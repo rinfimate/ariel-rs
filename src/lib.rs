@@ -22,6 +22,7 @@ pub(crate) mod diagrams;
 /// [`RenderError`], which are also re-exported at the crate root.
 pub mod error;
 pub(crate) mod error_svg;
+pub(crate) mod icons;
 pub(crate) mod style;
 pub(crate) mod svg;
 pub(crate) mod text;

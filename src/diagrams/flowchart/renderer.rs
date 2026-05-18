@@ -23,6 +23,7 @@
 use super::constants::*;
 use super::parser::{EdgeStyle, FlowchartDiagram, NodeShape, NodeStyle, Subgraph};
 use super::templates;
+use crate::icons::parse_fa_label;
 use crate::svg::SvgWriter;
 use crate::text::measure;
 use crate::theme::{Theme, ThemeVars};
@@ -1826,12 +1827,32 @@ fn render_node(
     } else {
         String::new()
     };
+
+    // Resolve FA icon syntax: "fa:fa-ban forbidden" → icon char + remaining text.
+    let (fa_char, fa_text) = parse_fa_label(&node.label);
+
     if use_foreign_object {
         // Cylinder labels sit lower to center in the body, not at the top ellipse.
         let label_ty = if node.shape == NodeShape::Cylinder {
             CYLINDER_LABEL_Y_OFFSET
         } else {
             LABEL_Y_OFFSET
+        };
+        // For the FO path the label goes inside an HTML <p> element. When a Font
+        // Awesome icon is present, wrap the glyph in a <span> with the FA font
+        // so the icon renders when FA is loaded and degrades to a box otherwise.
+        let fo_label = if let Some(ch) = fa_char {
+            let icon_html = format!(
+                r#"<span style="font-family: 'Font Awesome 6 Free'; font-weight: 900;">{}</span>"#,
+                ch
+            );
+            if fa_text.is_empty() {
+                icon_html
+            } else {
+                format!("{} {}", icon_html, esc(fa_text))
+            }
+        } else {
+            esc(&node.label)
         };
         s.push_str(&templates::node_label_fo(
             &label_color_style,
@@ -1841,7 +1862,7 @@ fn render_node(
             LABEL_FO_HEIGHT,
             &div_color_style,
             &span_color,
-            &esc(&node.label),
+            &fo_label,
         ));
     } else {
         let text_fill = if !label_color_style.is_empty() {
@@ -1851,13 +1872,32 @@ fn render_node(
         } else {
             vars.primary_text
         };
+        // For the plain SVG text path the label goes inside a <text> element.
+        // When a Font Awesome icon is present, emit two <tspan> elements so the
+        // icon glyph uses the FA font while any remaining text uses the normal font.
+        let svg_label = if let Some(ch) = fa_char {
+            if fa_text.is_empty() {
+                format!(
+                    r#"<tspan font-family="Font Awesome 6 Free" font-weight="900">{}</tspan>"#,
+                    ch
+                )
+            } else {
+                format!(
+                    r#"<tspan font-family="Font Awesome 6 Free" font-weight="900">{}</tspan><tspan> {}</tspan>"#,
+                    ch,
+                    esc(fa_text)
+                )
+            }
+        } else {
+            esc(&node.label)
+        };
         s.push_str(&templates::node_label_text(
             &label_color_style,
             TEXT_LABEL_Y,
             ff,
             FONT_SIZE,
             text_fill,
-            &esc(&node.label),
+            &svg_label,
         ));
     }
 
