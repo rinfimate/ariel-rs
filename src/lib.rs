@@ -260,7 +260,9 @@ fn unwind_message(e: Box<dyn Any + Send>) -> String {
 /// assert_eq!(detect("not a diagram"), DiagramType::Unknown);
 /// ```
 pub fn detect(input: &str) -> DiagramType {
-    let trimmed = input.trim_start();
+    // Strip YAML frontmatter before detection — any diagram type can have it.
+    let stripped = strip_frontmatter(input.trim_start());
+    let trimmed = stripped.trim_start();
 
     if trimmed.starts_with("flowchart") || trimmed.starts_with("graph ") {
         return DiagramType::Flowchart;
