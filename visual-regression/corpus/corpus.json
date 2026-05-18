@@ -1,0 +1,147 @@
+{
+  "flowchart_lr_basic": "flowchart LR\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Process]\n    B -->|No| D[End]\n    C --> D",
+
+  "flowchart_tb_nodes": "flowchart TB\n    A([Stadium]) --> B[[Subroutine]]\n    B --> C[(Database)]\n    C --> D((Circle))\n    D --> E>Asymmetric]",
+
+  "flowchart_subgraph": "flowchart TB\n    subgraph one\n        a1-->a2\n    end\n    subgraph two\n        b1-->b2\n    end\n    subgraph three\n        c1-->c2\n    end\n    one --> two\n    three --> two\n    two --> c2",
+
+  "flowchart_styled": "flowchart LR\n    id1(Start)-->id2(Stop)\n    style id1 fill:#f9f,stroke:#333,stroke-width:4px\n    style id2 fill:#bbf,stroke:#f66,stroke-width:2px,color:#fff",
+
+  "flowchart_edge_types": "flowchart LR\n    A-->B\n    A--- C\n    A-.->D\n    A==>E\n    A--text-->F\n    A-.text.->G",
+
+  "flowchart_christmas": "flowchart TD\n    A[Christmas] -->|Get money| B(Go shopping)\n    B --> C{Let me think}\n    C -->|One| D[Laptop]\n    C -->|Two| E[iPhone]\n    C -->|Three| F[Car]",
+
+  "flowchart_nested_subgraph": "flowchart LR\n    subgraph TOP\n        direction TB\n        subgraph B1\n            direction RL\n            i1 -->f1\n        end\n        subgraph B2\n            direction BT\n            i2 -->f2\n        end\n    end\n    A --> TOP --> B\n    B1 --> B2",
+
+  "flowchart_special_chars": "flowchart LR\n    a[\"This is the (text) in the box\"] --> b[\"Result: A->B\"]\n    b --> c[\"C & D together\"]",
+
+  "flowchart_long_chain": "flowchart LR\n    A --> B --> C --> D --> E --> F --> G\n    G --> H --> I --> J",
+
+  "flowchart_multipath": "flowchart TD\n    Start --> A & B & C\n    A --> D\n    B --> D\n    C --> D\n    D --> End",
+
+  "sequence_basic": "sequenceDiagram\n    Alice->>Bob: Hello Bob, how are you?\n    Bob-->>Alice: Great!\n    Alice-)Bob: See you later!",
+
+  "sequence_loop": "sequenceDiagram\n    Alice->John: Hello John, how are you?\n    loop Every minute\n        John-->Alice: Great!\n    end",
+
+  "sequence_alt": "sequenceDiagram\n    Alice->>Bob: Hello Bob\n    alt is sick\n        Bob->>Alice: Not so good\n    else is well\n        Bob->>Alice: Feeling fresh\n    end\n    opt Extra message\n        Bob->>Alice: Thanks for asking\n    end",
+
+  "sequence_notes": "sequenceDiagram\n    participant John\n    Note right of John: Text in note\n    John->Alice: Text\n    Note over Alice,John: A typical interaction",
+
+  "sequence_activation": "sequenceDiagram\n    Alice->>+John: Hello John, how are you?\n    Alice->>+John: John, can you hear me?\n    John-->>-Alice: Hi Alice, I can hear you!\n    John-->>-Alice: I feel great!",
+
+  "sequence_autonumber": "sequenceDiagram\n    autonumber\n    Alice->>John: Hello John\n    loop Healthcheck\n        John->>John: Fight hypochondria\n    end\n    Note right of John: Rational thoughts!\n    John-->>Alice: Great!\n    John->>Bob: How about you?\n    Bob-->>John: Jolly good!",
+
+  "sequence_par": "sequenceDiagram\n    par Alice to Bob\n        Alice->>Bob: Hello guys!\n    and Alice to John\n        Alice->>John: Hello guys!\n    end\n    Bob-->>Alice: Hi Alice!\n    John-->>Alice: Hi Alice!",
+
+  "sequence_actors": "sequenceDiagram\n    actor Alice\n    actor Bob\n    Alice->>Bob: Hi Bob\n    Bob->>Alice: Hi Alice\n    Alice->>Bob: Can I ask you something?\n    Bob-->>Alice: Sure!",
+
+  "class_basic": "classDiagram\n    class Animal {\n        +String name\n        +int age\n        +makeSound() void\n    }\n    class Dog {\n        +String breed\n        +fetch() void\n    }\n    Animal <|-- Dog",
+
+  "class_interfaces": "classDiagram\n    class Shape {\n        <<interface>>\n        +draw() void\n        +area() float\n    }\n    class Circle {\n        +float radius\n        +draw() void\n        +area() float\n    }\n    class Rectangle {\n        +float width\n        +float height\n        +draw() void\n        +area() float\n    }\n    Shape <|.. Circle\n    Shape <|.. Rectangle",
+
+  "class_associations": "classDiagram\n    classA --|> classB : Inheritance\n    classC --* classD : Composition\n    classE --o classF : Aggregation\n    classG --> classH : Association\n    classI -- classJ : Link\n    classK ..> classL : Dependency\n    classM ..|> classN : Realization",
+
+  "class_multiplicity": "classDiagram\n    Customer \"1\" --> \"*\" Ticket\n    Student \"1\" --> \"1..*\" Course\n    Galaxy --> \"many\" Star : Contains",
+
+  "class_annotations": "classDiagram\n    class Shape {\n        <<abstract>>\n        +color: String\n        +draw() void\n    }\n    class Color {\n        <<enumeration>>\n        RED\n        GREEN\n        BLUE\n    }",
+
+  "er_basic": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    ORDER ||--|{ LINE-ITEM : contains",
+
+  "er_attributes": "erDiagram\n    CUSTOMER {\n        string name PK\n        string email\n        int age\n    }\n    ORDER {\n        int id PK\n        date created\n        string status\n    }\n    CUSTOMER ||--o{ ORDER : places",
+
+  "er_complex": "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    CUSTOMER {\n        string name\n        string email\n    }\n    ORDER ||--|{ LINE-ITEM : contains\n    ORDER {\n        int id\n        date date\n    }\n    PRODUCT ||--o{ LINE-ITEM : in\n    PRODUCT {\n        string name\n        float price\n    }\n    LINE-ITEM {\n        int quantity\n        float price\n    }",
+
+  "er_optional": "erDiagram\n    PERSON }|..|{ PERSON : \"is married to\"\n    PERSON ||--o{ ADDRESS : \"lives at\"\n    ADDRESS ||--|{ CITY : \"is in\"",
+
+  "er_car": "erDiagram\n    CAR ||--o{ NAMED-DRIVER : allows\n    CAR {\n        string registrationNumber PK\n        string make\n        string model\n    }\n    PERSON ||--o{ NAMED-DRIVER : is\n    PERSON {\n        string driversLicense PK\n        string firstName\n        string lastName\n    }",
+
+  "state_basic": "stateDiagram-v2\n    [*] --> Still\n    Still --> [*]\n    Still --> Moving\n    Moving --> Still\n    Moving --> Crash\n    Crash --> [*]",
+
+  "state_composite": "stateDiagram-v2\n    [*] --> First\n    state First {\n        [*] --> second\n        second --> [*]\n    }",
+
+  "state_fork": "stateDiagram-v2\n    state fork_state <<fork>>\n    [*] --> fork_state\n    fork_state --> State2\n    fork_state --> State3\n    state join_state <<join>>\n    State2 --> join_state\n    State3 --> join_state\n    join_state --> State4\n    State4 --> [*]",
+
+  "state_notes": "stateDiagram-v2\n    State1: The state with a note\n    note right of State1\n        Important information\n    end note\n    State1 --> State2\n    State2 --> State1",
+
+  "state_choice": "stateDiagram-v2\n    state if_state <<choice>>\n    [*] --> IsPositive\n    IsPositive --> if_state\n    if_state --> False: if n < 0\n    if_state --> True: if n >= 0",
+
+  "gantt_basic": "gantt\n    title A Gantt Diagram\n    dateFormat YYYY-MM-DD\n    section Section\n    A task          :a1, 2024-01-01, 30d\n    Another task    :after a1, 20d",
+
+  "gantt_sections": "gantt\n    title Project Schedule\n    dateFormat YYYY-MM-DD\n    section Design\n    Wireframes      :des1, 2024-01-01, 14d\n    Mockups         :des2, after des1, 14d\n    section Development\n    Backend         :dev1, after des1, 30d\n    Frontend        :dev2, after des2, 21d\n    section Testing\n    QA              :qa1, after dev1, 14d",
+
+  "gantt_milestones": "gantt\n    dateFormat YYYY-MM-DD\n    title Adding GANTT milestones\n    section A\n    Completed task      :done, des1, 2024-01-06, 2024-01-08\n    Active task         :active, des2, 2024-01-09, 3d\n    Future task         :des3, after des2, 5d\n    section Critical\n    Crit done task      :crit, done, 2024-01-06, 24h\n    Crit active task    :crit, active, 3d\n    Crit task           :crit, 5d",
+
+  "gantt_excludes": "gantt\n    title Gantt with weekends excluded\n    dateFormat YYYY-MM-DD\n    excludes weekends\n    section Section\n    A task          :a1, 2024-01-01, 10d\n    Another task    :after a1, 10d",
+
+  "gantt_tick_interval": "gantt\n    title Gantt with tick interval\n    dateFormat YYYY-MM-DD\n    tickInterval 1week\n    section Section\n    Long task           :2024-01-01, 60d\n    Another long task   :2024-02-01, 30d",
+
+  "pie_basic": "pie\n    \"Dogs\" : 386\n    \"Cats\" : 85\n    \"Rats\" : 15",
+
+  "pie_title": "pie title Pets adopted by volunteers\n    \"Dogs\" : 386\n    \"Cats\" : 85\n    \"Rats\" : 15",
+
+  "pie_many_slices": "pie title Browser Market Share\n    \"Chrome\" : 65.2\n    \"Safari\" : 19.2\n    \"Firefox\" : 4.0\n    \"Edge\" : 3.1\n    \"Samsung\" : 2.8\n    \"Opera\" : 1.2\n    \"Other\" : 4.5",
+
+  "pie_showdata": "pie showData title Key Elements\n    \"Calcium\" : 42.96\n    \"Potassium\" : 50.05\n    \"Magnesium\" : 10.01\n    \"Iron\" : 5",
+
+  "pie_equal": "pie title Equal Split\n    \"A\" : 25\n    \"B\" : 25\n    \"C\" : 25\n    \"D\" : 25",
+
+  "git_basic": "gitGraph\n   commit\n   branch develop\n   checkout develop\n   commit\n   commit\n   checkout main\n   merge develop\n   commit",
+
+  "git_multiple_branches": "gitGraph\n   commit id: \"Initial\"\n   branch feature\n   checkout feature\n   commit id: \"Feature work\"\n   checkout main\n   branch hotfix\n   checkout hotfix\n   commit id: \"Hotfix\"\n   checkout main\n   merge hotfix\n   merge feature\n   commit id: \"Release\"",
+
+  "git_tags": "gitGraph\n   commit\n   commit tag: \"v1.0\"\n   branch develop\n   checkout develop\n   commit\n   commit\n   checkout main\n   merge develop tag: \"v2.0\"",
+
+  "mindmap_basic": "mindmap\n  root((mindmap))\n    Origins\n      Long history\n      Popularisation\n    Research\n      On effectiveness\n      On Whiteboard\n    Tools\n      Pen\n      Mermaid",
+
+  "mindmap_tech": "mindmap\n  root((Technology))\n    Frontend\n      React\n      Vue\n      Angular\n    Backend\n      Node.js\n      Python\n      Go\n    Database\n      SQL\n      NoSQL",
+
+  "timeline_basic": "timeline\n    title History of Social Media\n    2002 : LinkedIn\n    2004 : Facebook\n         : Google\n    2005 : Youtube\n    2006 : Twitter",
+
+  "timeline_sections": "timeline\n    title Timeline of Industrial Revolution\n    section 17th-20th century\n        Industry 1.0 : Machinery, Steam power\n        Industry 2.0 : Electricity, Internal combustion engine\n    section 21st century\n        Industry 3.0 : Electronics, Computers\n        Industry 4.0 : Internet, Robotics, IoT",
+
+  "quadrant_basic": "quadrantChart\n    title Reach and engagement of campaigns\n    x-axis Low Reach --> High Reach\n    y-axis Low Engagement --> High Engagement\n    quadrant-1 We should expand\n    quadrant-2 Need to promote\n    quadrant-3 Re-evaluate\n    quadrant-4 May be improved\n    Campaign A: [0.3, 0.6]\n    Campaign B: [0.45, 0.23]\n    Campaign C: [0.57, 0.69]\n    Campaign D: [0.78, 0.34]\n    Campaign E: [0.40, 0.34]\n    Campaign F: [0.35, 0.78]",
+
+  "quadrant_risk": "quadrantChart\n    title Risk vs Impact\n    x-axis Low Impact --> High Impact\n    y-axis Low Risk --> High Risk\n    quadrant-1 Monitor\n    quadrant-2 Critical\n    quadrant-3 Low Priority\n    quadrant-4 Act Now\n    Item A: [0.7, 0.3]\n    Item B: [0.8, 0.8]\n    Item C: [0.2, 0.2]\n    Item D: [0.3, 0.7]",
+
+  "xychart_basic": "xychart-beta\n    title \"Sales Revenue\"\n    x-axis [jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec]\n    y-axis \"Revenue (in $)\" 4000 --> 11000\n    bar [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]\n    line [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]",
+
+  "xychart_line_only": "xychart-beta\n    title \"Temperature Over Time\"\n    x-axis [Mon, Tue, Wed, Thu, Fri, Sat, Sun]\n    y-axis \"Temp (C)\" 0 --> 40\n    line [15, 18, 22, 20, 25, 30, 28]",
+
+  "c4_basic": "C4Context\n      title System Context diagram for Internet Banking System\n      Enterprise_Boundary(b0, \"BankBoundary0\") {\n        Person(customerA, \"Banking Customer A\")\n        Person(customerB, \"Banking Customer B\")\n        System(SystemAA, \"Internet Banking System\")\n      }",
+
+  "c4_relations": "C4Context\n    title System Context for E-commerce\n    Person(customer, \"Customer\", \"A user of the e-commerce site\")\n    System(webApp, \"Web Application\", \"Provides shopping functionality\")\n    System_Ext(payment, \"Payment Gateway\", \"Handles payments\")\n    Rel(customer, webApp, \"Uses\")\n    Rel(webApp, payment, \"Processes payments via\")",
+
+  "block_basic": "block-beta\n    columns 3\n    A[\"A\"]:1\n    B[\"B\"]:1\n    C[\"C\"]:1\n    space:1\n    D[\"D\"]:1\n    space:1",
+
+  "block_arrows": "block-beta\n    columns 3\n    A[\"Start\"]:1\n    space:1\n    B[\"End\"]:1\n    A --> B",
+
+  "packet_basic": "packet-beta\n accTitle: Packet\n 0-7: \"Source\"\n 8-15: \"Dest\"\n 16-31: \"Data\"",
+
+  "packet_ipv4": "packet-beta\n title IPv4 Header\n 0-3: \"Version\"\n 4-7: \"IHL\"\n 8-15: \"DSCP\"\n 16-31: \"Total Length\"\n 32-47: \"Identification\"\n 48-50: \"Flags\"\n 51-63: \"Fragment Offset\"",
+
+  "journey_basic": "journey\n    title My working day\n    section Go to work\n      Make tea: 5: Me\n      Go upstairs: 3: Me\n      Do work: 1: Me, Cat\n    section Go home\n      Go downstairs: 5: Me\n      Sit down: 5: Me",
+
+  "journey_shopping": "journey\n    title Shopping Experience\n    section Browse\n      Visit website: 5: Customer\n      Search products: 4: Customer\n    section Purchase\n      Add to cart: 5: Customer\n      Checkout: 3: Customer\n      Payment: 2: Customer\n    section Post Purchase\n      Receive email: 5: Customer\n      Track order: 4: Customer",
+
+  "requirement_basic": "requirementDiagram\n    requirement test_req {\n    id: 1\n    text: the test text.\n    risk: high\n    verifymethod: test\n    }\n    element test_entity {\n    type: simulation\n    }\n    test_entity - satisfies -> test_req",
+
+  "requirement_system": "requirementDiagram\n    requirement sys_req {\n    id: 2\n    text: System shall handle high load\n    risk: high\n    verifymethod: test\n    }\n    element server {\n    type: software\n    }\n    server - satisfies -> sys_req",
+
+  "kanban_basic": "kanban\n  Todo\n    id1[Write blog post]\n    id2[Plan vacation]\n  In Progress\n    id3[Write code]\n  Done\n    id4[Create diagrams]",
+
+  "kanban_sprint": "kanban\n  Backlog\n    task1[Setup CI/CD]\n    task2[Write tests]\n  In Progress\n    task3[Implement feature]\n  Review\n    task4[Code review]\n  Done\n    task5[Deploy to prod]",
+
+  "sankey_basic": "sankey-beta\nCoal,Power,50\nGas,Power,30\nNuclear,Power,20\nPower,Homes,40\nPower,Industry,60",
+
+  "sankey_energy": "sankey-beta\nCoal,Electricity,50\nGas,Electricity,30\nSolar,Electricity,20\nElectricity,Industry,40\nElectricity,Homes,35\nElectricity,Transport,25",
+
+  "architecture_basic": "architecture-beta\n    service api(internet)[API]\n    service db(database)[Database]\n    api:R --> L:db",
+
+  "architecture_cloud": "architecture-beta\n    group cloud(cloud)[Cloud]\n      service server(server)[Server] in cloud\n      service storage(disk)[Storage] in cloud\n    service client(internet)[Client]\n    client:R --> L:server\n    server:B --> T:storage",
+
+  "ishikawa_basic": "---\nconfig:\n  theme: default\n---\nishikawa\n    Effect: [Quality Problem]\n    Cause1: [Materials]\n        SubCause1: [Bad input]\n    Cause2: [Methods]\n        SubCause2: [Wrong process]",
+
+  "radar_basic": "---\nconfig:\n  radar:\n    axisScaleFactor: 0.7\n---\nradar-beta\n    title Skills\n    axis A[\"Coding\"], B[\"Design\"], C[\"Communication\"], D[\"Testing\"]\n    curve Team1 { A: 80, B: 60, C: 70, D: 85 }\n    curve Team2 { A: 70, B: 80, C: 65, D: 75 }",
+
+  "treemap_basic": "treemap-beta\n  \"Documents\": 500\n  \"Pictures\": 800\n  \"Videos\": 1200"
+}

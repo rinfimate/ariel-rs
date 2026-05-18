@@ -1,0 +1,28 @@
+[package]
+name = "ariel-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A faithful Rust port of Mermaid JS — headless SVG diagram rendering without a browser"
+license = "MIT"
+authors = ["Rochanglien Infimate"]
+repository = "https://github.com/rinfimate/ariel-rs"
+homepage = "https://github.com/rinfimate/ariel-rs"
+documentation = "https://docs.rs/ariel-rs"
+keywords = ["mermaid", "diagram", "svg", "rendering", "headless"]
+categories = ["visualization", "graphics", "text-processing"]
+readme = "README.md"
+exclude = [
+    "visual-regression/",
+    ".github/hooks/",
+    "src/bin/debug_dagre.rs",
+]
+
+[dependencies]
+dagre-dgl-rs = "0.1.0"
+ab_glyph = "0.2"
+indexmap = "2"
+serde_json = "1"
+chrono = "0.4"
+
+[dev-dependencies]
+insta = "1"

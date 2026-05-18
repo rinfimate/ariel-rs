@@ -1,0 +1,18 @@
+{
+  "name": "mermaid-visual-regression",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "refs": "node render_reference.mjs",
+    "png:ref": "node svg_to_png.mjs ref",
+    "png:rust": "node svg_to_png.mjs rust",
+    "compare": "node compare.mjs",
+    "run-all": "node render_reference.mjs && node svg_to_png.mjs ref && node compare.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.0",
+    "mermaid": "^11.0.0",
+    "pngjs": "^7.0.0",
+    "puppeteer": "^24.0.0"
+  }
+}

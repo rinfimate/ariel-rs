@@ -1,0 +1,19 @@
+# Build output
+/target/
+
+# Cargo.lock is intentionally excluded for library crates
+Cargo.lock
+
+# Coverage output
+coverage/
+tarpaulin-report.html
+cobertura.xml
+
+# Visual regression test output (generated, not source)
+visual-regression/rust/
+visual-regression/ref/
+visual-regression/report.json
+visual-regression/compare_all.html
+visual-regression/node_modules/
+REFACTOR_PLAN.md
+ROADMAP.md
