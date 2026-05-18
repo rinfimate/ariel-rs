@@ -266,7 +266,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input =
             "packet-beta\n accTitle: Packet\n 0-7: \"Source\"\n 8-15: \"Dest\"\n 16-31: \"Data\"";

@@ -599,7 +599,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input = "block-beta\n    columns 3\n    A[\"A\"]:1\n    B[\"B\"]:1\n    C[\"C\"]:1\n    space:1\n    D[\"D\"]:1\n    space:1";
         let diag = parser::parse(input).diagram;

@@ -861,7 +861,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input =
             "timeline\n    title History of Social Media\n    2002 : LinkedIn\n    2004 : Facebook";

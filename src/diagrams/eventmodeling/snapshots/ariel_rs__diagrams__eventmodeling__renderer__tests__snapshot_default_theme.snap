@@ -1,0 +1,12 @@
+---
+source: src/diagrams/eventmodeling/renderer.rs
+assertion_line: 336
+expression: svg
+---
+<svg id="mermaid-eventmodeling" xmlns="http://www.w3.org/2000/svg" width="360" height="160" viewBox="0 0 360 160" role="graphics-document"><style>
+#mermaid-eventmodeling { font-family: Arial, sans-serif; font-size: 13px; }
+.em-swimlane rect { fill-opacity: 0.08; }
+.em-swimlane text { font-weight: bold; fill: #333333; }
+.em-box rect { rx: 3; ry: 3; }
+.em-relation { stroke-width: 1; }
+</style><defs><marker id="em-arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#333333"/></marker></defs><g class="em-swimlane"><rect x="0" y="30" width="360" height="100" rx="3" fill="rgb(250,250,250)" stroke="rgb(240,240,240)"/><text font-weight="bold" x="30" y="60" font-family="Arial, sans-serif" font-size="13" fill="#333333">Commands</text></g><g class="em-box"><rect x="160" y="50" rx="3" width="118.665" height="60" stroke="#777777" fill="#AAAAAA"/><foreignObject x="170" y="60" width="98.665" height="40"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><span style="display:table-cell;text-align:center;vertical-align:middle;font-family:Arial, sans-serif;font-size:13px;color:#fff;">Order&quot;]: command</span></div></foreignObject></g><text class="em-title" x="180" y="16" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#333333">Order Flow</text></svg>

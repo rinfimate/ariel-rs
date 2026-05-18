@@ -525,7 +525,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let diag = parser::parse(TREEMAP_BASIC).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);

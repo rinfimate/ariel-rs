@@ -497,7 +497,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input = "ishikawa\n    Effect: [Quality Problem]\n    Cause1: [Materials]\n        SubCause1: [Bad input]\n    Cause2: [Methods]\n        SubCause2: [Wrong process]";
         let diag = parser::parse(input).diagram;

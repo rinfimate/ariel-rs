@@ -1,0 +1,16 @@
+---
+source: src/diagrams/ishikawa/renderer.rs
+assertion_line: 504
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 623.0 540.0" width="100%" style="max-width:623px"><style>
+.ishikawa-spine { stroke: #333; stroke-width: 3; fill: none; }
+.ishikawa-branch { stroke: #333; stroke-width: 2; fill: none; }
+.ishikawa-sub-branch { stroke: #555; stroke-width: 1.5; fill: none; }
+.ishikawa-head { fill: #fff; stroke: #333; stroke-width: 2; }
+.ishikawa-head-label { fill: #333; font-family: Arial, sans-serif; font-weight: bold; }
+.ishikawa-label { fill: #333; font-family: Arial, sans-serif; }
+.ishikawa-label-box { fill: #fff; stroke: #333; stroke-width: 1; rx: 3; ry: 3; }
+.ishikawa-arrow { fill: #333; }
+.ishikawa-title { fill: #333; font-family: Arial, sans-serif; }
+</style><g transform="translate(264.9,270.0)"><defs><marker id="ishikawa-arrow" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 Z" class="ishikawa-arrow"/></marker></defs><line class="ishikawa-spine" x1="-244.9" y1="250.0" x2="0" y2="250.0"/><line class="ishikawa-branch" x1="-20.00" y1="250.00" x2="-54.79" y2="2.43" marker-start="url(#ishikawa-arrow)"/><rect class="ishikawa-label-box" x="-128.77" y="-15.57" width="147.96" height="18.00"/><text class="ishikawa-label cause" text-anchor="middle" x="-54.79" y="0.43" font-size="14">Cause1: [Materials]</text><line class="ishikawa-sub-branch" x1="-37.40" y1="126.22" x2="-67.40" y2="126.22" marker-start="url(#ishikawa-arrow)"/><text class="ishikawa-label align" text-anchor="end" x="-69.40" y="131.12" font-size="14">SubCause1: [Bad input]</text><line class="ishikawa-branch" x1="-20.00" y1="250.00" x2="-54.79" y2="497.57" marker-start="url(#ishikawa-arrow)"/><rect class="ishikawa-label-box" x="-127.39" y="501.57" width="145.18" height="18.00"/><text class="ishikawa-label cause" text-anchor="middle" x="-54.79" y="515.57" font-size="14">Cause2: [Methods]</text><line class="ishikawa-sub-branch" x1="-37.40" y1="373.78" x2="-67.40" y2="373.78" marker-start="url(#ishikawa-arrow)"/><text class="ishikawa-label align" text-anchor="end" x="-69.40" y="378.68" font-size="14">SubCause2: [Wrong process]</text><g class="ishikawa-head-group" transform="translate(0,250.0)"><path class="ishikawa-head" d="M 0 -41.00 L 0 41.00 Q 338.12 0 0 -41.00 Z"/><text class="ishikawa-head-label" text-anchor="middle" x="112.7" y="0.0" font-size="14">Effect: [Quality Problem]</text></g></g></svg>

@@ -373,7 +373,7 @@ pub fn render(input: &str, theme: theme::Theme) -> String {
         ($diagram_type:expr, $call:expr) => {{
             let result = panic::catch_unwind(AssertUnwindSafe(|| $call));
             match result {
-                Ok(svg) => svg,
+                Ok(svg) => svg::normalize_floats(&svg),
                 Err(e) => {
                     let msg = unwind_message(e);
                     error_svg::render_error_svg($diagram_type, &msg)
@@ -460,7 +460,7 @@ pub fn try_render(input: &str, theme: theme::Theme) -> Result<String, RenderErro
         ($diagram_type:expr, $call:expr) => {{
             let result = panic::catch_unwind(AssertUnwindSafe(|| $call));
             match result {
-                Ok(svg) => Ok(svg),
+                Ok(svg) => Ok(svg::normalize_floats(&svg)),
                 Err(e) => {
                     let msg = unwind_message(e);
                     Err(RenderError::from_panic($diagram_type, msg))

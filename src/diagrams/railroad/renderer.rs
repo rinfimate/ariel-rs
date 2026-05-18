@@ -594,7 +594,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input = "railroad\n    title Grammar\n    digit ::= \"0\" | \"1\" | \"2\"\n";
         let diag = parser::parse(input).diagram;

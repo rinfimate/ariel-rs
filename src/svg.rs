@@ -393,3 +393,66 @@ pub fn foreign_object_label(
 pub fn attrs(pairs: &[(&str, &str)]) -> String {
     svg_attrs(pairs)
 }
+
+/// Round all floating-point literals in an SVG string to 3 decimal places.
+///
+/// Eliminates platform-specific f64 precision differences (Windows vs Linux
+/// differ in the 14th+ decimal place). Trailing zeros are stripped so
+/// `1.500` becomes `1.5` and `2.000` becomes `2`.
+pub(crate) fn normalize_floats(svg: &str) -> String {
+    let mut out = String::with_capacity(svg.len());
+    let bytes = svg.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Detect optional leading minus
+        let neg = bytes[i] == b'-' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit();
+        let start = i;
+
+        let mut j = if neg { i + 1 } else { i };
+
+        // Must start with a digit
+        if !bytes[j].is_ascii_digit() {
+            out.push(bytes[i] as char);
+            i += 1;
+            continue;
+        }
+
+        // Consume integer digits
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            j += 1;
+        }
+
+        // Only a float if followed by '.' then more digits
+        if j < bytes.len() && bytes[j] == b'.' {
+            let dot = j;
+            j += 1;
+            let frac_start = j;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > frac_start {
+                // Parse and reformat to 3dp
+                if let Ok(v) = svg[start..j].parse::<f64>() {
+                    let rounded = format!("{v:.3}");
+                    let trimmed = rounded.trim_end_matches('0').trim_end_matches('.');
+                    out.push_str(trimmed);
+                    i = j;
+                    continue;
+                }
+                // parse failed — emit verbatim up to dot, retry from dot
+                out.push_str(&svg[start..dot]);
+                i = dot;
+                continue;
+            }
+            // dot not followed by digits — emit integer part, retry from dot
+            out.push_str(&svg[start..dot]);
+            i = dot;
+            continue;
+        }
+
+        // Plain integer — emit verbatim
+        out.push_str(&svg[start..j]);
+        i = j;
+    }
+    out
+}

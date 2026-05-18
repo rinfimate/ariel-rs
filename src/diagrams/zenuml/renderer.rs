@@ -452,7 +452,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input = "zenuml\n    title Greeting\n    Alice->Bob: Hello\n    Bob->Alice: Hi\n";
         let diag = parser::parse(input).diagram;

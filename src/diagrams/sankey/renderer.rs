@@ -1005,7 +1005,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "platform-specific float precision — run locally"]
     fn snapshot_default_theme() {
         let input = "sankey-beta\nCoal,Power,50\nGas,Power,30\nNuclear,Power,20\nPower,Homes,40\nPower,Industry,60";
         let diag = parser::parse(input).diagram;
