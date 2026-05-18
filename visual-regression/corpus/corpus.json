@@ -191,5 +191,9 @@
 
   "live_editor_venn": "venn-beta\n    title \"Three overlapping sets\"\n    set A\n    set B\n    set C\n    union A,B[\"AB\"]\n    union B,C[\"BC\"]\n    union A,C[\"AC\"]\n    union A,B,C[\"ABC\"]",
 
-  "live_editor_ishikawa": "ishikawa-beta\n    Blurry Photo\n    Process\n        Out of focus\n        Shutter speed too slow\n    User\n        Shaky hands\n    Equipment\n        LENS\n            Inappropriate lens\n            Dirty lens\n        SENSOR\n            Dirty sensor\n    Environment\n        Too dark"
+  "live_editor_ishikawa": "ishikawa-beta\n    Blurry Photo\n    Process\n        Out of focus\n        Shutter speed too slow\n    User\n        Shaky hands\n    Equipment\n        LENS\n            Inappropriate lens\n            Dirty lens\n        SENSOR\n            Dirty sensor\n    Environment\n        Too dark",
+
+  "live_editor_state": "stateDiagram-v2\n    [*] --> Still\n    Still --> [*]\n    Still --> Moving\n    Moving --> Still\n    Moving --> Crash\n    Crash --> [*]",
+
+  "live_editor_treeview": "treeView-beta\n    \"docs\"\n        \"build\"\n        \"make.bat\"\n        \"Makefile\"\n        \"source\"\n            \"build\"\n            \"static\"\n                \"_templates\"\n                \"div. Files\""
 }
