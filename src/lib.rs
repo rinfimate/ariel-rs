@@ -311,7 +311,7 @@ pub fn detect(input: &str) -> DiagramType {
     if trimmed.starts_with("block-beta") {
         return DiagramType::Block;
     }
-    if trimmed.starts_with("packet-beta") {
+    if trimmed.starts_with("packet-beta") || trimmed.starts_with("packet") {
         return DiagramType::Packet;
     }
     if trimmed.starts_with("journey") {
