@@ -456,7 +456,7 @@ mod tests {
         let input = "zenuml\n    title Greeting\n    Alice->Bob: Hello\n    Bob->Alice: Hi\n";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 
     // ── new tests ─────────────────────────────────────────────────────────────

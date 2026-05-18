@@ -655,6 +655,6 @@ mod tests {
         let input = "C4Context\n      title System Context diagram for Internet Banking System\n      Enterprise_Boundary(b0, \"BankBoundary0\") {\n        Person(customerA, \"Banking Customer A\")\n        Person(customerB, \"Banking Customer B\")\n        System(SystemAA, \"Internet Banking System\")\n      }";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default, false);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

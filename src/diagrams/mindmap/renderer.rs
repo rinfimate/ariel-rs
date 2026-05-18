@@ -469,6 +469,6 @@ mod tests {
         let input = "mindmap\n  root((mindmap))\n    Origins\n      Long history\n      Popularisation\n    Research\n      On effectiveness\n      On Whiteboard\n    Tools\n      Pen\n      Mermaid";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

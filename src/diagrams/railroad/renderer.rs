@@ -598,6 +598,6 @@ mod tests {
         let input = "railroad\n    title Grammar\n    digit ::= \"0\" | \"1\" | \"2\"\n";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

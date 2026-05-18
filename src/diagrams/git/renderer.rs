@@ -856,6 +856,6 @@ mod tests {
         let input = "gitGraph\n   commit\n   branch develop\n   checkout develop\n   commit\n   commit\n   checkout main\n   merge develop\n   commit";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

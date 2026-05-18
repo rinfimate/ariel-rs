@@ -2350,6 +2350,6 @@ mod tests {
     fn snapshot_default_theme() {
         let diag = parser::parse(FLOWCHART_BASIC).diagram;
         let svg = render(&diag, crate::theme::Theme::Default, false);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

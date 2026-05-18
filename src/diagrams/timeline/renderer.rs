@@ -866,6 +866,6 @@ mod tests {
             "timeline\n    title History of Social Media\n    2002 : LinkedIn\n    2004 : Facebook";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

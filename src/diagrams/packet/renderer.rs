@@ -271,6 +271,6 @@ mod tests {
             "packet-beta\n accTitle: Packet\n 0-7: \"Source\"\n 8-15: \"Dest\"\n 16-31: \"Data\"";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default, false);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

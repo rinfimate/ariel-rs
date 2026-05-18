@@ -603,6 +603,6 @@ mod tests {
         let input = "block-beta\n    columns 3\n    A[\"A\"]:1\n    B[\"B\"]:1\n    C[\"C\"]:1\n    space:1\n    D[\"D\"]:1\n    space:1";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default, false);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

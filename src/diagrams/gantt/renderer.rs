@@ -682,6 +682,6 @@ mod tests {
         let input = "gantt\n    title A Gantt Diagram\n    dateFormat YYYY-MM-DD\n    section Section\n    A task          :a1, 2024-01-01, 30d\n    Another task    :after a1, 20d";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default, false);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

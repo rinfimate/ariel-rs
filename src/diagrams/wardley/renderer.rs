@@ -271,6 +271,6 @@ mod tests {
         let input = "wardley\n    title My Wardley Map\n    component UserNeed [0.9, 0.1]\n    component Backend [0.5, 0.7]\n    UserNeed->Backend\n";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

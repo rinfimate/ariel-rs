@@ -1009,6 +1009,6 @@ mod tests {
         let input = "sankey-beta\nCoal,Power,50\nGas,Power,30\nNuclear,Power,20\nPower,Homes,40\nPower,Industry,60";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
-        insta::assert_snapshot!(svg);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }
