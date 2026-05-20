@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::PieDiagram;
-use super::templates;
+use super::templates::{self, build_style, esc, fmt, fmt_value};
 use crate::text::measure;
 use crate::theme::Theme;
 /// Faithful Rust port of Mermaid's pieRenderer.ts.
@@ -102,22 +102,6 @@ fn arc_centroid(start_angle: f64, end_angle: f64, radius: f64) -> (f64, f64) {
     let x = mid.sin() * radius;
     let y = -mid.cos() * radius;
     (x, y)
-}
-
-/// Format f64 with enough precision but stripping trailing zeros (matches D3 output style).
-fn fmt(v: f64) -> String {
-    // Snap near-zero to zero (avoids floating-point accumulation artifacts like -4.5e-14)
-    let v = if v.abs() < 1e-10 { 0.0 } else { v };
-    // Use up to 15 significant digits, trim trailing zeros after decimal
-    let s = format!("{:.15}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    // If empty or just "-", return "0"
-    if s.is_empty() || s == "-" {
-        "0".to_string()
-    } else {
-        s.to_string()
-    }
 }
 
 /// Pick a color for a slice by index (wraps around after 12).
@@ -226,10 +210,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
 
     // Title text
     let title_y = -((HEIGHT - 50.0) / 2.0); // -(200.0)
-    svg_parts.push(templates::title_text(
-        &fmt(title_y),
-        &escape_text(title_text_str),
-    ));
+    svg_parts.push(templates::title_text(&fmt(title_y), &esc(title_text_str)));
 
     // Legend items
     let legend_height = LEGEND_RECT_SIZE + LEGEND_SPACING;
@@ -250,7 +231,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
             &fmt(LEGEND_HORIZONTAL_OFFSET),
             &fmt(vertical),
             color,
-            &escape_text(&legend_text),
+            &esc(&legend_text),
         ));
     }
 
@@ -259,32 +240,6 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
     svg_parts.push("</svg>".to_string());
 
     svg_parts.join("")
-}
-
-/// Format a value for showData display: integers show without decimal, floats show as-is.
-fn fmt_value(v: f64) -> String {
-    if v.fract() == 0.0 {
-        format!("{}", v as i64)
-    } else {
-        // Strip trailing zeros
-        let s = format!("{:.10}", v);
-        let s = s.trim_end_matches('0').trim_end_matches('.');
-        s.to_string()
-    }
-}
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        r#"#{id}{{font-family:{ff};font-size:16px;fill:#333;}}@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}@keyframes dash{{to{{stroke-dashoffset:0;}}}}#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}#{id} .error-icon{{fill:#552222;}}#{id} .error-text{{fill:#552222;stroke:#552222;}}#{id} .edge-thickness-normal{{stroke-width:1px;}}#{id} .edge-thickness-thick{{stroke-width:3.5px;}}#{id} .edge-pattern-solid{{stroke-dasharray:0;}}#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}#{id} .marker{{fill:#333333;stroke:#333333;}}#{id} .marker.cross{{stroke:#333333;}}#{id} svg{{font-family:{ff};font-size:16px;}}#{id} p{{margin:0;}}#{id} .pieCircle{{stroke:black;stroke-width:2px;opacity:0.7;}}#{id} .pieOuterCircle{{stroke:black;stroke-width:2px;fill:none;}}#{id} .pieTitleText{{text-anchor:middle;font-size:25px;fill:black;font-family:{ff};}}#{id} .slice{{font-family:{ff};fill:#333;font-size:17px;}}#{id} .legend text{{fill:black;font-family:{ff};font-size:17px;}}#{id} :root{{--mermaid-font-family:{ff};}}"#,
-        id = id,
-        ff = ff,
-    )
 }
 
 #[cfg(test)]
@@ -323,20 +278,24 @@ mod tests {
     }
 
     #[test]
-    fn pie_color_0_is_rgb() {
-        // PIE_COLORS are pre-computed as rgb() strings — no parsing needed
+    fn pie_color_0_is_valid() {
+        // PIE_COLORS[0] is the primary color (#ECECFF)
         assert!(
-            PIE_COLORS[0].starts_with("rgb("),
-            "Expected rgb() string, got: {}",
+            PIE_COLORS[0].starts_with('#')
+                || PIE_COLORS[0].starts_with("hsl(")
+                || PIE_COLORS[0].starts_with("rgb("),
+            "Expected a valid color string, got: {}",
             PIE_COLORS[0]
         );
     }
 
     #[test]
-    fn pie_color_1_is_rgb() {
+    fn pie_color_1_is_valid() {
         assert!(
-            PIE_COLORS[1].starts_with("rgb("),
-            "Expected rgb() string, got: {}",
+            PIE_COLORS[1].starts_with('#')
+                || PIE_COLORS[1].starts_with("hsl(")
+                || PIE_COLORS[1].starts_with("rgb("),
+            "Expected a valid color string, got: {}",
             PIE_COLORS[1]
         );
     }

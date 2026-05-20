@@ -31,6 +31,7 @@ impl IshikawaNode {
 }
 
 pub struct IshikawaDiagram {
+    #[allow(dead_code)]
     pub title: Option<String>,
     /// The root node (fish head / effect). Its children are the main bones (causes).
     pub root: Option<IshikawaNode>,
@@ -58,6 +59,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<IshikawaDiagram> {
                 || lower == "ishikawa"
                 || lower.starts_with("fishbone ")
                 || lower.starts_with("ishikawa ")
+                || lower.starts_with("ishikawa-")
             {
                 header_seen = true;
                 continue;

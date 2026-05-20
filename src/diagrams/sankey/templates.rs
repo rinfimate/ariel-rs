@@ -4,6 +4,31 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_css(svg_id: &str, ff: &str) -> String {
+    format!(
+        concat!(
+            "#{id}{{font-family:{ff};font-size:14px;fill:#333;}}",
+            "#{id} .nodes .node rect{{shape-rendering:crispEdges;}}",
+            "#{id} .links .link{{fill:none;stroke-opacity:0.5;}}",
+            "#{id} .node-labels text{{font-size:14px;}}",
+            "#{id} .sankey-label-bg{{stroke:#fff;stroke-width:4px;paint-order:stroke;fill:#fff;opacity:0.8;}}",
+            "#{id} .sankey-label-fg{{}}",
+        ),
+        id = svg_id,
+        ff = ff,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 

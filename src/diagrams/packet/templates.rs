@@ -4,6 +4,32 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::{esc, fmt};
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    // Matches mermaid's packet styles (defaultPacketStyleOptions)
+    format!(
+        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}\
+        #{id} .packetByte{{font-size:10px;}}\
+        #{id} .packetByte.start{{fill:black;}}\
+        #{id} .packetByte.end{{fill:black;}}\
+        #{id} .packetLabel{{fill:black;font-size:12px;}}\
+        #{id} .packetTitle{{fill:black;font-size:14px;}}\
+        #{id} .packetBlock{{stroke:black;stroke-width:1;fill:#efefef;}}\
+        #{id} :root{{--mermaid-font-family:{ff};}}",
+        id = id,
+        ff = ff,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 

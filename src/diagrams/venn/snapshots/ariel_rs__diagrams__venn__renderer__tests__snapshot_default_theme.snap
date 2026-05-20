@@ -1,6 +1,13 @@
 ---
 source: src/diagrams/venn/renderer.rs
-assertion_line: 366
-expression: svg
+expression: "crate::svg::normalize_floats(&svg)"
 ---
-<svg id="mermaid-venn" xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="graphics-document"><style>#mermaid-venn{font-family:Arial, sans-serif;font-size:14px;} .venn-circle path{fill-opacity:0.25;} .venn-circle text,.venn-intersection text{text-anchor:middle;dominant-baseline:middle;fill:#333333;}</style><text class="venn-title" x="400" y="16" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="16" fill="#333333">Sets</text><g transform="translate(0,48)"><g class="venn-circle venn-set-0"><path d="M 228.647,201 A 110.55,110.55 0 1,0 449.748,201 A 110.55,110.55 0 1,0 228.647,201" style="fill:#4C8BF5;fill-opacity:0.1;stroke:#4C8BF5;stroke-width:2.5;stroke-opacity:0.95;"/><text x="339.197" y="134.67" style="font-size:24px;fill:#2D5393;">A</text></g><g class="venn-circle venn-set-1"><path d="M 350.252,201 A 110.55,110.55 0 1,0 571.352,201 A 110.55,110.55 0 1,0 350.252,201" style="fill:#FF6B6B;fill-opacity:0.1;stroke:#FF6B6B;stroke-width:2.5;stroke-opacity:0.95;"/><text x="460.803" y="134.67" style="font-size:24px;fill:#994040;">B</text></g></g></svg>
+<svg id="mermaid-venn" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 800 450" style="max-width: 800px;" role="graphics-document document" aria-roledescription="venn"><style>.venn-title{font-family:Arial, sans-serif;} .venn-circle text{font-family:Arial, sans-serif;} .venn-intersection text{font-family:Arial, sans-serif;} .venn-text-node{font-family:Arial, sans-serif;}</style><text class="venn-title" font-size="32px" text-anchor="middle" dominant-baseline="middle" x="50%" y="16" style="fill: #333333;">Sets</text><g transform="translate(0, 24)"><g class="venn-area venn-circle venn-set-0" data-venn-sets="A"><path d="
+M 274.328 213
+m -198 0
+a 198 198 0 1 0 396 0
+a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #5353ff; stroke: #5353ff; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="205" y="239" style="fill: #313199; font-size: 24px;"><tspan x="205" y="239" dy="0.35em">A</tspan></text></g><g class="venn-area venn-circle venn-set-1" data-venn-sets="B"><path d="
+M 525.672 213
+m -198 0
+a 198 198 0 1 0 396 0
+a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #ffff45; stroke: #ffff45; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="594" y="239" style="fill: #999929; font-size: 24px;"><tspan x="594" y="239" dy="0.35em">B</tspan></text></g></g></svg>

@@ -1,533 +1,575 @@
-// State diagram parser — faithful port of Mermaid stateDb.ts
-// Supports stateDiagram-v2 and stateDiagram syntax.
+// Faithful port of Mermaid stateDiagram-v2 parser (stateDb.ts + grammar)
+// Handles stateDiagram-v2 and stateDiagram syntax.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
 
-fn fresh_id(prefix: &str) -> String {
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{}{}", prefix, n)
+#[allow(dead_code)]
+pub fn reset_counter() {
+    COUNTER.store(0, Ordering::Relaxed);
 }
+
+fn fresh_id() -> u32 {
+    COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+// ─── Constants (from stateCommon.ts) ─────────────────────────────────────────
+
+pub const DOMID_STATE: &str = "state";
+#[allow(dead_code)]
+pub const DOMID_TYPE_SPACER: &str = "----";
+pub const NOTE_ID_SUFFIX: &str = "----note"; // NOTE_ID  = "----note"
+pub const PARENT_ID_SUFFIX: &str = "----parent"; // PARENT_ID = "----parent"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/// Maps to shape strings used in dataFetcher.ts
 #[derive(Debug, Clone, PartialEq)]
-pub enum StateType {
-    /// Normal state
-    Normal,
-    /// [*] — used as both start and end depending on position
-    Start,
-    End,
-    /// <<fork>>
-    Fork,
-    /// <<join>>
-    Join,
-    /// <<choice>>
-    Choice,
-    /// Composite (has sub-states)
-    Composite,
-    /// note
+pub enum Shape {
+    /// "rect" — normal state
+    Rect,
+    /// "rectWithTitle" — state with description lines
+    RectWithTitle,
+    /// "stateStart" — [*] as start
+    StateStart,
+    /// "stateEnd" — [*] as end
+    StateEnd,
+    /// "divider"
+    #[allow(dead_code)]
+    Divider,
+    /// "roundedWithTitle" — composite group
+    RoundedWithTitle,
+    /// "note"
     Note,
+    /// "noteGroup" — compound parent for note
+    NoteGroup,
+    /// "fork" / "join"
+    ForkJoin,
+    /// "choice"
+    Choice,
 }
 
+/// A node in the layout graph — mirrors NodeData from dataFetcher.ts
 #[derive(Debug, Clone)]
-pub struct StateNode {
+pub struct Node {
     pub id: String,
-    /// Display label (for normal states, this is the state name; may have multi-line descriptions)
+    pub dom_id: String,
+    pub shape: Shape,
+    /// Display label / description
     pub label: String,
-    pub state_type: StateType,
-    /// If this is a composite state, these are the sub-statements
-    pub doc: Vec<StateStmt>,
-    /// Note text
-    pub note_text: Option<String>,
-    /// Note position (right/left)
-    pub note_pos: Option<String>,
+    /// For compound parent nodes: which node is the parent
+    pub parent_id: Option<String>,
+    /// padding (note compound uses 16, states use 8)
+    #[allow(dead_code)]
+    pub padding: f64,
+    /// CSS classes string
+    #[allow(dead_code)]
+    pub css_classes: String,
+    /// For composite states: sub-level nodes and edges
+    pub is_group: bool,
+    pub dir: String,
+    /// For notes: position ("right of" / "left of")
+    #[allow(dead_code)]
+    pub position: Option<String>,
 }
 
-impl StateNode {
-    pub fn new(id: &str, state_type: StateType) -> Self {
-        StateNode {
-            id: id.to_string(),
-            label: id.to_string(),
-            state_type,
-            doc: Vec::new(),
-            note_text: None,
-            note_pos: None,
-        }
-    }
-}
-
+/// An edge in the layout graph — mirrors Edge from dataFetcher.ts
 #[derive(Debug, Clone)]
-pub struct Transition {
-    pub from: String,
-    pub to: String,
-    pub label: Option<String>,
+pub struct Edge {
+    #[allow(dead_code)]
+    pub id: String,
+    pub start: String,
+    pub end: String,
+    pub label: String,
+    /// "none" for note edges, "normal" for state transitions
+    pub arrowhead: String,
+    /// CSS classes: "transition" or "transition note-edge"
+    pub classes: String,
 }
 
-#[derive(Debug, Clone)]
-pub enum StateStmt {
-    State(StateNode),
-    Transition(Transition),
-    /// direction LR / TB / etc.
-    Direction(String),
-}
-
-#[derive(Debug)]
+/// Top-level parse result
 pub struct StateDiagram {
-    /// Top-level statements
-    pub stmts: Vec<StateStmt>,
-    /// Overall direction
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
     pub direction: String,
 }
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
 
-pub fn parse(input: &str) -> crate::error::ParseResult<StateDiagram> {
-    let mut diag = StateDiagram {
-        stmts: Vec::new(),
-        direction: "TB".to_string(),
-    };
-
-    let lines: Vec<&str> = input.lines().collect();
-    let mut i = 0;
-
-    // Skip header line (stateDiagram-v2 / stateDiagram)
-    while i < lines.len() {
-        let line = lines[i].trim();
-        if line.starts_with("stateDiagram") {
-            i += 1;
-            break;
-        }
-        i += 1;
-    }
-
-    let (stmts, dir) = parse_block(&lines, &mut i, false);
-    diag.stmts = stmts;
-    // Look for direction in top-level stmts
-    for stmt in &diag.stmts {
-        if let StateStmt::Direction(d) = stmt {
-            diag.direction = d.clone();
-        }
-    }
-    let _ = dir;
-
-    crate::error::ParseResult::ok(diag)
-}
-
-/// Parse a block of statements until we hit `end` or end-of-input.
-/// Returns (stmts, direction).
-/// `inside_state` is true when we are inside a `state X { ... }` block.
-fn parse_block(lines: &[&str], i: &mut usize, inside_state: bool) -> (Vec<StateStmt>, String) {
-    let mut stmts: Vec<StateStmt> = Vec::new();
+pub fn parse(input: &str) -> StateDiagram {
+    COUNTER.store(0, Ordering::Relaxed);
+    let mut nodes: Vec<Node> = Vec::new();
+    let mut edges: Vec<Edge> = Vec::new();
     let mut direction = "TB".to_string();
 
-    while *i < lines.len() {
-        let raw = lines[*i];
+    // Strip YAML frontmatter
+    let input = strip_frontmatter(input);
+    let lines: Vec<&str> = input.lines().collect();
+
+    let mut in_header = true;
+    let mut i = 0;
+
+    // Track which node ids have been seen (to avoid duplicates)
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Track composite parent context
+    let mut composite_stack: Vec<String> = Vec::new();
+
+    while i < lines.len() {
+        let raw = lines[i];
         let line = strip_comment(raw).trim().to_string();
-        *i += 1;
+        i += 1;
 
         if line.is_empty() {
             continue;
         }
 
-        // End of composite block
-        if line == "}" || line == "end" {
-            if inside_state {
-                break;
+        // Wait for diagram header
+        if in_header {
+            if line.starts_with("stateDiagram") {
+                in_header = false;
             }
             continue;
         }
 
-        // direction statement
-        if let Some(rest) = line.strip_prefix("direction ") {
-            direction = rest.trim().to_string();
-            stmts.push(StateStmt::Direction(direction.clone()));
+        // direction
+        if let Some(dir) = line.strip_prefix("direction ") {
+            direction = dir.trim().to_string();
+            continue;
+        }
+
+        // accTitle / accDescr — skip
+        if line.starts_with("accTitle") || line.starts_with("accDescr") {
+            continue;
+        }
+
+        // End of composite block
+        if line == "}" {
+            composite_stack.pop();
             continue;
         }
 
         // Note: "note right of X" / "note left of X"
         if line.starts_with("note ") {
-            if let Some(note_stmt) = parse_note(&line, lines, i) {
-                stmts.push(note_stmt);
-            }
-            continue;
-        }
-
-        // `state X <<type>>` or `state X { ... }` or `state "label" as X`
-        if let Some(rest) = line.strip_prefix("state ") {
-            if let Some(stmt) = parse_state_decl(rest, lines, i) {
-                stmts.push(stmt);
-            }
-            continue;
-        }
-
-        // Transition: X --> Y [: label]
-        if line.contains("-->") {
-            if let Some(t) = parse_transition(&line) {
-                stmts.push(StateStmt::Transition(t));
-            }
-            continue;
-        }
-
-        // Could be a bare state name or `StateId: description` (implicit declaration)
-        if !line.is_empty() && !line.starts_with("%%") {
-            // Check for `StateId: description` (description form)
-            if let Some(colon_pos) = line.find(':') {
-                let id_part = line[..colon_pos].trim();
-                let desc_part = line[colon_pos + 1..].trim();
-                // Validate: id_part must look like a valid state ID (no spaces), desc non-empty
-                if is_valid_state_id(id_part) && !id_part.contains(' ') && !desc_part.is_empty() {
-                    let mut node = StateNode::new(&resolve_id(id_part), StateType::Normal);
-                    node.label = desc_part.to_string();
-                    stmts.push(StateStmt::State(node));
-                    continue;
+            if let Some((note_nodes, note_edges)) =
+                parse_note(&line, &lines, &mut i, &mut seen, &composite_stack)
+            {
+                for n in note_nodes {
+                    nodes.push(n);
+                }
+                for e in note_edges {
+                    edges.push(e);
                 }
             }
-            // Bare state name
-            let id = line.trim().to_string();
-            if is_valid_state_id(&id) {
-                let node = StateNode::new(&resolve_id(&id), StateType::Normal);
-                stmts.push(StateStmt::State(node));
-            }
+            continue;
         }
-    }
 
-    (stmts, direction)
-}
-
-/// Parse `state DECL` where DECL is one of:
-///   - `"Quoted Label" as StateId`
-///   - `StateId <<fork>>`
-///   - `StateId <<join>>`
-///   - `StateId <<choice>>`
-///   - `StateId { ... }` (composite)
-///   - `StateId` (bare)
-fn parse_state_decl(rest: &str, lines: &[&str], i: &mut usize) -> Option<StateStmt> {
-    let rest = rest.trim();
-
-    // `"Quoted Label" as StateId`
-    if let Some(rest_stripped) = rest.strip_prefix('"') {
-        if let Some(close) = rest_stripped.find('"') {
-            let label = &rest_stripped[..close];
-            let after = rest_stripped[close + 1..].trim();
-            let id = if let Some(as_rest) = after.strip_prefix("as ") {
-                as_rest.trim().to_string()
+        // Composite state: "state X {"
+        if line.ends_with('{') {
+            let id = line.trim_end_matches('{').trim().to_string();
+            let id = if let Some(r) = id.strip_prefix("state ") {
+                r.trim().to_string()
             } else {
-                // no `as` — use label as id
-                label.to_string()
+                id
             };
-            let mut node = StateNode::new(&id, StateType::Normal);
-            node.label = label.to_string();
-            return Some(StateStmt::State(node));
+            let parent_id = composite_stack.last().cloned();
+            // Update existing node to be composite group (it may have been added as Rect)
+            if let Some(n) = nodes.iter_mut().find(|n| n.id == id) {
+                n.shape = Shape::RoundedWithTitle;
+                n.is_group = true;
+                n.dir = direction.clone();
+            } else {
+                ensure_node(
+                    &id,
+                    Shape::RoundedWithTitle,
+                    &id,
+                    parent_id,
+                    8.0,
+                    true,
+                    &direction,
+                    None,
+                    &mut nodes,
+                    &mut seen,
+                );
+            }
+            composite_stack.push(id);
+            continue;
         }
-    }
 
-    // `StateId <<type>>`
-    if let Some(bracket_start) = rest.find("<<") {
-        if let Some(bracket_end) = rest.find(">>") {
-            let id = rest[..bracket_start].trim().to_string();
-            let type_str = &rest[bracket_start + 2..bracket_end];
-            let state_type = match type_str.trim() {
-                "fork" => StateType::Fork,
-                "join" => StateType::Join,
-                "choice" => StateType::Choice,
-                _ => StateType::Normal,
+        // State with annotation: "state \"label\" as ID" or "state ID <<type>>"
+        if line.starts_with("state ") {
+            if let Some(rest) = line.strip_prefix("state ") {
+                let parent_id = composite_stack.last().cloned();
+                if let Some(id) = parse_state_declaration(rest, &mut nodes, &mut seen, parent_id) {
+                    let _ = id;
+                }
+            }
+            continue;
+        }
+
+        // Relation: "A --> B" or "A --> B : label"
+        if line.contains("-->") {
+            let (from_raw, to_raw, label) = parse_relation(&line);
+            // docTranslator: [*] as first → "{parent}_start", as second → "{parent}_end"
+            let parent_ctx = composite_stack
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "root".to_string());
+            let from = if from_raw == "[*]" {
+                format!("{}_start", parent_ctx)
+            } else {
+                from_raw.clone()
             };
-            let node = StateNode::new(&id, state_type);
-            return Some(StateStmt::State(node));
+            let to = if to_raw == "[*]" {
+                format!("{}_end", parent_ctx)
+            } else {
+                to_raw.clone()
+            };
+            let from_shape = if from.ends_with("_start") {
+                Shape::StateStart
+            } else {
+                node_shape(&from)
+            };
+            let to_shape = if to.ends_with("_end") {
+                Shape::StateEnd
+            } else {
+                node_shape(&to)
+            };
+            let parent_id = if composite_stack.is_empty() {
+                None
+            } else {
+                Some(parent_ctx)
+            };
+            ensure_node(
+                &from,
+                from_shape,
+                &from,
+                parent_id.clone(),
+                8.0,
+                false,
+                &direction,
+                None,
+                &mut nodes,
+                &mut seen,
+            );
+            ensure_node(
+                &to, to_shape, &to, parent_id, 8.0, false, &direction, None, &mut nodes, &mut seen,
+            );
+            let edge_id = format!("edge{}", fresh_id());
+            edges.push(Edge {
+                id: edge_id,
+                start: from,
+                end: to,
+                label,
+                arrowhead: "normal".to_string(),
+                classes: "transition".to_string(),
+            });
+            continue;
         }
-    }
 
-    // `StateId { ... }` — composite state with optional `{` on same line or next
-    // Check if rest ends with `{` or the next non-empty line is `{`
-    let (id_part, open_brace_here) = if rest.ends_with('{') {
-        (rest.trim_end_matches('{').trim(), true)
-    } else {
-        (rest, false)
-    };
-
-    let id = id_part.trim().to_string();
-
-    // If `{` is on same line or peek at next line
-    let has_brace = open_brace_here || peek_brace(lines, *i);
-
-    if has_brace {
-        if !open_brace_here {
-            // consume the `{` line
-            *i += 1;
-        }
-        let (sub_stmts, sub_dir) = parse_block(lines, i, true);
-        let mut node = StateNode::new(&id, StateType::Composite);
-        node.doc = sub_stmts;
-        // Propagate direction if specified
-        for stmt in &node.doc {
-            if let StateStmt::Direction(d) = stmt {
-                node.label = id.clone(); // keep label
-                let _ = d; // direction is embedded in doc stmts
+        // "ID: description" or bare state declaration
+        if !line.is_empty() {
+            let parent_id = composite_stack.last().cloned();
+            let (id, label) = if let Some(pos) = line.find(':') {
+                let id = line[..pos].trim().to_string();
+                let label = line[pos + 1..].trim().to_string();
+                (id, label)
+            } else {
+                (line.clone(), line.clone())
+            };
+            // Update label if node already exists
+            if let Some(n) = nodes.iter_mut().find(|n| n.id == id) {
+                if !label.is_empty() && label != id {
+                    n.label = label.clone();
+                }
+            } else {
+                let shape = if label != id {
+                    Shape::RectWithTitle
+                } else {
+                    node_shape(&id)
+                };
+                ensure_node(
+                    &id, shape, &label, parent_id, 8.0, false, &direction, None, &mut nodes,
+                    &mut seen,
+                );
             }
         }
-        let _ = sub_dir;
-        return Some(StateStmt::State(node));
     }
 
-    // Bare `state X`
-    if !id.is_empty() {
-        let node = StateNode::new(&id, StateType::Normal);
-        return Some(StateStmt::State(node));
+    StateDiagram {
+        nodes,
+        edges,
+        direction,
     }
-
-    None
 }
 
-/// Parse a note statement.
-/// Syntax:
-///   note right of StateName
-///     Text here
-///   end note
-fn parse_note(line: &str, lines: &[&str], i: &mut usize) -> Option<StateStmt> {
-    // "note right of X" or "note left of X"
-    let rest = &line["note ".len()..];
-    let (pos, state_id) = if let Some(r) = rest.strip_prefix("right of ") {
-        ("right", r.trim().to_string())
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+fn node_shape(id: &str) -> Shape {
+    match id {
+        "[*]" => Shape::StateStart, // direction resolved at edge-attach time
+        _ => Shape::Rect,
+    }
+}
+
+/// Ensure a node with given id exists; add it if not seen yet.
+#[allow(clippy::too_many_arguments)]
+fn ensure_node(
+    id: &str,
+    shape: Shape,
+    label: &str,
+    parent_id: Option<String>,
+    padding: f64,
+    is_group: bool,
+    dir: &str,
+    position: Option<String>,
+    nodes: &mut Vec<Node>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    if seen.contains(id) {
+        return;
+    }
+    seen.insert(id.to_string());
+    let count = fresh_id();
+    let dom_id = format!("{}-{}-{}", DOMID_STATE, id, count);
+    let css_classes = match &shape {
+        Shape::Note => "statediagram-note".to_string(),
+        Shape::NoteGroup => "statediagram-cluster".to_string(),
+        Shape::StateStart | Shape::StateEnd => "statediagram-state".to_string(),
+        _ => "statediagram-state".to_string(),
+    };
+    nodes.push(Node {
+        id: id.to_string(),
+        dom_id,
+        shape,
+        label: label.to_string(),
+        parent_id,
+        padding,
+        css_classes,
+        is_group,
+        dir: dir.to_string(),
+        position,
+    });
+}
+
+/// Parse "note right of X\n  text\nend note"
+/// Returns (nodes_to_add, edges_to_add)
+fn parse_note(
+    line: &str,
+    lines: &[&str],
+    i: &mut usize,
+    seen: &mut std::collections::HashSet<String>,
+    composite_stack: &[String],
+) -> Option<(Vec<Node>, Vec<Edge>)> {
+    let rest = line.strip_prefix("note ")?;
+    let (position, state_id) = if let Some(r) = rest.strip_prefix("right of ") {
+        ("right of", r.trim().to_string())
     } else if let Some(r) = rest.strip_prefix("left of ") {
-        ("left", r.trim().to_string())
+        ("left of", r.trim().to_string())
     } else {
         return None;
     };
 
     // Collect note text until "end note"
-    let mut note_lines: Vec<String> = Vec::new();
+    let mut text_lines: Vec<String> = Vec::new();
     while *i < lines.len() {
-        let raw = lines[*i];
-        let l = strip_comment(raw).trim().to_string();
+        let l = strip_comment(lines[*i]).trim().to_string();
         *i += 1;
         if l == "end note" {
             break;
         }
-        note_lines.push(l);
+        text_lines.push(l);
     }
-    let note_text = note_lines.join("\n");
+    let text = text_lines.join("\n");
 
-    let note_id = fresh_id("note_");
-    let mut node = StateNode::new(&note_id, StateType::Note);
-    node.note_text = Some(note_text);
-    node.note_pos = Some(pos.to_string());
-    // The note is "attached to" state_id — we encode as a note transition
-    // We produce a fake note node + a transition to the target state
-    // For simplicity: embed as a synthetic StateNode with label = state_id
-    node.label = state_id;
-    Some(StateStmt::State(node))
-}
+    let count = fresh_id();
 
-fn parse_transition(line: &str) -> Option<Transition> {
-    // Split on -->
-    let parts: Vec<&str> = line.splitn(2, "-->").collect();
-    if parts.len() != 2 {
-        return None;
+    // noteGroup (compound parent) — id = "{stateId}----parent"
+    let group_id = format!("{}{}", state_id, PARENT_ID_SUFFIX);
+    let group_dom_id = format!("{}-{}{}-{}", DOMID_STATE, state_id, PARENT_ID_SUFFIX, count);
+
+    // note node — id = "{stateId}----note-{count}"
+    let note_id = format!("{}{}-{}", state_id, NOTE_ID_SUFFIX, count);
+    let note_dom_id = format!("{}-{}{}-{}", DOMID_STATE, state_id, NOTE_ID_SUFFIX, count);
+
+    // edge id
+    let edge_id = format!("{}-{}", state_id, note_id);
+
+    let parent_from_stack = composite_stack.last().cloned();
+
+    let mut new_nodes = Vec::new();
+    let mut new_edges = Vec::new();
+
+    // groupData (noteGroup) — no parentId, padding=16
+    if !seen.contains(&group_id) {
+        seen.insert(group_id.clone());
+        new_nodes.push(Node {
+            id: group_id.clone(),
+            dom_id: group_dom_id,
+            shape: Shape::NoteGroup,
+            label: text.clone(),
+            parent_id: None,
+            padding: 16.0,
+            css_classes: "statediagram-cluster".to_string(),
+            is_group: true,
+            dir: "TB".to_string(),
+            position: Some(position.to_string()),
+        });
     }
-    let from_raw = parts[0].trim();
-    let rest = parts[1].trim();
 
-    // rest may have `: label`
-    let (to_raw, label) = if let Some(col) = rest.find(':') {
-        let to = rest[..col].trim();
-        let lbl = rest[col + 1..].trim().to_string();
-        (to, if lbl.is_empty() { None } else { Some(lbl) })
+    // noteData — parentId = group_id
+    new_nodes.push(Node {
+        id: note_id.clone(),
+        dom_id: note_dom_id,
+        shape: Shape::Note,
+        label: text.clone(),
+        parent_id: Some(group_id),
+        padding: 8.0,
+        css_classes: "statediagram-note".to_string(),
+        is_group: false,
+        dir: "TB".to_string(),
+        position: Some(position.to_string()),
+    });
+
+    // stateNode — no parentId (root level)
+    if !seen.contains(&state_id) {
+        seen.insert(state_id.clone());
+        let state_count = fresh_id();
+        let state_dom_id = format!("{}-{}-{}", DOMID_STATE, state_id, state_count);
+        new_nodes.push(Node {
+            id: state_id.clone(),
+            dom_id: state_dom_id,
+            shape: Shape::Rect,
+            label: state_id.clone(),
+            parent_id: parent_from_stack,
+            padding: 8.0,
+            css_classes: "statediagram-state".to_string(),
+            is_group: false,
+            dir: "TB".to_string(),
+            position: None,
+        });
+    }
+
+    // note edge — "right of": from=state, to=note; "left of": from=note, to=state
+    let (from, to) = if position == "left of" {
+        (note_id.clone(), state_id.clone())
     } else {
-        (rest, None)
+        (state_id.clone(), note_id.clone())
     };
+    new_edges.push(Edge {
+        id: edge_id,
+        start: from,
+        end: to,
+        label: String::new(),
+        arrowhead: "none".to_string(),
+        classes: "transition note-edge".to_string(),
+    });
 
-    let from = resolve_id(from_raw.trim());
-    let to = resolve_id(to_raw.trim());
-
-    if from.is_empty() || to.is_empty() {
-        return None;
-    }
-
-    Some(Transition { from, to, label })
+    Some((new_nodes, new_edges))
 }
 
-/// [*] maps to a special sentinel id that we resolve during rendering
-fn resolve_id(raw: &str) -> String {
-    match raw {
-        "[*]" => "[*]".to_string(),
-        s => s.to_string(),
-    }
-}
-
-fn is_valid_state_id(id: &str) -> bool {
-    !id.is_empty()
-        && !id.starts_with("%%")
-        && !id.starts_with("--")
-        && id
-            .chars()
-            .next()
-            .map(|c| c.is_alphanumeric() || c == '[' || c == '_')
-            .unwrap_or(false)
-}
-
-fn strip_comment(line: &str) -> &str {
-    if let Some(pos) = line.find("%%") {
-        &line[..pos]
-    } else {
-        line
-    }
-}
-
-/// Peek at lines starting at index to see if the next non-empty line is `{`
-fn peek_brace(lines: &[&str], from: usize) -> bool {
-    for &l in &lines[from..] {
-        let t = l.trim();
-        if t.is_empty() {
-            continue;
-        }
-        return t == "{";
-    }
-    false
-}
-
-// ─── Flattening helpers ───────────────────────────────────────────────────────
-
-/// Flatten a StateDiagram into a list of all (unique) state nodes and
-/// transitions, properly numbering [*] references per context.
-///
-/// Each composite state "owns" its own start/end [*] instances.
-/// Returns (states, transitions) where states are unique by id.
-pub struct FlatGraph {
-    /// All unique state nodes keyed by id
-    pub states: indexmap::IndexMap<String, StateNode>,
-    /// All transitions (from, to, label)
-    pub transitions: Vec<Transition>,
-    /// Subgraph membership: state_id -> parent_composite_id
-    pub parent: std::collections::HashMap<String, String>,
-}
-
-pub fn flatten(diag: &StateDiagram) -> FlatGraph {
-    let mut graph = FlatGraph {
-        states: indexmap::IndexMap::new(),
-        transitions: Vec::new(),
-        parent: std::collections::HashMap::new(),
-    };
-
-    flatten_stmts(&diag.stmts, None, &mut graph);
-    graph
-}
-
-fn flatten_stmts(stmts: &[StateStmt], parent_id: Option<&str>, graph: &mut FlatGraph) {
-    // First pass: allocate unique ids for [*] in this context
-    // Count how many [*] transitions appear to decide start vs end
-    let star_count = stmts
-        .iter()
-        .filter(|s| {
-            if let StateStmt::Transition(t) = s {
-                t.from == "[*]" || t.to == "[*]"
-            } else {
-                false
+/// Resolve [*] start/end based on whether it appears as source or target
+#[allow(dead_code)]
+pub fn resolve_start_end(nodes: &mut [Node], edges: &[Edge]) {
+    for edge in edges {
+        if edge.start == "[*]" {
+            // [*] as source → StateStart
+            if let Some(n) = nodes.iter_mut().find(|n| n.id == "[*]") {
+                n.shape = Shape::StateStart;
             }
-        })
-        .count();
-    let _ = star_count;
-
-    // Per-context ids for [*] start/end
-    let ctx_prefix = parent_id.unwrap_or("root");
-    let start_id = format!("{}_start", ctx_prefix);
-    let end_id = format!("{}_end", ctx_prefix);
-
-    for stmt in stmts {
-        match stmt {
-            StateStmt::State(node) => {
-                match node.state_type {
-                    StateType::Composite => {
-                        // Register the composite node itself
-                        let mut n = node.clone();
-                        n.doc = Vec::new(); // clear, children handled separately
-                        graph.states.insert(node.id.clone(), n);
-                        if let Some(pid) = parent_id {
-                            graph.parent.insert(node.id.clone(), pid.to_string());
-                        }
-                        // Recurse into children
-                        flatten_stmts(&node.doc, Some(&node.id), graph);
-                    }
-                    StateType::Note => {
-                        // Note nodes: we register them but they're rendered specially
-                        graph.states.insert(node.id.clone(), node.clone());
-                        if let Some(pid) = parent_id {
-                            graph.parent.insert(node.id.clone(), pid.to_string());
-                        }
-                    }
-                    _ => {
-                        graph
-                            .states
-                            .entry(node.id.clone())
-                            .or_insert_with(|| node.clone());
-                        if let Some(pid) = parent_id {
-                            graph
-                                .parent
-                                .entry(node.id.clone())
-                                .or_insert_with(|| pid.to_string());
-                        }
-                    }
+        }
+        if edge.end == "[*]" {
+            // [*] as target → StateEnd
+            // If there's already a StateStart [*], we need a second node
+            // Mermaid uses the same id but the shape changes based on context.
+            // Simple heuristic: if this [*] has an incoming edge, it's an end.
+            if let Some(n) = nodes.iter_mut().find(|n| n.id == "[*]") {
+                if n.shape == Shape::StateStart {
+                    // Need a separate end node — use a unique id
+                    // This is handled by the renderer using the edge direction
+                } else {
+                    n.shape = Shape::StateEnd;
                 }
             }
-            StateStmt::Transition(t) => {
-                let from = if t.from == "[*]" {
-                    // Register start node if not yet
-                    if !graph.states.contains_key(&start_id) {
-                        let mut n = StateNode::new(&start_id, StateType::Start);
-                        n.label = start_id.clone();
-                        graph.states.insert(start_id.clone(), n);
-                        if let Some(pid) = parent_id {
-                            graph.parent.insert(start_id.clone(), pid.to_string());
-                        }
-                    }
-                    start_id.clone()
-                } else {
-                    // Ensure state exists
-                    graph
-                        .states
-                        .entry(t.from.clone())
-                        .or_insert_with(|| StateNode::new(&t.from, StateType::Normal));
-                    if let Some(pid) = parent_id {
-                        graph
-                            .parent
-                            .entry(t.from.clone())
-                            .or_insert_with(|| pid.to_string());
-                    }
-                    t.from.clone()
-                };
-
-                let to = if t.to == "[*]" {
-                    if !graph.states.contains_key(&end_id) {
-                        let mut n = StateNode::new(&end_id, StateType::End);
-                        n.label = end_id.clone();
-                        graph.states.insert(end_id.clone(), n);
-                        if let Some(pid) = parent_id {
-                            graph.parent.insert(end_id.clone(), pid.to_string());
-                        }
-                    }
-                    end_id.clone()
-                } else {
-                    graph
-                        .states
-                        .entry(t.to.clone())
-                        .or_insert_with(|| StateNode::new(&t.to, StateType::Normal));
-                    if let Some(pid) = parent_id {
-                        graph
-                            .parent
-                            .entry(t.to.clone())
-                            .or_insert_with(|| pid.to_string());
-                    }
-                    t.to.clone()
-                };
-
-                graph.transitions.push(Transition {
-                    from,
-                    to,
-                    label: t.label.clone(),
-                });
-            }
-            StateStmt::Direction(_) => {}
         }
+    }
+}
+
+fn parse_relation(line: &str) -> (String, String, String) {
+    let parts: Vec<&str> = line.splitn(2, "-->").collect();
+    let from = parts[0].trim().to_string();
+    let rest = parts.get(1).map(|s| s.trim()).unwrap_or("");
+    let (to, label) = if let Some(pos) = rest.find(':') {
+        (
+            rest[..pos].trim().to_string(),
+            rest[pos + 1..].trim().to_string(),
+        )
+    } else {
+        (rest.to_string(), String::new())
+    };
+    (from, to, label)
+}
+
+fn parse_state_declaration(
+    rest: &str,
+    nodes: &mut Vec<Node>,
+    seen: &mut std::collections::HashSet<String>,
+    parent_id: Option<String>,
+) -> Option<String> {
+    // "\"label\" as ID"
+    if let Some(stripped) = rest.strip_prefix('"') {
+        let end_quote = stripped.find('"')? + 1;
+        let label = stripped[..end_quote - 1].to_string();
+        let after = stripped[end_quote..].trim();
+        let id = after.strip_prefix("as ")?.trim().to_string();
+        ensure_node(
+            &id,
+            Shape::Rect,
+            &label,
+            parent_id,
+            8.0,
+            false,
+            "TB",
+            None,
+            nodes,
+            seen,
+        );
+        return Some(id);
+    }
+    // "ID <<type>>"
+    if let Some(pos) = rest.find("<<") {
+        let id = rest[..pos].trim().to_string();
+        let type_str = rest[pos + 2..].trim_end_matches(">>").trim();
+        let shape = match type_str {
+            "fork" | "join" => Shape::ForkJoin,
+            "choice" => Shape::Choice,
+            _ => Shape::Rect,
+        };
+        ensure_node(
+            &id, shape, &id, parent_id, 8.0, false, "TB", None, nodes, seen,
+        );
+        return Some(id);
+    }
+    None
+}
+
+fn strip_comment(s: &str) -> &str {
+    if let Some(p) = s.find("%%") {
+        &s[..p]
+    } else {
+        s
+    }
+}
+
+fn strip_frontmatter(input: &str) -> &str {
+    let t = input.trim_start();
+    if !t.starts_with("---") {
+        return input;
+    }
+    let after = &t[3..];
+    if let Some(end) = after.find("\n---") {
+        &after[end + 4..]
+    } else {
+        input
     }
 }

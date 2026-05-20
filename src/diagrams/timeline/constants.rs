@@ -53,3 +53,76 @@ pub const NODE_CORNER_R: f64 = 5.0;
 
 /// Fixed id attribute for the timeline diagram SVG root element.
 pub const DIAGRAM_ID: &str = "mermaid-timeline";
+
+// ---------------------------------------------------------------------------
+// Section colour palette
+// ---------------------------------------------------------------------------
+
+pub struct SectionStyle {
+    pub fill: &'static str,
+    pub line: &'static str,
+    pub text: &'static str,
+}
+
+pub const SECTION_STYLES: [SectionStyle; 12] = [
+    SectionStyle {
+        fill: "hsl(240, 100%, 76.2745098039%)",
+        line: "hsl(60, 100%, 86.2745098039%)",
+        text: "#ffffff",
+    },
+    SectionStyle {
+        fill: "hsl(60, 100%, 73.5294117647%)",
+        line: "hsl(240, 100%, 83.5294117647%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(80, 100%, 76.2745098039%)",
+        line: "hsl(260, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(270, 100%, 76.2745098039%)",
+        line: "hsl(90, 100%, 86.2745098039%)",
+        text: "#ffffff",
+    },
+    SectionStyle {
+        fill: "hsl(300, 100%, 76.2745098039%)",
+        line: "hsl(120, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(330, 100%, 76.2745098039%)",
+        line: "hsl(150, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(0, 100%, 76.2745098039%)",
+        line: "hsl(180, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(30, 100%, 76.2745098039%)",
+        line: "hsl(210, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(90, 100%, 76.2745098039%)",
+        line: "hsl(270, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(150, 100%, 76.2745098039%)",
+        line: "hsl(330, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(180, 100%, 76.2745098039%)",
+        line: "hsl(0, 100%, 86.2745098039%)",
+        text: "black",
+    },
+    SectionStyle {
+        fill: "hsl(210, 100%, 76.2745098039%)",
+        line: "hsl(30, 100%, 86.2745098039%)",
+        text: "black",
+    },
+];

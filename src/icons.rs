@@ -84,6 +84,11 @@ pub(crate) fn fa_icon_char(name: &str) -> Option<char> {
         "sliders" | "sliders-h" => Some('\u{f1de}'),
         "terminal" => Some('\u{f120}'),
         "truck" => Some('\u{f0d1}'),
+        "car" => Some('\u{f1b9}'),
+        "bus" => Some('\u{f207}'),
+        "bicycle" => Some('\u{f206}'),
+        "plane" | "plane-up" => Some('\u{f072}'),
+        "ship" => Some('\u{f21a}'),
         "wifi" => Some('\u{f1eb}'),
         "wrench" => Some('\u{f0ad}'),
         _ => None,
@@ -110,6 +115,9 @@ pub(crate) fn parse_fa_label(label: &str) -> (Option<char>, &str) {
         if let Some(ch) = fa_icon_char(icon_part) {
             return (Some(ch), text_part);
         }
+        // Unknown icon — strip the fa:fa-xxx prefix, keep the text only.
+        // Matches Mermaid JS behaviour: shows remaining text, no literal "fa:fa-xxx".
+        return (None, text_part);
     }
     (None, label)
 }
@@ -156,9 +164,10 @@ mod tests {
 
     #[test]
     fn parse_fa_label_unknown_icon() {
+        // Unknown icon strips the fa:fa-xxx prefix, keeps only the remaining text.
         let (ch, text) = parse_fa_label("fa:fa-nonexistent label");
         assert_eq!(ch, None);
-        assert_eq!(text, "fa:fa-nonexistent label");
+        assert_eq!(text, "label");
     }
 
     #[test]

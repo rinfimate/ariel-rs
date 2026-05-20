@@ -4,14 +4,60 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+/// Format a float for SVG output — up to 10 significant digits but no trailing zeros.
+pub fn fmt_f(v: f64) -> String {
+    // Round to 10 decimal places to avoid floating point noise, strip trailing zeros
+    let s = format!("{:.10}", v);
+    let s = s.trim_end_matches('0');
+    let s = s.trim_end_matches('.');
+    if s.is_empty() || s == "-" {
+        return "0".to_string();
+    }
+    s.to_string()
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
-/// Render the outer SVG wrapper for a wardley map.
-pub fn svg_root(total_w: f64, total_h: f64, content: &str) -> String {
+/// Render the outer `<svg>` element.
+pub fn svg_root(width: f64, height: f64) -> String {
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {:.1} {:.1}" width="100%" style="max-width:{:.0}px">{}</svg>"#,
-        total_w, total_h, total_w, content,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 {width} {height}\" width=\"100%\" style=\"max-width: {width}px;\">",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Defs / markers
+// ---------------------------------------------------------------------------
+
+/// Render the `<defs>` block containing all arrow markers.
+pub fn defs_block(svg_id: &str) -> String {
+    format!(
+        "<defs>\
+<marker id=\"arrow-{svg_id}\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">\
+<path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"#dc3545\" stroke=\"none\"></path></marker>\
+<marker id=\"link-arrow-end-{svg_id}\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"5\" markerHeight=\"5\" orient=\"auto\">\
+<path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"#333333\" stroke=\"none\"></path></marker>\
+<marker id=\"link-arrow-start-{svg_id}\" viewBox=\"0 0 10 10\" refX=\"1\" refY=\"5\" markerWidth=\"5\" markerHeight=\"5\" orient=\"auto\">\
+<path d=\"M 10 0 L 0 5 L 10 10 z\" fill=\"#333333\" stroke=\"none\"></path></marker>\
+</defs>",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Background
+// ---------------------------------------------------------------------------
+
+/// Render the background `<rect>` filling the entire canvas.
+pub fn background_rect(width: f64, height: f64) -> String {
+    format!(
+        "<rect class=\"wardley-background\" width=\"{width}\" height=\"{height}\" fill=\"white\"></rect>",
     )
 }
 
@@ -20,166 +66,151 @@ pub fn svg_root(total_w: f64, total_h: f64, content: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the diagram title `<text>` element.
-pub fn title_text(x: f64, title_font: f64, title: &str) -> String {
+pub fn title_text(x: f64, y: f64, font_size: f64, text: &str) -> String {
     format!(
-        r#"<text class="wardley-title" x="{:.1}" y="20" text-anchor="middle" font-size="{}">{}</text>"#,
-        x, title_font, title,
+        "<text class=\"wardley-title\" x=\"{x}\" y=\"{y}\" fill=\"#131300\" font-size=\"{font_size}\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\">{text}</text>",
     )
 }
 
 // ---------------------------------------------------------------------------
-// Background and borders
+// Axes
 // ---------------------------------------------------------------------------
 
-/// Render the plot area background `<rect>`.
-pub fn bg_rect(canvas_w: f64, canvas_h: f64) -> String {
+/// Render a single axis `<line>` (horizontal or vertical).
+pub fn axis_line(x1: f64, x2: f64, y1: f64, y2: f64) -> String {
     format!(
-        r#"<rect class="wardley-bg" x="0" y="0" width="{:.1}" height="{:.1}"/>"#,
-        canvas_w, canvas_h,
+        "<line x1=\"{x1}\" x2=\"{x2}\" y1=\"{y1}\" y2=\"{y2}\" stroke=\"#333333\" stroke-width=\"1\"></line>",
     )
 }
 
-/// Render the plot area border `<rect>`.
-pub fn border_rect(canvas_w: f64, canvas_h: f64) -> String {
+/// Render the X-axis "Evolution" label.
+pub fn axis_label_x(x: f64, y: f64, font_size: f64) -> String {
     format!(
-        r#"<rect class="wardley-border" x="0" y="0" width="{:.1}" height="{:.1}"/>"#,
-        canvas_w, canvas_h,
+        "<text class=\"wardley-axis-label wardley-axis-label-x\" x=\"{x}\" y=\"{y}\" fill=\"#131300\" font-size=\"{font_size}\" font-weight=\"bold\" text-anchor=\"middle\">Evolution</text>",
     )
 }
 
-/// Render an evolution stage background `<rect>`.
-pub fn stage_bg_rect(x_start: f64, w: f64, canvas_h: f64, fill: &str) -> String {
+/// Render the Y-axis "Visibility" label (rotated).
+pub fn axis_label_y(x: f64, y: f64, font_size: f64) -> String {
     format!(
-        r#"<rect x="{:.1}" y="0" width="{:.1}" height="{:.1}" fill="{}" opacity="0.5"/>"#,
-        x_start, w, canvas_h, fill,
-    )
-}
-
-/// Render a stage boundary vertical `<line>`.
-pub fn stage_boundary_line(x: f64, canvas_h: f64) -> String {
-    format!(
-        r#"<line class="wardley-axis-line" x1="{:.1}" y1="0" x2="{:.1}" y2="{:.1}"/>"#,
-        x, x, canvas_h,
-    )
-}
-
-/// Render a stage label `<text>` at the bottom of the stage.
-pub fn stage_label(x_center: f64, y: f64, axis_font: f64, label: &str) -> String {
-    format!(
-        r#"<text class="wardley-stage-label" x="{:.1}" y="{:.1}" text-anchor="middle" font-size="{}">{}</text>"#,
-        x_center, y, axis_font, label,
+        "<text class=\"wardley-axis-label wardley-axis-label-y\" x=\"{x}\" y=\"{y}\" fill=\"#131300\" font-size=\"{font_size}\" font-weight=\"bold\" text-anchor=\"middle\" transform=\"rotate(-90 {x} {y})\">Visibility</text>",
     )
 }
 
 // ---------------------------------------------------------------------------
-// Axis labels
+// Evolution stages
 // ---------------------------------------------------------------------------
 
-/// Render the "Visible" Y-axis label at the top-left.
-pub fn axis_label_visible(axis_font: f64) -> String {
+/// Render a vertical dashed stage boundary `<line>`.
+pub fn stage_line(x: f64, y_top: f64, y_bottom: f64) -> String {
     format!(
-        r#"<text class="wardley-axis-label" x="-5" y="0" text-anchor="end" font-size="{}" dominant-baseline="hanging">Visible</text>"#,
-        axis_font,
+        "<line x1=\"{x}\" x2=\"{x}\" y1=\"{y_top}\" y2=\"{y_bottom}\" stroke=\"#000\" stroke-width=\"1\" stroke-dasharray=\"5 5\" opacity=\"0.8\"></line>",
     )
 }
 
-/// Render the "Invisible" Y-axis label at the bottom-left.
-pub fn axis_label_invisible(canvas_h: f64, axis_font: f64) -> String {
+/// Render a stage name `<text>` label below the X axis.
+pub fn stage_label(x: f64, y: f64, font_size: f64, text: &str) -> String {
     format!(
-        r#"<text class="wardley-axis-label" x="-5" y="{:.1}" text-anchor="end" font-size="{}">Invisible</text>"#,
-        canvas_h, axis_font,
+        "<text class=\"wardley-stage-label\" x=\"{x}\" y=\"{y}\" fill=\"#131300\" font-size=\"{font_size}\" text-anchor=\"middle\">{text}</text>",
     )
-}
-
-/// Render the "Evolution" X-axis label at the bottom-center.
-pub fn axis_label_evolution(canvas_w: f64, y: f64, axis_font: f64) -> String {
-    format!(
-        r#"<text class="wardley-axis-label" x="{:.1}" y="{:.1}" text-anchor="middle" font-size="{}">Evolution</text>"#,
-        canvas_w / 2.0,
-        y,
-        axis_font,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Arrow marker
-// ---------------------------------------------------------------------------
-
-/// Render the wardley arrowhead `<defs><marker>` definition.
-pub fn arrow_marker() -> String {
-    r#"<defs><marker id="wardley-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="wardley-arrow-head"/></marker></defs>"#.to_string()
 }
 
 // ---------------------------------------------------------------------------
 // Links
 // ---------------------------------------------------------------------------
 
-/// Render a link `<line>` with optional dasharray.
-pub fn link_line(x1: f64, y1: f64, x2: f64, y2: f64, dasharray: &str) -> String {
+/// Render a link `<line>` between two components (solid or dashed).
+pub fn link_line(x1: &str, y1: &str, x2: &str, y2: &str, dash_attr: &str) -> String {
     format!(
-        r#"<line class="wardley-link" x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}"{} marker-end="url(#wardley-arrow)"/>"#,
-        x1, y1, x2, y2, dasharray,
+        "<line class=\"wardley-link\" x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" stroke=\"#333333\" stroke-width=\"1\"{dash_attr}></line>",
     )
 }
 
-/// Render a link label `<text>` at the midpoint of a link.
-pub fn link_label(mx: f64, my: f64, axis_font: f64, label: &str) -> String {
+/// Render a link label `<text>` element at the midpoint of the link.
+pub fn link_label(x: &str, y: &str, font_size: f64, text: &str) -> String {
     format!(
-        r#"<text class="wardley-link-label" x="{:.1}" y="{:.1}" text-anchor="middle" font-size="{}">{}</text>"#,
-        mx, my, axis_font, label,
+        "<text class=\"wardley-link-label\" x=\"{x}\" y=\"{y}\" fill=\"#131300\" font-size=\"{font_size}\" text-anchor=\"middle\" dominant-baseline=\"middle\">{text}</text>",
     )
 }
 
 // ---------------------------------------------------------------------------
-// Nodes
+// Trend (evolve) arrows
 // ---------------------------------------------------------------------------
 
-/// Render a node circle (`<circle>`).
-pub fn node_circle(class: &str, cx: f64, cy: f64, r: f64, fill_overlay: &str) -> String {
+/// Render an evolve trend `<line>` with a red arrowhead.
+pub fn trend_arrow(x1: &str, y1: &str, x2: &str, y2: &str, svg_id: &str) -> String {
     format!(
-        r#"<circle class="{}" cx="{:.1}" cy="{:.1}" r="{:.1}"{}"/>"#,
-        class, cx, cy, r, fill_overlay,
+        "<line class=\"wardley-trend\" x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#arrow-{svg_id})\"></line>",
     )
 }
 
-/// Render the inertia vertical `<line>` next to a node.
-pub fn inertia_line(cx: f64, cy: f64, node_radius: f64) -> String {
+// ---------------------------------------------------------------------------
+// Node group
+// ---------------------------------------------------------------------------
+
+/// Render the opening `<g>` tag for a node group.
+pub fn node_group_open(class_suffix: &str) -> String {
+    format!("<g class=\"wardley-node wardley-node--{class_suffix}\">")
+}
+
+// ---------------------------------------------------------------------------
+// Anchor nodes
+// ---------------------------------------------------------------------------
+
+/// Render an anchor label `<text>` (bold, centered, no circle).
+pub fn anchor_label(x: &str, y: &str, font_size: f64, text: &str) -> String {
     format!(
-        r#"<line class="wardley-inertia" x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}"/>"#,
-        cx + node_radius + 3.0,
-        cy - 8.0,
-        cx + node_radius + 3.0,
-        cy + 8.0,
+        "<text x=\"{x}\" y=\"{y}\" class=\"wardley-node-label\" fill=\"#000\" font-size=\"{font_size}\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\">{text}</text>",
     )
 }
 
-/// Render a node label `<text>` above the node circle.
-pub fn node_label(cx: f64, cy: f64, node_radius: f64, font_size: f64, label: &str) -> String {
+// ---------------------------------------------------------------------------
+// Note nodes
+// ---------------------------------------------------------------------------
+
+/// Render a note `<text>` element.
+pub fn note_text(x: &str, y: &str, text: &str) -> String {
     format!(
-        r#"<text class="wardley-label" x="{:.1}" y="{:.1}" text-anchor="middle" font-size="{}">{}</text>"#,
-        cx,
-        cy - node_radius - 4.0,
-        font_size,
-        label,
+        "<text x=\"{x}\" y=\"{y}\" text-anchor=\"start\" font-size=\"11\" fill=\"#131300\" font-weight=\"bold\">{text}</text>",
     )
 }
 
-/// Render a note background `<rect>`.
-pub fn note_rect(cx: f64, cy: f64, tw: f64, font_size: f64) -> String {
+// ---------------------------------------------------------------------------
+// Component nodes
+// ---------------------------------------------------------------------------
+
+/// Render a sourcing overlay circle (outsource, buy, or build).
+pub fn sourcing_overlay_circle(
+    class_name: &str,
+    cx: &str,
+    cy: &str,
+    r: f64,
+    fill: &str,
+    stroke: &str,
+) -> String {
     format!(
-        r#"<rect class="wardley-note-box" x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="3"/>"#,
-        cx - tw / 2.0 - 4.0,
-        cy - font_size - 2.0,
-        tw + 8.0,
-        font_size + 6.0,
+        "<circle class=\"{class_name}\" cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"1\"></circle>",
     )
 }
 
-/// Render a note label `<text>`.
-pub fn note_text(cx: f64, cy: f64, font_size: f64, label: &str) -> String {
+/// Render the main component circle (white fill, grey stroke).
+pub fn component_circle(cx: &str, cy: &str, r: f64) -> String {
     format!(
-        r#"<text class="wardley-note" x="{:.1}" y="{:.1}" text-anchor="middle" font-size="{}">{}</text>"#,
-        cx, cy, font_size, label,
+        "<circle cx=\"{cx}\" cy=\"{cy}\" r=\"{r}\" fill=\"white\" stroke=\"#333333\" stroke-width=\"1\"></circle>",
+    )
+}
+
+/// Render the inertia vertical line to the right of a component node.
+pub fn inertia_line(x: &str, y1: &str, y2: &str) -> String {
+    format!(
+        "<line class=\"wardley-inertia\" x1=\"{x}\" y1=\"{y1}\" x2=\"{x}\" y2=\"{y2}\" stroke=\"#333333\" stroke-width=\"6\"></line>",
+    )
+}
+
+/// Render a component text label.
+pub fn component_label(x: &str, y: &str, font_size: f64, text: &str) -> String {
+    format!(
+        "<text x=\"{x}\" y=\"{y}\" class=\"wardley-node-label\" fill=\"#131300\" font-size=\"{font_size}\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\">{text}</text>",
     )
 }
 
@@ -187,27 +218,9 @@ pub fn note_text(cx: f64, cy: f64, font_size: f64, label: &str) -> String {
 // Annotations
 // ---------------------------------------------------------------------------
 
-/// Render an annotation circle.
-pub fn annotation_circle(cx: f64, cy: f64) -> String {
+/// Render a single annotation (numbered circle + bold text).
+pub fn annotation(cx: &str, cy: &str, number: u32) -> String {
     format!(
-        r#"<circle class="wardley-annotation" cx="{:.1}" cy="{:.1}" r="8"/>"#,
-        cx, cy,
+        "<g class=\"wardley-annotation\"><circle cx=\"{cx}\" cy=\"{cy}\" r=\"10\" fill=\"white\" stroke=\"#333333\" stroke-width=\"1.5\"></circle><text x=\"{cx}\" y=\"{cy}\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"10\" fill=\"#131300\" font-weight=\"bold\">{number}</text></g>",
     )
-}
-
-/// Render an annotation number `<text>`.
-pub fn annotation_number(cx: f64, cy: f64, axis_font: f64, number: u32) -> String {
-    format!(
-        r#"<text class="wardley-annotation-num" x="{:.1}" y="{:.1}" text-anchor="middle" dominant-baseline="middle" font-size="{}">{}</text>"#,
-        cx, cy, axis_font, number,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Main group
-// ---------------------------------------------------------------------------
-
-/// Render the opening `<g transform="translate(gx,gy)">` group for axes + content.
-pub fn main_group_open(gx: f64, gy: f64) -> String {
-    format!(r#"<g transform="translate({:.1},{:.1})">"#, gx, gy)
 }

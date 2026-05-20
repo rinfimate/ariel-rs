@@ -28,9 +28,13 @@ use super::parser::{GanttDiagram, Task, TaskStatus};
 ///   .today                       — today line
 ///   .titleText                   — diagram title
 #[allow(unused_imports)]
-use super::templates;
+use super::templates::{
+    self, build_style, esc, escape_id, exclude_rect, grid_domain_path, grid_group_open, grid_tick,
+    milestone_rect, section_band_rect, section_title, svg_root, task_bar_rect, task_text,
+    title_text, today_line,
+};
 use crate::text::measure;
-use crate::theme::{Theme, ThemeVars};
+use crate::theme::Theme;
 fn svg_height(num_rows: usize) -> f64 {
     CHART_TOP + (num_rows as f64) * ROW_HEIGHT + GRID_AXIS_OFFSET + GRID_BOTTOM_PAD + 25.0
 }
@@ -227,15 +231,12 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     let mut out = String::new();
 
     // SVG root
-    out.push_str(&format!(
-        r#"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="gantt">"#,
-        id = id,
-        w = SVG_WIDTH,
-        h = height as i64,
-    ));
+    out.push_str(&svg_root(id, SVG_WIDTH, height as i64));
 
     // Style
-    out.push_str(&format!("<style>{}</style>", build_style(id, &vars)));
+    out.push_str("<style>");
+    out.push_str(&build_style(id, &vars));
+    out.push_str("</style>");
 
     // Empty first group (Mermaid always emits this)
     out.push_str("<g></g>");
@@ -264,16 +265,15 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             let ex_end = day_to_x(excl_end).round() as i64;
             let ew = (ex_end - ex).max(0);
             let date_label = super::parser::format_date_public(excl_start);
-            out.push_str(&format!(
-                r#"<rect id="{id}-exclude-{date}" x="{x}" y="{y}" width="{w}" height="{h}" transform-origin="{ox}px {oy}px" class="exclude-range"></rect>"#,
-                id = id,
-                date = date_label,
-                x = ex,
-                y = excl_y as i64,
-                w = ew,
-                h = excl_height as i64,
-                ox = (ex as f64 + ew as f64 / 2.0).round() as i64,
-                oy = (excl_y + excl_height / 2.0).round() as i64,
+            out.push_str(&exclude_rect(
+                id,
+                &date_label,
+                ex,
+                excl_y as i64,
+                ew,
+                excl_height as i64,
+                (ex as f64 + ew as f64 / 2.0).round() as i64,
+                (excl_y + excl_height / 2.0).round() as i64,
             ));
             sat += 7; // next Saturday
         }
@@ -285,19 +285,17 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     // The domain/tick lines extend upward from grid_y to (TITLE_TOP + 10) in page coords,
     // so in the grid's local coordinate system the top is -(grid_y - (TITLE_TOP + 10)).
     let grid_height = grid_y - (TITLE_TOP + 10.0);
-    out.push_str(&format!(
-        r#"<g class="grid" transform="translate({lp}, {gy})" fill="none" font-size="{afs}" font-family="sans-serif" text-anchor="middle">"#,
-        lp = LEFT_PAD as i64,
-        gy = grid_y as i64,
-        afs = AXIS_FONT_SIZE as i64,
+    out.push_str(&grid_group_open(
+        LEFT_PAD as i64,
+        grid_y as i64,
+        AXIS_FONT_SIZE as i64,
     ));
 
     // Domain line (the horizontal baseline)
     // D3 axis uses 0.5-offset for crisp rendering: M0.5,{-h}V0.5H{w+0.5}V{-h}
-    out.push_str(&format!(
-        r#"<path class="domain" stroke="currentColor" d="M0.5,{top}V0.5H{right}V{top}"></path>"#,
-        top = -(grid_height.round() as i64),
-        right = DRAW_WIDTH + 0.5,
+    out.push_str(&grid_domain_path(
+        -(grid_height.round() as i64),
+        DRAW_WIDTH + 0.5,
     ));
 
     // Tick marks and labels
@@ -306,12 +304,11 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     for tick in &ticks {
         let x = ((*tick - t_min) / span * DRAW_WIDTH).round() + 0.5;
         let label = format_date(*tick);
-        out.push_str(&format!(
-            "<g class=\"tick\" opacity=\"1\" transform=\"translate({x},0)\"><line stroke=\"currentColor\" y2=\"{top}\"></line><text fill=\"#000\" y=\"3\" dy=\"1em\" stroke=\"none\" font-size=\"{afs}\" style=\"text-anchor: middle;\">{label}</text></g>",
-            x = x,
-            top = -(grid_height as i64),
-            afs = AXIS_FONT_SIZE as i64,
-            label = label,
+        out.push_str(&grid_tick(
+            x,
+            -(grid_height as i64),
+            AXIS_FONT_SIZE as i64,
+            &label,
         ));
     }
 
@@ -330,12 +327,11 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
         let class_idx = sec_idx % 4;
         for row_offset in 0..*row_count {
             let band_y = CHART_TOP + (*row_start + row_offset) as f64 * ROW_HEIGHT;
-            out.push_str(&format!(
-                r#"<rect x="0" y="{y}" width="{w}" height="{h}" class="section section{ci}"></rect>"#,
-                y = band_y as i64,
-                w = band_width,
-                h = ROW_HEIGHT as i64,
-                ci = class_idx,
+            out.push_str(&section_band_rect(
+                band_y as i64,
+                band_width,
+                ROW_HEIGHT as i64,
+                class_idx,
             ));
         }
     }
@@ -361,30 +357,28 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             let half = BAR_HEIGHT / 2.0;
             let mx = bar_cx;
             let my = bar_y + BAR_HEIGHT / 2.0;
-            out.push_str(&format!(
-                r#"<rect id="{id}-{tid}" rx="0" ry="0" x="{rx}" y="{ry}" width="{size}" height="{size}" transform-origin="{ox}px {oy}px" transform="rotate(45)" class="task {tc} milestone"></rect>"#,
-                id = id,
-                tid = escape_id(&task.id),
-                rx = mx - half * 0.8,
-                ry = my - half * 0.8,
-                size = BAR_HEIGHT * 0.8,
-                ox = mx,
-                oy = my,
-                tc = tc,
+            out.push_str(&milestone_rect(
+                id,
+                &escape_id(&task.id),
+                mx - half * 0.8,
+                my - half * 0.8,
+                BAR_HEIGHT * 0.8,
+                mx,
+                my,
+                &tc,
             ));
         } else {
             // Normal task bar
-            out.push_str(&format!(
-                r#"<rect id="{id}-{tid}" rx="3" ry="3" x="{bx}" y="{by}" width="{bw}" height="{bh}" transform-origin="{cx}px {cy}px" class="task {tc} "></rect>"#,
-                id = id,
-                tid = escape_id(&task.id),
-                bx = bar_x.round() as i64,
-                by = bar_y as i64,
-                bw = bar_w.round() as i64,
-                bh = BAR_HEIGHT as i64,
-                cx = bar_cx.round() as i64,
-                cy = bar_cy.round() as i64,
-                tc = tc,
+            out.push_str(&task_bar_rect(
+                id,
+                &escape_id(&task.id),
+                bar_x.round() as i64,
+                bar_y as i64,
+                bar_w.round() as i64,
+                BAR_HEIGHT as i64,
+                bar_cx.round() as i64,
+                bar_cy.round() as i64,
+                &tc,
             ));
         }
 
@@ -396,46 +390,44 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
         // Text class: "taskText taskText0" etc. — no bar class (task0/done0/etc.)
         // which would bleed the bar fill colour onto the text.
         let text_cls = format!(" taskText {}", text_class(task));
+        let tid = escape_id(&task.id);
 
         if bar_w > 0.0 && text_w + 2.0 <= bar_w {
             // Text fits inside bar — centered
-            out.push_str(&format!(
-                r#"<text id="{id}-{tid}-text" font-size="{fs}" x="{tx}" y="{ty}" text-height="{bh}" class="{tc}">{label}</text>"#,
-                id = id,
-                tid = escape_id(&task.id),
-                fs = FONT_SIZE as i64,
-                tx = bar_cx as i64,
-                ty = text_y as i64,
-                bh = BAR_HEIGHT as i64,
-                tc = text_cls.trim(),
-                label = escape_text(&text),
+            out.push_str(&task_text(
+                id,
+                &tid,
+                FONT_SIZE as i64,
+                bar_cx as i64,
+                text_y as i64,
+                BAR_HEIGHT as i64,
+                text_cls.trim(),
+                &esc(&text),
             ));
         } else if bar_w < LEFT_PAD {
             // Text outside to the right
             let outside_cls = format!("taskTextOutsideRight {}", text_class(task));
-            out.push_str(&format!(
-                r#"<text id="{id}-{tid}-text" font-size="{fs}" x="{tx}" y="{ty}" text-height="{bh}" class="{tc}">{label}</text>"#,
-                id = id,
-                tid = escape_id(&task.id),
-                fs = FONT_SIZE as i64,
-                tx = (bar_x + bar_w + 2.0) as i64,
-                ty = text_y as i64,
-                bh = BAR_HEIGHT as i64,
-                tc = outside_cls.trim(),
-                label = escape_text(&text),
+            out.push_str(&task_text(
+                id,
+                &tid,
+                FONT_SIZE as i64,
+                (bar_x + bar_w + 2.0) as i64,
+                text_y as i64,
+                BAR_HEIGHT as i64,
+                outside_cls.trim(),
+                &esc(&text),
             ));
         } else {
             // Text inside but truncated — show centered anyway (matches Mermaid)
-            out.push_str(&format!(
-                r#"<text id="{id}-{tid}-text" font-size="{fs}" x="{tx}" y="{ty}" text-height="{bh}" class="{tc}">{label}</text>"#,
-                id = id,
-                tid = escape_id(&task.id),
-                fs = FONT_SIZE as i64,
-                tx = bar_cx as i64,
-                ty = text_y as i64,
-                bh = BAR_HEIGHT as i64,
-                tc = text_cls.trim(),
-                label = escape_text(&text),
+            out.push_str(&task_text(
+                id,
+                &tid,
+                FONT_SIZE as i64,
+                bar_cx as i64,
+                text_y as i64,
+                BAR_HEIGHT as i64,
+                text_cls.trim(),
+                &esc(&text),
             ));
         }
     }
@@ -449,12 +441,11 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
         let band_center_y =
             CHART_TOP + (*row_start as f64) * ROW_HEIGHT + (*row_count as f64) * ROW_HEIGHT / 2.0;
         let class_idx = sec_idx % 4;
-        out.push_str(&format!(
-            r#"<text dy="0em" x="10" y="{y}" font-size="{fs}" class="sectionTitle sectionTitle{ci}"><tspan alignment-baseline="central" x="10">{label}</tspan></text>"#,
-            y = band_center_y as i64,
-            fs = SECTION_FONT_SIZE as i64,
-            ci = class_idx,
-            label = escape_text(sec_name),
+        out.push_str(&section_title(
+            band_center_y as i64,
+            SECTION_FONT_SIZE as i64,
+            class_idx,
+            &esc(sec_name),
         ));
     }
 
@@ -466,20 +457,18 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     let today_days = today_days();
     let today_x = day_to_x(today_days);
     let chart_bottom = grid_y + GRID_BOTTOM_PAD;
-    out.push_str(&format!(
-        r#"<g class="today"><line x1="{tx}" x2="{tx}" y1="{top}" y2="{bot}" class="today"></line></g>"#,
-        tx = today_x as i64,
-        top = TITLE_TOP as i64,
-        bot = chart_bottom as i64,
+    out.push_str(&today_line(
+        today_x as i64,
+        TITLE_TOP as i64,
+        chart_bottom as i64,
     ));
 
     // ── Title ────────────────────────────────────────────────────────────────
     if let Some(ref title) = diag.title {
-        out.push_str(&format!(
-            r#"<text x="{cx}" y="{ty}" class="titleText">{title}</text>"#,
-            cx = (SVG_WIDTH / 2.0) as i64,
-            ty = TITLE_TOP as i64,
-            title = escape_text(title),
+        out.push_str(&title_text(
+            (SVG_WIDTH / 2.0) as i64,
+            TITLE_TOP as i64,
+            &esc(title),
         ));
     }
 
@@ -538,97 +527,8 @@ fn base_task_class(task: &Task) -> String {
     }
 }
 
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn escape_id(s: &str) -> String {
-    s.replace(' ', "-")
-}
-
 fn empty_svg() -> String {
     r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text x="10" y="30">Empty Gantt</text></svg>"#.to_string()
-}
-
-// ── CSS ───────────────────────────────────────────────────────────────────────
-
-fn build_style(id: &str, vars: &ThemeVars) -> String {
-    let ff = vars.font_family;
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}",
-            "@keyframes dash{{to{{stroke-dashoffset:0;}}}}",
-            "#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}",
-            "#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}",
-            "#{id} .error-icon{{fill:#552222;}}",
-            "#{id} .error-text{{fill:#552222;stroke:#552222;}}",
-            "#{id} .edge-thickness-normal{{stroke-width:1px;}}",
-            "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}",
-            "#{id} .edge-pattern-solid{{stroke-dasharray:0;}}",
-            "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}",
-            "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}",
-            "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}",
-            "#{id} .marker{{fill:#333333;stroke:#333333;}}",
-            "#{id} .marker.cross{{stroke:#333333;}}",
-            "#{id} svg{{font-family:{ff};font-size:16px;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .mermaid-main-font{{font-family:{ff};}}",
-            "#{id} .exclude-range{{fill:#eeeeee;}}",
-            "#{id} .section{{stroke:none;opacity:0.2;}}",
-            "#{id} .section0{{fill:rgba(102, 102, 255, 0.49);}}",
-            "#{id} .section2{{fill:#fff400;}}",
-            "#{id} .section1,#{id} .section3{{fill:white;opacity:0.2;}}",
-            "#{id} .sectionTitle0{{fill:#333;}}",
-            "#{id} .sectionTitle1{{fill:#333;}}",
-            "#{id} .sectionTitle2{{fill:#333;}}",
-            "#{id} .sectionTitle3{{fill:#333;}}",
-            "#{id} .sectionTitle{{text-anchor:start;font-family:{ff};}}",
-            "#{id} .grid .tick{{stroke:lightgrey;opacity:0.8;shape-rendering:crispEdges;}}",
-            "#{id} .grid .tick text{{font-family:{ff};fill:#333;}}",
-            "#{id} .grid path{{stroke-width:0;}}",
-            "#{id} .today{{fill:none;stroke:red;stroke-width:2px;}}",
-            "#{id} .task{{stroke-width:2;}}",
-            "#{id} .taskText{{text-anchor:middle;font-family:{ff};}}",
-            "#{id} .taskTextOutsideRight{{fill:black;text-anchor:start;font-family:{ff};}}",
-            "#{id} .taskTextOutsideLeft{{fill:black;text-anchor:end;}}",
-            "#{id} .task.clickable{{cursor:pointer;}}",
-            "#{id} .taskText.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskTextOutsideLeft.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskTextOutsideRight.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskText0,#{id} .taskText1,#{id} .taskText2,#{id} .taskText3{{fill:white;}}",
-            "#{id} .task0,#{id} .task1,#{id} .task2,#{id} .task3{{fill:#8a90dd;stroke:#534fbc;}}",
-            "#{id} .taskTextOutside0,#{id} .taskTextOutside2{{fill:black;}}",
-            "#{id} .taskTextOutside1,#{id} .taskTextOutside3{{fill:black;}}",
-            "#{id} .active0,#{id} .active1,#{id} .active2,#{id} .active3{{fill:#bfc7ff;stroke:#534fbc;}}",
-            "#{id} .activeText0,#{id} .activeText1,#{id} .activeText2,#{id} .activeText3{{fill:black!important;}}",
-            "#{id} .done0,#{id} .done1,#{id} .done2,#{id} .done3{{stroke:grey;fill:lightgrey;stroke-width:2;}}",
-            "#{id} .doneText0,#{id} .doneText1,#{id} .doneText2,#{id} .doneText3{{fill:black!important;}}",
-            "#{id} .doneText0.taskTextOutsideLeft,#{id} .doneText0.taskTextOutsideRight,",
-            "#{id} .doneText1.taskTextOutsideLeft,#{id} .doneText1.taskTextOutsideRight,",
-            "#{id} .doneText2.taskTextOutsideLeft,#{id} .doneText2.taskTextOutsideRight,",
-            "#{id} .doneText3.taskTextOutsideLeft,#{id} .doneText3.taskTextOutsideRight{{fill:black!important;}}",
-            "#{id} .crit0,#{id} .crit1,#{id} .crit2,#{id} .crit3{{stroke:#ff8888;fill:red;stroke-width:2;}}",
-            "#{id} .activeCrit0,#{id} .activeCrit1,#{id} .activeCrit2,#{id} .activeCrit3{{stroke:#ff8888;fill:#bfc7ff;stroke-width:2;}}",
-            "#{id} .doneCrit0,#{id} .doneCrit1,#{id} .doneCrit2,#{id} .doneCrit3{{stroke:#ff8888;fill:lightgrey;stroke-width:2;cursor:pointer;shape-rendering:crispEdges;}}",
-            "#{id} .milestone{{transform:rotate(45deg) scale(0.8,0.8);}}",
-            "#{id} .milestoneText{{font-style:italic;}}",
-            "#{id} .doneCritText0,#{id} .doneCritText1,#{id} .doneCritText2,#{id} .doneCritText3{{fill:black!important;}}",
-            "#{id} .doneCritText0.taskTextOutsideLeft,#{id} .doneCritText0.taskTextOutsideRight,",
-            "#{id} .doneCritText1.taskTextOutsideLeft,#{id} .doneCritText1.taskTextOutsideRight,",
-            "#{id} .doneCritText2.taskTextOutsideLeft,#{id} .doneCritText2.taskTextOutsideRight,",
-            "#{id} .doneCritText3.taskTextOutsideLeft,#{id} .doneCritText3.taskTextOutsideRight{{fill:black!important;}}",
-            "#{id} .vert{{stroke:navy;}}",
-            "#{id} .vertText{{font-size:15px;text-anchor:middle;fill:navy!important;}}",
-            "#{id} .activeCritText0,#{id} .activeCritText1,#{id} .activeCritText2,#{id} .activeCritText3{{fill:black!important;}}",
-            "#{id} .titleText{{text-anchor:middle;font-size:18px;fill:#333;font-family:{ff};}}",
-            "#{id} :root{{--mermaid-font-family:{ff};}}",
-        ),
-        id = id,
-        ff = ff,
-    )
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

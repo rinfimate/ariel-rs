@@ -88,6 +88,7 @@ impl std::fmt::Write for SvgWriter {
 /// Convert HTML named entities to their Unicode equivalents.
 /// SVG is XML and only supports &amp; &lt; &gt; &apos; &quot; natively.
 /// All other HTML entities must be converted to Unicode characters.
+#[allow(dead_code)]
 pub fn html_entities_to_unicode(s: &str) -> String {
     // Common HTML entities used in Mermaid diagram labels
     static ENTITIES: &[(&str, &str)] = &[
@@ -147,6 +148,7 @@ pub fn html_entities_to_unicode(s: &str) -> String {
 /// Render waypoints as straight lines with rounded corners at each bend.
 /// Interior waypoints get a small cubic bezier arc of radius `r` instead of
 /// a sharp angle, keeping all straight segments but smoothing direction changes.
+#[allow(dead_code)]
 pub fn rounded_path(pts: &[(f64, f64)], r: f64) -> String {
     let n = pts.len();
     if n == 0 {
@@ -215,6 +217,7 @@ pub fn rounded_path(pts: &[(f64, f64)], r: f64) -> String {
 }
 
 /// Convenience wrapper with a default corner radius of 5px.
+#[allow(dead_code)]
 pub fn smooth_bezier_path(pts: &[(f64, f64)]) -> String {
     rounded_path(pts, 5.0)
 }
@@ -403,7 +406,28 @@ pub(crate) fn normalize_floats(svg: &str) -> String {
     let mut out = String::with_capacity(svg.len());
     let bytes = svg.as_bytes();
     let mut i = 0;
+    // Track whether we're inside a tag (< ... >) or in text content (> ... <).
+    // Only normalize floats inside tags — text content (e.g. "v1.0") must be preserved.
+    let mut in_tag = false;
     while i < bytes.len() {
+        if bytes[i] == b'<' {
+            in_tag = true;
+            out.push('<');
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'>' {
+            in_tag = false;
+            out.push('>');
+            i += 1;
+            continue;
+        }
+        // Outside tags: pass text content through unchanged
+        if !in_tag {
+            out.push(bytes[i] as char);
+            i += 1;
+            continue;
+        }
         // Detect optional leading minus
         let neg = bytes[i] == b'-' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit();
         let start = i;
@@ -455,4 +479,21 @@ pub(crate) fn normalize_floats(svg: &str) -> String {
         i = j;
     }
     out
+}
+
+/// Inject a background rect into an SVG string so the diagram has an explicit
+/// background colour when embedded in a dark host page.
+#[allow(dead_code)]
+pub(crate) fn inject_background(svg: &str, color: &str) -> String {
+    let insert = format!(r#"<rect width="100%" height="100%" fill="{}"/>"#, color);
+    // Insert after the first closing `>` of the root <svg ...> tag.
+    if let Some(pos) = svg.find('>') {
+        let mut out = String::with_capacity(svg.len() + insert.len());
+        out.push_str(&svg[..pos + 1]);
+        out.push_str(&insert);
+        out.push_str(&svg[pos + 1..]);
+        out
+    } else {
+        svg.to_string()
+    }
 }

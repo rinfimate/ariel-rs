@@ -4,19 +4,52 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+pub fn fmt_f(v: f64) -> String {
+    if v == v.floor() && v.is_finite() {
+        format!("{}", v as i64)
+    } else {
+        // Up to 4 significant decimal digits, strip trailing zeros
+        let s = format!("{:.4}", v);
+        let s = s.trim_end_matches('0');
+        let s = s.trim_end_matches('.');
+        s.to_string()
+    }
+}
+
+pub fn fmt_i(v: f64) -> i64 {
+    v.round() as i64
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
-/// Render the outer SVG wrapper element for the treemap.
-pub fn svg_root(max_w: &str, vb_x: &str, vb_y: &str, vb_w: &str, vb_h: &str) -> String {
+/// Render the outer SVG wrapper element for an empty treemap.
+pub(crate) fn svg_root_empty(max_w: i64, vb_x: i64, vb_y: i64, vb_w: i64, vb_h: i64) -> String {
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width: {mw}px;" viewBox="{vx} {vy} {vw} {vh}" role="graphics-document" class="flowchart">"#,
-        mw = max_w,
-        vx = vb_x,
-        vy = vb_y,
-        vw = vb_w,
-        vh = vb_h,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width: {max_w}px;" viewBox="{vb_x} {vb_y} {vb_w} {vb_h}" role="graphics-document" class="flowchart"></svg>"#,
     )
+}
+
+/// Render the outer SVG wrapper element for a non-empty treemap.
+pub(crate) fn svg_root(max_w: i64, vb_x: i64, vb_y: i64, vb_w: i64, vb_h: i64) -> String {
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width: {max_w}px;" viewBox="{vb_x} {vb_y} {vb_w} {vb_h}" role="graphics-document" class="flowchart">"#,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Style block
+// ---------------------------------------------------------------------------
+
+/// Render the `<style>` block for the treemap.
+pub(crate) fn style_block() -> &'static str {
+    r#"<style>.treemapNode.section{stroke:black;stroke-width:1;fill:#efefef;}.treemapNode.leaf{stroke:black;stroke-width:1;fill:#efefef;}.treemapLabel{fill:#333;font-size:12px;}.treemapValue{fill:#333;font-size:10px;}.treemapTitle{fill:#333;font-size:14px;}</style>"#
 }
 
 // ---------------------------------------------------------------------------
@@ -24,67 +57,127 @@ pub fn svg_root(max_w: &str, vb_x: &str, vb_y: &str, vb_w: &str, vb_h: &str) -> 
 // ---------------------------------------------------------------------------
 
 /// Render the diagram title `<text>` element.
-pub fn title_text(cx: &str, ty: &str, font_family: &str, text: &str) -> String {
+pub(crate) fn title_text(cx: &str, ty: &str, text: &str) -> String {
     format!(
-        "<text x=\"{cx}\" y=\"{ty}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"{ff}\" font-size=\"14\" font-weight=\"bold\" fill=\"#333\" class=\"treemapTitle\">{text}</text>",
-        cx = cx,
-        ty = ty,
-        ff = font_family,
-        text = text,
+        r#"<text x="{cx}" y="{ty}" class="treemapTitle" text-anchor="middle" dominant-baseline="middle">{text}</text>"#,
     )
 }
 
 // ---------------------------------------------------------------------------
-// Leaf tile
+// Container group
 // ---------------------------------------------------------------------------
 
-/// Render a leaf tile background `<rect>`.
-pub fn leaf_rect(x: &str, y: &str, w: &str, h: &str) -> String {
+/// Render the opening `<g>` of the treemap container group.
+pub(crate) fn container_group_open(ty: &str) -> String {
+    format!(r#"<g transform="translate(0, {ty})" class="treemapContainer">"#)
+}
+
+// ---------------------------------------------------------------------------
+// Section (branch node)
+// ---------------------------------------------------------------------------
+
+/// Render the opening `<g>` of a treemap section group.
+pub(crate) fn section_group_open(x: &str, y: &str) -> String {
+    format!(r#"<g class="treemapSection" transform="translate({x},{y})">"#)
+}
+
+/// Render the section header background `<rect>`.
+pub(crate) fn section_header_rect(w: &str, h: &str, display: &str) -> String {
     format!(
-        r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" class="treemapLeaf" fill="transparent" style="" fill-opacity="0.3" stroke="transparent" stroke-width="3"/>"#,
-        x = x,
-        y = y,
-        w = w,
-        h = h,
+        r#"<rect width="{w}" height="{h}" class="treemapSectionHeader" fill="none" fill-opacity="0.6" stroke-width="0.6" style="{display}"></rect>"#,
     )
 }
 
-/// Render the leaf label `<text>` (dominant-baseline=middle).
-pub fn leaf_label_text(
+/// Render a `<clipPath>` for the section header text.
+pub(crate) fn section_clip_path(idx: usize, clip_w: &str, clip_h: &str) -> String {
+    format!(
+        r#"<clipPath id="clip-section-mermaid-svg-0-{idx}"><rect width="{clip_w}" height="{clip_h}"></rect></clipPath>"#,
+    )
+}
+
+/// Render the full-section background `<rect>`.
+pub(crate) fn section_rect(
+    w: &str,
+    h: &str,
+    idx: usize,
+    fill: &str,
+    stroke: &str,
+    display: &str,
+) -> String {
+    format!(
+        r#"<rect width="{w}" height="{h}" class="treemapSection section{idx}" fill="{fill}" fill-opacity="0.6" stroke="{stroke}" stroke-width="2" stroke-opacity="0.4" style="{display}"></rect>"#,
+    )
+}
+
+/// X offset (px) for section label text inside its header.
+const SECTION_LABEL_X: &str = "6";
+
+/// Render the section label `<text>`.
+pub(crate) fn section_label_text(header_mid_y: &str, style: &str, text: &str) -> String {
+    format!(
+        r#"<text class="treemapSectionLabel" x="{SECTION_LABEL_X}" y="{header_mid_y}" dominant-baseline="middle" font-weight="bold" style="{style}">{text}</text>"#,
+    )
+}
+
+/// Render the section value `<text>`.
+pub(crate) fn section_value_text(
+    val_x: &str,
+    header_mid_y: &str,
+    style: &str,
+    text: &str,
+) -> String {
+    format!(
+        r#"<text class="treemapSectionValue" x="{val_x}" y="{header_mid_y}" text-anchor="end" dominant-baseline="middle" font-style="italic" style="{style}">{text}</text>"#,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Leaf node
+// ---------------------------------------------------------------------------
+
+/// Render the opening `<g>` of a treemap leaf group.
+pub(crate) fn leaf_group_open(idx: usize, x: &str, y: &str) -> String {
+    format!(r#"<g class="treemapNode treemapLeafGroup leaf{idx}x" transform="translate({x},{y})">"#,)
+}
+
+/// Render the leaf background `<rect>`.
+pub(crate) fn leaf_rect(w: &str, h: &str, fill: &str) -> String {
+    format!(
+        r#"<rect width="{w}" height="{h}" class="treemapLeaf" fill="{fill}" style="" fill-opacity="0.3" stroke="{fill}" stroke-width="3"></rect>"#,
+    )
+}
+
+/// Render the leaf `<clipPath>`.
+pub(crate) fn leaf_clip_path(idx: usize, clip_w: &str, clip_h: &str) -> String {
+    format!(
+        r#"<clipPath id="clip-mermaid-svg-0-{idx}"><rect width="{clip_w}" height="{clip_h}"></rect></clipPath>"#,
+    )
+}
+
+/// Render the leaf label `<text>`.
+pub(crate) fn leaf_label_text(
     cx: &str,
     cy: &str,
-    font_family: &str,
-    font_size: i32,
+    font_size: u32,
     color: &str,
+    idx: usize,
     text: &str,
 ) -> String {
     format!(
-        r#"<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="middle" font-family="{ff}" font-size="{fs}" fill="{color}" class="treemapLabel" style="text-anchor: middle; dominant-baseline: middle; font-size: {fs}px;fill:{color};">{text}</text>"#,
-        x = cx,
-        y = cy,
-        ff = font_family,
-        fs = font_size,
-        color = color,
-        text = text,
+        r#"<text class="treemapLabel" x="{cx}" y="{cy}" style="text-anchor: middle; dominant-baseline: middle; font-size: {font_size}px;fill:{color};" clip-path="url(#clip-mermaid-svg-0-{idx})">{text}</text>"#,
     )
 }
 
-/// Render the leaf value `<text>` (dominant-baseline=hanging).
-pub fn leaf_value_text(
+/// Render the leaf value `<text>`.
+pub(crate) fn leaf_value_text(
     cx: &str,
-    y: &str,
-    font_family: &str,
-    font_size: i32,
+    value_y: &str,
+    font_size: u32,
     color: &str,
+    idx: usize,
     text: &str,
 ) -> String {
     format!(
-        r#"<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="hanging" font-family="{ff}" font-size="{fs}" fill="{color}" class="treemapValue" style="text-anchor: middle; dominant-baseline: hanging; font-size: {fs}px; fill: {color};">{text}</text>"#,
-        x = cx,
-        y = y,
-        ff = font_family,
-        fs = font_size,
-        color = color,
-        text = text,
+        r#"<text class="treemapValue" x="{cx}" y="{value_y}" style="text-anchor: middle; dominant-baseline: hanging; font-size: {font_size}px; fill: {color};" clip-path="url(#clip-mermaid-svg-0-{idx})">{text}</text>"#,
     )
 }

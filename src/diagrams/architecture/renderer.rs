@@ -15,7 +15,10 @@
 use super::constants::*;
 use super::parser::{ArchDiagram, ArchEdge, ArchGroup, ArchJunction, ArchService, Direction};
 #[allow(unused_imports)]
-use super::templates;
+use super::templates::{
+    self, edge_arrow, edge_label, edge_path, esc, fmt, group_icon_and_label, group_plain_label,
+    group_rect, service_group, service_icon_svg, service_label, style_block, svg_root,
+};
 use crate::theme::Theme;
 use std::collections::HashMap;
 
@@ -358,25 +361,10 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
     let mut out = String::new();
 
     // SVG header
-    out.push_str(&format!(
-        "<svg id=\"mermaid-svg\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" style=\"max-width: {}px;\" viewBox=\"{} {} {} {}\" role=\"graphics-document document\" aria-roledescription=\"architecture\">",
-        fmt(vb_w), fmt(vb_x), fmt(vb_y), fmt(vb_w), fmt(vb_h),
-    ));
+    out.push_str(&svg_root(vb_w, vb_x, vb_y, vb_w, vb_h));
 
     // CSS (matches mermaid's architectureRenderer CSS)
-    out.push_str(&format!(
-        concat!(
-            "<style>",
-            "#mermaid-svg{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#mermaid-svg .edge{{stroke-width:3;stroke:#333333;fill:none;}}",
-            "#mermaid-svg .arrow{{fill:#333333;}}",
-            "#mermaid-svg .node-bkg{{fill:none;stroke:hsl(240, 60%, 86.2745098039%);stroke-width:2px;stroke-dasharray:8;}}",
-            "#mermaid-svg .node-icon-text{{display:flex;align-items:center;}}",
-            "#mermaid-svg p{{margin:0;}}",
-            "</style>",
-        ),
-        ff = ff,
-    ));
+    out.push_str(&style_block(ff));
 
     // mermaid outputs an empty <g> first
     out.push_str("<g></g>");
@@ -431,40 +419,27 @@ fn render_group_recursive(
     };
 
     // Dashed container rectangle
-    out.push_str(&format!(
-        "<rect id=\"mermaid-svg-group-{id}\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" class=\"node-bkg\"></rect>",
-        id = esc(&grp.id),
-        x = fmt(bb.x), y = fmt(bb.y), w = fmt(bb.w), h = fmt(bb.h),
-    ));
+    out.push_str(&group_rect(&esc(&grp.id), bb.x, bb.y, bb.w, bb.h));
 
     // Optional icon (30×30 at top-left) + label text to its right
     if let Some(icon) = &grp.icon {
         let icon_x = bb.x + 1.0;
         let icon_y = bb.y + 1.0;
-        out.push_str(&format!(
-            "<g><g transform=\"translate({ix}, {iy})\"><g><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"30\" height=\"30\" viewBox=\"0 0 80 80\"><g>{inner}</g></svg></g></g>",
-            ix = fmt(icon_x), iy = fmt(icon_y),
-            inner = icon_inner(icon),
-        ));
-
-        // Label text next to icon, using same tspan structure as services
         let label = grp.title.as_deref().unwrap_or(&grp.id);
         let label_tx = icon_x + 33.0; // icon 30px + 3px gap
-        let label_ty = icon_y + 14.0; // vertically centred in 30px icon
-        out.push_str(&format!(
-            "<g dy=\"1em\" alignment-baseline=\"middle\" dominant-baseline=\"start\" text-anchor=\"start\" transform=\"translate({tx}, {ty})\"><g><rect class=\"background\" style=\"stroke: none\"></rect><text y=\"-10.1\" style=\"\"><tspan class=\"text-outer-tspan row\" x=\"0\" y=\"-0.1em\" dy=\"1.1em\"><tspan font-style=\"normal\" class=\"text-inner-tspan\" font-weight=\"normal\">{text}</tspan></tspan></text></g></g>",
-            tx = fmt(label_tx), ty = fmt(label_ty),
-            text = esc(label),
+        let label_ty = icon_y + 6.0; // matches reference: ty = bb.y + 7 = icon_y + 6
+        out.push_str(&group_icon_and_label(
+            icon_x,
+            icon_y,
+            icon_inner(icon),
+            label_tx,
+            label_ty,
+            &esc(label),
         ));
-        out.push_str("</g>");
     } else {
         // No icon: plain label
         let label = grp.title.as_deref().unwrap_or(&grp.id);
-        out.push_str(&format!(
-            "<g dy=\"1em\" alignment-baseline=\"middle\" dominant-baseline=\"start\" text-anchor=\"start\" transform=\"translate({tx}, {ty})\"><g><rect class=\"background\" style=\"stroke: none\"></rect><text y=\"-10.1\" style=\"\"><tspan class=\"text-outer-tspan row\" x=\"0\" y=\"-0.1em\" dy=\"1.1em\"><tspan font-style=\"normal\" class=\"text-inner-tspan\" font-weight=\"normal\">{text}</tspan></tspan></text></g></g>",
-            tx = fmt(bb.x + 10.0), ty = fmt(bb.y + 18.0),
-            text = esc(label),
-        ));
+        out.push_str(&group_plain_label(bb.x + 10.0, bb.y + 18.0, &esc(label)));
     }
 
     // Recurse into child groups
@@ -487,28 +462,17 @@ fn render_service(svc: &ArchService, layout: &Layout, out: &mut String) {
     let icon_top = centre.y - ICON_SIZE / 2.0;
     let label = svc.title.as_deref().unwrap_or(&svc.id);
 
-    out.push_str(&format!(
-        "<g id=\"mermaid-svg-service-{id}\" class=\"architecture-service\" transform=\"translate({tx},{ty})\">",
-        id = esc(&svc.id),
-        tx = fmt(icon_left),
-        ty = fmt(icon_top),
-    ));
+    out.push_str(&service_group(&esc(&svc.id), icon_left, icon_top));
 
     // Label group below icon: translate(icon_half, icon_size) = translate(40, 80) in service-local
-    out.push_str(&format!(
-        "<g dy=\"1em\" alignment-baseline=\"middle\" dominant-baseline=\"middle\" text-anchor=\"middle\" transform=\"translate(40, 80)\"><g><rect class=\"background\" style=\"stroke: none\"></rect><text y=\"-10.1\" style=\"\"><tspan class=\"text-outer-tspan row\" x=\"0\" y=\"-0.1em\" dy=\"1.1em\"><tspan font-style=\"normal\" class=\"text-inner-tspan\" font-weight=\"normal\">{text}</tspan></tspan></text></g></g>",
-        text = esc(label),
-    ));
+    out.push_str(&service_label(&esc(label)));
 
     // Icon SVG (80×80 with blue background and white art)
     out.push_str("<g><g>");
     let inner = svc.icon.as_deref().map(icon_inner).unwrap_or(
         "<rect width=\"80\" height=\"80\" style=\"fill: #087ebf; stroke-width: 0px;\"></rect>",
     );
-    out.push_str(&format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><g>{inner}</g></svg>",
-        inner = inner,
-    ));
+    out.push_str(&service_icon_svg(inner));
     out.push_str("</g></g>");
 
     out.push_str("</g>");
@@ -543,42 +507,25 @@ fn render_edge(edge: &ArchEdge, layout: &Layout, out: &mut String) {
     );
 
     out.push_str("<g>");
-    out.push_str(&format!(
-        "<path d=\"{path}\" class=\"edge\" id=\"mermaid-svg-L_{lhs}_{rhs}_0\"></path>",
-        path = path,
-        lhs = esc(&edge.lhs_id),
-        rhs = esc(&edge.rhs_id),
-    ));
+    out.push_str(&edge_path(&path, &esc(&edge.lhs_id), &esc(&edge.rhs_id)));
 
     // Arrow at rhs (into rhs node)
     if edge.rhs_into {
         let (pts, t) = arrow_at(&rc, &edge.rhs_dir, tx, ty);
-        out.push_str(&format!(
-            "<polygon points=\"{pts}\" transform=\"{t}\" class=\"arrow\"></polygon>",
-            pts = pts,
-            t = t,
-        ));
+        out.push_str(&edge_arrow(&pts, &t));
     }
 
     // Arrow at lhs (into lhs node) — for bidirectional edges
     if edge.lhs_into {
         let (pts, t) = arrow_at(&lc, &edge.lhs_dir, sx, sy);
-        out.push_str(&format!(
-            "<polygon points=\"{pts}\" transform=\"{t}\" class=\"arrow\"></polygon>",
-            pts = pts,
-            t = t,
-        ));
+        out.push_str(&edge_arrow(&pts, &t));
     }
 
     // Edge label
     if let Some(label) = &edge.title {
         let lx = (sx + tx) / 2.0;
         let ly = (sy + ty) / 2.0 - 6.0;
-        out.push_str(&format!(
-            "<text x=\"{x}\" y=\"{y}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"14\" fill=\"#333333\">{text}</text>",
-            x = fmt(lx), y = fmt(ly),
-            text = esc(label),
-        ));
+        out.push_str(&edge_label(lx, ly, &esc(label)));
     }
 
     out.push_str("</g>");
@@ -649,26 +596,6 @@ fn arrow_at(centre: &Pos, dir: &Direction, _anchor_x: f64, _anchor_y: f64) -> (S
             (pts, t)
         }
     }
-}
-
-// ─── Number formatting ─────────────────────────────────────────────────────────
-
-fn fmt(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e12 {
-        return format!("{}", v as i64);
-    }
-    // Use enough precision then strip trailing zeros
-    let s = format!("{:.13}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]

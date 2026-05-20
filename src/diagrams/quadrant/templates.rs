@@ -4,6 +4,40 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::{esc, fmt};
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    use super::constants::*;
+    format!(
+        r#"#{id}{{font-family:{ff};font-size:16px;fill:#333;}}
+#{id} .quadrant-point-label{{fill:{ptf};font-size:{plfs}px;}}
+#{id} .quadrant-point{{fill:{pf};}}
+#{id} .quadrant-title{{fill:{tf};font-size:{tfs}px;}}
+#{id} .quadrant-xlabel{{fill:{xf};font-size:{xlfs}px;}}
+#{id} .quadrant-ylabel{{fill:{yf};font-size:{ylfs}px;}}
+"#,
+        id = id,
+        ff = ff,
+        ptf = QUADRANT_POINT_TEXT_FILL,
+        plfs = POINT_LABEL_FONT_SIZE,
+        pf = QUADRANT_POINT_FILL,
+        tf = QUADRANT_TITLE_FILL,
+        tfs = TITLE_FONT_SIZE,
+        xf = QUADRANT_X_AXIS_TEXT_FILL,
+        xlfs = X_AXIS_LABEL_FONT_SIZE,
+        yf = QUADRANT_Y_AXIS_TEXT_FILL,
+        ylfs = Y_AXIS_LABEL_FONT_SIZE,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 

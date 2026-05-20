@@ -60,6 +60,12 @@ pub struct ThemeVars {
     pub font_family: &'static str,
     /// Base font size in pixels.
     pub font_size: f64,
+    /// Venn diagram set colours (venn1–venn8 from Mermaid themeVariables).
+    pub venn_colors: &'static [&'static str],
+    /// Text colour used inside venn set labels and intersections.
+    pub venn_set_text_color: &'static str,
+    /// Text colour used for the venn diagram title.
+    pub venn_title_text_color: &'static str,
 }
 
 impl Theme {
@@ -86,6 +92,12 @@ impl Theme {
                 edge_label_bg: "#ffffff",
                 font_family: "Arial, sans-serif",
                 font_size: 14.0,
+                venn_colors: &[
+                    "#5353ff", "#ffff45", "#b5ff20", "#ff6b6b", "#9467bd", "#8c564b", "#e377c2",
+                    "#7f7f7f",
+                ],
+                venn_set_text_color: "#333333",
+                venn_title_text_color: "#333333",
             },
             Theme::Dark => ThemeVars {
                 background: "#1e1e1e",
@@ -107,6 +119,12 @@ impl Theme {
                 edge_label_bg: "#323232",
                 font_family: "Arial, sans-serif",
                 font_size: 14.0,
+                venn_colors: &[
+                    "#5353ff", "#ffff45", "#b5ff20", "#ff6b6b", "#9467bd", "#8c564b", "#e377c2",
+                    "#7f7f7f",
+                ],
+                venn_set_text_color: "#ccc",
+                venn_title_text_color: "#F9FFFE",
             },
             Theme::Forest => ThemeVars {
                 background: "#ffffff",
@@ -128,6 +146,12 @@ impl Theme {
                 edge_label_bg: "#ffffff",
                 font_family: "Arial, sans-serif",
                 font_size: 14.0,
+                venn_colors: &[
+                    "#5353ff", "#ffff45", "#b5ff20", "#ff6b6b", "#9467bd", "#8c564b", "#e377c2",
+                    "#7f7f7f",
+                ],
+                venn_set_text_color: "#333333",
+                venn_title_text_color: "#333333",
             },
             Theme::Neutral => ThemeVars {
                 background: "#ffffff",
@@ -149,6 +173,12 @@ impl Theme {
                 edge_label_bg: "#ffffff",
                 font_family: "Arial, sans-serif",
                 font_size: 14.0,
+                venn_colors: &[
+                    "#5353ff", "#ffff45", "#b5ff20", "#ff6b6b", "#9467bd", "#8c564b", "#e377c2",
+                    "#7f7f7f",
+                ],
+                venn_set_text_color: "#333333",
+                venn_title_text_color: "#333333",
             },
         }
     }

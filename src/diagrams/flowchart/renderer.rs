@@ -22,7 +22,7 @@
 
 use super::constants::*;
 use super::parser::{EdgeStyle, FlowchartDiagram, NodeShape, NodeStyle, Subgraph};
-use super::templates;
+use super::templates::{self, build_css, esc, fmt};
 use crate::icons::parse_fa_label;
 use crate::svg::SvgWriter;
 use crate::text::measure;
@@ -1451,121 +1451,6 @@ fn composite_sg_layout(
     }
 }
 
-// --- CSS ---------------------------------------------------------------------
-
-fn build_css(id: &str, vars: &ThemeVars) -> String {
-    // Build via string concatenation to avoid escaping issues with CSS
-    // attribute selectors like [data-look="neo"] inside format!()
-    let pf = vars.primary_color;
-    let ps = vars.primary_border;
-    let cf = vars.cluster_bg;
-    let cs = vars.cluster_border;
-    let ff = vars.font_family;
-    let mut c = String::new();
-    c.push_str(&format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}"
-    ));
-    c.push_str("@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}");
-    c.push_str("@keyframes dash{to{stroke-dashoffset:0;}}");
-    c.push_str(&format!("#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .error-icon{{fill:#552222;}}"));
-    c.push_str(&format!(
-        "#{id} .error-text{{fill:#552222;stroke:#552222;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-normal{{stroke-width:1px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}"
-    ));
-    c.push_str(&format!("#{id} .edge-pattern-solid{{stroke-dasharray:0;}}"));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}"
-    ));
-    c.push_str(&format!("#{id} .marker{{fill:#333333;stroke:#333333;}}"));
-    c.push_str(&format!("#{id} .marker.cross{{stroke:#333333;}}"));
-    c.push_str(&format!("#{id} svg{{font-family:{ff};font-size:16px;}}"));
-    c.push_str(&format!("#{id} p{{margin:0;}}"));
-    c.push_str(&format!("#{id} .label{{font-family:{ff};color:#333;}}"));
-    c.push_str(&format!("#{id} .cluster-label text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster-label span{{color:#333;}}"));
-    c.push_str(&format!(
-        "#{id} .cluster-label span p{{background-color:transparent;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .label text,#{id} span{{fill:#333;color:#333;}}"
-    ));
-    c.push_str(&format!("#{id} .node rect,#{id} .node circle,#{id} .node ellipse,#{id} .node polygon,#{id} .node path{{fill:{pf};stroke:{ps};stroke-width:1px;}}"));
-    c.push_str(&format!("#{id} .rough-node .label text,#{id} .node .label text,#{id} .image-shape .label,#{id} .icon-shape .label{{text-anchor:middle;}}"));
-    c.push_str(&format!(
-        "#{id} .node .katex path{{fill:#000;stroke:#000;stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} .rough-node .label,#{id} .node .label,#{id} .image-shape .label,#{id} .icon-shape .label{{text-align:center;}}"));
-    c.push_str(&format!("#{id} .node.clickable{{cursor:pointer;}}"));
-    c.push_str(&format!(
-        "#{id} .root .anchor path{{fill:#333333!important;stroke-width:0;stroke:#333333;}}"
-    ));
-    c.push_str(&format!("#{id} .arrowheadPath{{fill:#333333;}}"));
-    c.push_str(&format!(
-        "#{id} .edgePath .path{{stroke:#333333;stroke-width:1px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .flowchart-link{{stroke:#333333;fill:none;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edgeLabel{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edgeLabel p{{background-color:rgba(232,232,232, 0.8);}}"
-    ));
-    c.push_str(&format!("#{id} .edgeLabel rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
-    c.push_str(&format!(
-        "#{id} .labelBkg{{background-color:rgba(232, 232, 232, 0.5);}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .cluster rect{{fill:{cf};stroke:{cs};stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} .cluster text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster span{{color:#333;}}"));
-    c.push_str(&format!("#{id} div.mermaidTooltip{{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:{ff};font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}}"));
-    c.push_str(&format!(
-        "#{id} .flowchartTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}"
-    ));
-    c.push_str(&format!("#{id} rect.text{{fill:none;stroke-width:0;}}"));
-    c.push_str(&format!("#{id} .icon-shape,#{id} .image-shape{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"));
-    c.push_str(&format!("#{id} .icon-shape p,#{id} .image-shape p{{background-color:rgba(232,232,232, 0.8);padding:2px;}}"));
-    c.push_str(&format!("#{id} .icon-shape .label rect,#{id} .image-shape .label rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
-    c.push_str(&format!("#{id} .label-icon{{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}}"));
-    c.push_str(&format!(
-        "#{id} .node .label-icon path{{fill:currentColor;stroke:revert;stroke-width:revert;}}"
-    ));
-    c.push_str(&format!("#{id} .node .neo-node{{stroke:{ps};}}"));
-    // CSS attribute selectors with double quotes — written directly, no format! interpolation of quotes
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node rect,#{id} [data-look=\"neo\"].cluster rect,#{id} [data-look=\"neo\"].node polygon{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node path{{stroke:{ps};stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node .outer-path{{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node .neo-line path{{stroke:{ps};filter:none;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node circle{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node circle .state-start{{fill:#000000;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon{{fill:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon-neo path{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} :root{{--mermaid-font-family:{ff};}}"));
-    c
-}
-
 // --- Node sizing -------------------------------------------------------------
 
 fn shape_intersect_type(shape: &NodeShape) -> Option<&'static str> {
@@ -1577,7 +1462,14 @@ fn shape_intersect_type(shape: &NodeShape) -> Option<&'static str> {
 }
 
 fn node_size(label: &str, shape: &NodeShape) -> (f64, f64) {
-    let (raw_tw, _) = measure(label, FONT_SIZE);
+    // Measure the display text, not the raw label — strip fa:fa-xxx prefix if present.
+    let (_, display_text) = crate::icons::parse_fa_label(label);
+    let measure_text = if display_text.is_empty() {
+        label
+    } else {
+        display_text
+    };
+    let (raw_tw, _) = measure(measure_text, FONT_SIZE);
     let tw = raw_tw * TEXT_SCALE;
     match shape {
         NodeShape::Rectangle | NodeShape::Default => ((tw + H_PAD * 2.0).max(50.0), RECT_H),
@@ -1607,11 +1499,10 @@ fn node_size(label: &str, shape: &NodeShape) -> (f64, f64) {
             (r * 2.0, r * 2.0)
         }
         NodeShape::Asymmetric => {
-            // Add ASYMMETRIC_NOTCH_DEPTH to ensure text clears the left V-notch.
-            (
-                (tw + ASYMMETRIC_BASE_PAD + ASYMMETRIC_NOTCH_DEPTH).max(40.0),
-                COMPACT_H,
-            )
+            // lean_right: width = text + padding, height = COMPACT_H.
+            // The parallelogram extends ±h/2 beyond the text box horizontally,
+            // so dagre sees the full width correctly.
+            ((tw + ASYMMETRIC_BASE_PAD).max(40.0), COMPACT_H)
         }
     }
 }
@@ -1712,23 +1603,25 @@ fn render_node(
             s.push_str(&templates::node_circle(&fmt(w / 2.0), &inline_style));
         }
         NodeShape::Asymmetric => {
-            // >text] shape: flat right side, concave V-notch on LEFT (pointing right).
-            // Notch depth matches Mermaid reference (not full hh which clips text).
+            // rect_left_inv_arrow — faithful port of Mermaid rectLeftInvArrow.ts
+            //   notch = y/2 = -h/4  (left corners extend h/4 beyond bbox left)
+            //   polygon shifted right by -notch/2 = h/8
+            // Final points (node center = 0,0):
             let hw = w / 2.0;
             let hh = h / 2.0;
-            let notch = ASYMMETRIC_NOTCH_DEPTH;
+            let shift = hh / 4.0; // h/8 — rightward translate from Mermaid
             let pts = format!(
                 "{},{} {},{} {},{} {},{} {},{}",
-                fmt(-hw),
-                fmt(-hh), // top-left
-                fmt(hw),
-                fmt(-hh), // top-right
-                fmt(hw),
+                fmt(-(hw + shift)),
+                fmt(-hh), // top-left outer
+                fmt(-hw + shift),
+                fmt(0.0), // left notch tip (V-point)
+                fmt(-(hw + shift)),
+                fmt(hh), // bottom-left outer
+                fmt(hw + shift),
                 fmt(hh), // bottom-right
-                fmt(-hw),
-                fmt(hh), // bottom-left
-                fmt(-hw + notch),
-                fmt(0.0), // left V-notch tip
+                fmt(hw + shift),
+                fmt(-hh), // top-right
             );
             s.push_str(&templates::node_asymmetric(&pts, &inline_style));
         }
@@ -1841,22 +1734,22 @@ fn render_node(
         // For the FO path the label goes inside an HTML <p> element. When a Font
         // Awesome icon is present, wrap the glyph in a <span> with the FA font
         // so the icon renders when FA is loaded and degrades to a box otherwise.
-        let fo_label = if let Some(ch) = fa_char {
-            let icon_html = format!(
-                r#"<span style="font-family: 'Font Awesome 6 Free'; font-weight: 900;">{}</span>"#,
-                ch
-            );
-            if fa_text.is_empty() {
-                icon_html
-            } else {
-                format!("{} {}", icon_html, esc(fa_text))
-            }
+        // Show only the text portion of FA labels — the unicode glyph is omitted
+        // because Font Awesome is not guaranteed to be loaded in all contexts.
+        let fo_label = if fa_char.is_some() {
+            esc(fa_text)
         } else {
             esc(&node.label)
         };
+        // Asymmetric shape is shifted right by h/8 — label center follows.
+        let label_tx = if node.shape == NodeShape::Asymmetric {
+            fmt(-tw / 2.0 + h / 8.0)
+        } else {
+            fmt(-tw / 2.0)
+        };
         s.push_str(&templates::node_label_fo(
             &label_color_style,
-            &fmt(-tw / 2.0),
+            &label_tx,
             label_ty,
             &fmt(tw),
             LABEL_FO_HEIGHT,
@@ -1872,21 +1765,14 @@ fn render_node(
         } else {
             vars.primary_text
         };
-        // For the plain SVG text path the label goes inside a <text> element.
-        // When a Font Awesome icon is present, emit two <tspan> elements so the
-        // icon glyph uses the FA font while any remaining text uses the normal font.
-        let svg_label = if let Some(ch) = fa_char {
+        // For the plain SVG text path, show only the text portion of any FA label.
+        // We don't embed the FA glyph here because Font Awesome may not be loaded
+        // in static contexts (resvg, PNG export), which would show a broken box.
+        let svg_label = if fa_char.is_some() {
             if fa_text.is_empty() {
-                format!(
-                    r#"<tspan font-family="Font Awesome 6 Free" font-weight="900">{}</tspan>"#,
-                    ch
-                )
+                String::new()
             } else {
-                format!(
-                    r#"<tspan font-family="Font Awesome 6 Free" font-weight="900">{}</tspan><tspan> {}</tspan>"#,
-                    ch,
-                    esc(fa_text)
-                )
+                esc(fa_text)
             }
         } else {
             esc(&node.label)
@@ -2206,20 +2092,6 @@ fn midpoint(pts: &[Point]) -> (f64, f64) {
 }
 
 // --- Helpers -----------------------------------------------------------------
-
-fn fmt(v: f64) -> String {
-    let s = format!("{:.7}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
 
 fn pt_in_rect(p: &Point, cx: f64, cy: f64, w: f64, h: f64) -> bool {
     p.x >= cx - w / 2.0 - 1.0

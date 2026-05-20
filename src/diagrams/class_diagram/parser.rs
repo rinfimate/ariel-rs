@@ -352,10 +352,15 @@ pub fn parse(input: &str) -> crate::error::ParseResult<ClassDiagram> {
             continue;
         }
 
-        // ClassName : memberDefinition
-        if let Some(colon) = line.find(" : ") {
+        // ClassName : memberDefinition  (with or without space before colon)
+        // Handles both "Animal : +int age" and "Animal: +isMammal()"
+        let colon_match = line
+            .find(" : ")
+            .map(|i| (i, i + 3))
+            .or_else(|| line.find(": ").map(|i| (i, i + 2)));
+        if let Some((colon, after)) = colon_match {
             let class_name = line[..colon].trim();
-            let member_def = line[colon + 3..].trim();
+            let member_def = line[after..].trim();
             if !class_name.contains(' ') && !class_name.is_empty() {
                 ensure_class(&mut diag, class_name);
                 add_member_to_class(&mut diag, class_name, member_def);

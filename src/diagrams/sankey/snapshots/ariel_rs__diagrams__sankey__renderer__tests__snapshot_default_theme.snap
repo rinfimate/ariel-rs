@@ -1,6 +1,5 @@
 ---
 source: src/diagrams/sankey/renderer.rs
-assertion_line: 1012
 expression: "crate::svg::normalize_floats(&svg)"
 ---
 <svg id="mermaid-sankey" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 600 400" style="max-width:600px;" role="graphics-document document" aria-roledescription="sankey">
@@ -26,17 +25,17 @@ expression: "crate::svg::normalize_floats(&svg)"
 </g>
 </g>
 <g class="node-labels" font-size="14">
-<text x="16" y="86.5" dy="0em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Coal
+<text x="16" y="86.5" dy="0.35em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Coal
 50</text>
-<text x="311" y="191.99" dy="0em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Power
+<text x="311" y="191.99" dy="0.35em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Power
 100</text>
-<text x="16" y="251.9" dy="0em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Gas
+<text x="16" y="251.9" dy="0.35em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Gas
 30</text>
-<text x="16" y="365.4" dy="0em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Nuclear
+<text x="16" y="365.4" dy="0.35em" text-anchor="start" font-family="Arial, sans-serif" font-size="14px" fill="#333">Nuclear
 20</text>
-<text x="584" y="74.65" dy="0em" text-anchor="end" font-family="Arial, sans-serif" font-size="14px" fill="#333">Homes
+<text x="584" y="74.65" dy="0.35em" text-anchor="end" font-family="Arial, sans-serif" font-size="14px" fill="#333">Homes
 40</text>
-<text x="584" y="274.65" dy="0em" text-anchor="end" font-family="Arial, sans-serif" font-size="14px" fill="#333">Industry
+<text x="584" y="274.65" dy="0.35em" text-anchor="end" font-family="Arial, sans-serif" font-size="14px" fill="#333">Industry
 60</text>
 </g>
 <defs>

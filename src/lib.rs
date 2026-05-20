@@ -117,6 +117,8 @@ pub enum DiagramType {
     Er,
     /// Gantt chart diagram (`gantt` keyword).
     Gantt,
+    /// Info diagram (`info` keyword) — displays the Mermaid version string.
+    Info,
     /// State diagram (`stateDiagram` or `stateDiagram-v2` keyword).
     State,
     /// Class diagram (`classDiagram` keyword).
@@ -157,16 +159,12 @@ pub enum DiagramType {
     Architecture,
     /// Event modeling diagram (`eventmodeling` or `event-modeling` keyword).
     EventModeling,
-    /// Cynefin framework diagram (`cynefin` keyword).
-    Cynefin,
     /// Ishikawa / fishbone diagram (`ishikawa` or `fishbone` keyword).
     Ishikawa,
     /// Wardley map diagram (`wardley` keyword).
     Wardley,
-    /// ZenUML sequence diagram (`zenuml` keyword).
-    ZenUml,
-    /// Railroad / syntax diagram (`railroad` or `railroad-beta` keyword).
-    Railroad,
+    /// Tree-view diagram (`treeView-beta` or `treeview-beta` keyword).
+    TreeView,
     /// The input did not match any recognised diagram keyword.
     Unknown,
 }
@@ -181,6 +179,7 @@ impl DiagramType {
             DiagramType::Sequence => "sequenceDiagram",
             DiagramType::Er => "erDiagram",
             DiagramType::Gantt => "gantt",
+            DiagramType::Info => "info",
             DiagramType::State => "stateDiagram",
             DiagramType::Class => "classDiagram",
             DiagramType::Git => "gitGraph",
@@ -200,11 +199,9 @@ impl DiagramType {
             DiagramType::Venn => "venn",
             DiagramType::Architecture => "architecture",
             DiagramType::EventModeling => "eventmodeling",
-            DiagramType::Cynefin => "cynefin",
             DiagramType::Ishikawa => "ishikawa",
             DiagramType::Wardley => "wardley",
-            DiagramType::ZenUml => "zenuml",
-            DiagramType::Railroad => "railroad",
+            DiagramType::TreeView => "treeView-beta",
             DiagramType::Unknown => "unknown",
         }
     }
@@ -279,6 +276,9 @@ pub fn detect(input: &str) -> DiagramType {
     if trimmed.starts_with("gantt") {
         return DiagramType::Gantt;
     }
+    if trimmed.starts_with("info") {
+        return DiagramType::Info;
+    }
     if trimmed.starts_with("stateDiagram-v2") || trimmed.starts_with("stateDiagram") {
         return DiagramType::State;
     }
@@ -297,7 +297,7 @@ pub fn detect(input: &str) -> DiagramType {
     if trimmed.starts_with("quadrantChart") {
         return DiagramType::Quadrant;
     }
-    if trimmed.starts_with("xychart-beta") {
+    if trimmed.starts_with("xychart") {
         return DiagramType::XyChart;
     }
     if trimmed.starts_with("C4Context")
@@ -308,7 +308,7 @@ pub fn detect(input: &str) -> DiagramType {
     {
         return DiagramType::C4;
     }
-    if trimmed.starts_with("block-beta") {
+    if trimmed.starts_with("block") {
         return DiagramType::Block;
     }
     if trimmed.starts_with("packet-beta") || trimmed.starts_with("packet") {
@@ -317,16 +317,16 @@ pub fn detect(input: &str) -> DiagramType {
     if trimmed.starts_with("journey") {
         return DiagramType::Journey;
     }
-    if trimmed.starts_with("requirementDiagram") {
+    if trimmed.starts_with("requirementDiagram") || trimmed.starts_with("requirement") {
         return DiagramType::Requirement;
     }
     if trimmed.starts_with("kanban") {
         return DiagramType::Kanban;
     }
-    if trimmed.starts_with("sankey-beta")
+    if trimmed.starts_with("sankey")
         || strip_frontmatter(trimmed)
             .trim_start()
-            .starts_with("sankey-beta")
+            .starts_with("sankey")
     {
         return DiagramType::Sankey;
     }
@@ -348,20 +348,17 @@ pub fn detect(input: &str) -> DiagramType {
     if trimmed.starts_with("eventmodeling") || trimmed.starts_with("event-modeling") {
         return DiagramType::EventModeling;
     }
-    if trimmed.starts_with("cynefin") {
-        return DiagramType::Cynefin;
-    }
     if trimmed.starts_with("fishbone") || trimmed.starts_with("ishikawa") {
         return DiagramType::Ishikawa;
     }
     if trimmed.starts_with("wardley") {
         return DiagramType::Wardley;
     }
-    if trimmed.starts_with("zenuml") {
-        return DiagramType::ZenUml;
-    }
-    if trimmed.starts_with("railroad-beta") || trimmed.starts_with("railroad") {
-        return DiagramType::Railroad;
+    if trimmed.starts_with("treeView-beta")
+        || trimmed.starts_with("treeview-beta")
+        || trimmed.starts_with("treeView")
+    {
+        return DiagramType::TreeView;
     }
 
     DiagramType::Unknown
@@ -393,9 +390,19 @@ pub fn render(input: &str, theme: theme::Theme) -> String {
         }
         DiagramType::Pie => safe_render!(label, diagrams::pie::render_html(input, theme)),
         DiagramType::Sequence => safe_render!(label, diagrams::sequence::render_html(input, theme)),
-        DiagramType::Er => safe_render!(label, diagrams::er::render_html(input, theme)),
+        DiagramType::Er => safe_render!(label, {
+            let d = diagrams::er::parser::parse(input);
+            diagrams::er::render(&d.diagram, theme)
+        }),
         DiagramType::Gantt => safe_render!(label, diagrams::gantt::render_html(input, theme)),
-        DiagramType::State => safe_render!(label, diagrams::state::render_html(input, theme)),
+        DiagramType::Info => safe_render!(label, {
+            let d = diagrams::info::parser::parse(input);
+            diagrams::info::render(&d, theme)
+        }),
+        DiagramType::State => safe_render!(label, {
+            let d = diagrams::state::parser::parse(input);
+            diagrams::state::render(&d, theme, true)
+        }),
         DiagramType::Class => {
             safe_render!(label, diagrams::class_diagram::render_html(input, theme))
         }
@@ -422,11 +429,11 @@ pub fn render(input: &str, theme: theme::Theme) -> String {
         DiagramType::EventModeling => {
             safe_render!(label, diagrams::eventmodeling::render_html(input, theme))
         }
-        DiagramType::Cynefin => safe_render!(label, diagrams::cynefin::render_html(input, theme)),
         DiagramType::Ishikawa => safe_render!(label, diagrams::ishikawa::render_html(input, theme)),
         DiagramType::Wardley => safe_render!(label, diagrams::wardley::render_html(input, theme)),
-        DiagramType::ZenUml => safe_render!(label, diagrams::zenuml::render_html(input, theme)),
-        DiagramType::Railroad => safe_render!(label, diagrams::railroad::render_html(input, theme)),
+        DiagramType::TreeView => {
+            safe_render!(label, diagrams::treeview::render_html(input, theme))
+        }
         DiagramType::Unknown => error_svg::render_error_svg(label, "Unrecognized diagram type."),
     }
 }
@@ -482,9 +489,19 @@ pub fn try_render(input: &str, theme: theme::Theme) -> Result<String, RenderErro
         DiagramType::Sequence => {
             safe_try_render!(label, diagrams::sequence::render_html(input, theme))
         }
-        DiagramType::Er => safe_try_render!(label, diagrams::er::render_html(input, theme)),
+        DiagramType::Er => safe_try_render!(label, {
+            let d = diagrams::er::parser::parse(input);
+            diagrams::er::render(&d.diagram, theme)
+        }),
         DiagramType::Gantt => safe_try_render!(label, diagrams::gantt::render_html(input, theme)),
-        DiagramType::State => safe_try_render!(label, diagrams::state::render_html(input, theme)),
+        DiagramType::Info => safe_try_render!(label, {
+            let d = diagrams::info::parser::parse(input);
+            diagrams::info::render(&d, theme)
+        }),
+        DiagramType::State => safe_try_render!(label, {
+            let d = diagrams::state::parser::parse(input);
+            diagrams::state::render(&d, theme, true)
+        }),
         DiagramType::Class => {
             safe_try_render!(label, diagrams::class_diagram::render_html(input, theme))
         }
@@ -523,18 +540,14 @@ pub fn try_render(input: &str, theme: theme::Theme) -> Result<String, RenderErro
         DiagramType::EventModeling => {
             safe_try_render!(label, diagrams::eventmodeling::render_html(input, theme))
         }
-        DiagramType::Cynefin => {
-            safe_try_render!(label, diagrams::cynefin::render_html(input, theme))
-        }
         DiagramType::Ishikawa => {
             safe_try_render!(label, diagrams::ishikawa::render_html(input, theme))
         }
         DiagramType::Wardley => {
             safe_try_render!(label, diagrams::wardley::render_html(input, theme))
         }
-        DiagramType::ZenUml => safe_try_render!(label, diagrams::zenuml::render_html(input, theme)),
-        DiagramType::Railroad => {
-            safe_try_render!(label, diagrams::railroad::render_html(input, theme))
+        DiagramType::TreeView => {
+            safe_try_render!(label, diagrams::treeview::render_html(input, theme))
         }
         DiagramType::Unknown => Err(RenderError::unknown_type()),
     }
@@ -658,12 +671,6 @@ mod tests {
     #[test]
     fn render_git() {
         let svg = render("gitGraph\n  commit", theme::Theme::Default);
-        assert!(svg.contains("<svg"));
-    }
-
-    #[test]
-    fn render_zenuml() {
-        let svg = render("zenuml\n  Alice->Bob: Hi", theme::Theme::Default);
         assert!(svg.contains("<svg"));
     }
 
@@ -873,11 +880,6 @@ mod tests {
     }
 
     #[test]
-    fn detect_cynefin() {
-        assert_eq!(detect("cynefin\n  A"), DiagramType::Cynefin);
-    }
-
-    #[test]
     fn detect_ishikawa() {
         assert_eq!(detect("ishikawa\n  effect"), DiagramType::Ishikawa);
     }
@@ -893,18 +895,24 @@ mod tests {
     }
 
     #[test]
-    fn detect_zenuml() {
-        assert_eq!(detect("zenuml\n  A->B: hi"), DiagramType::ZenUml);
+    fn detect_treeview_beta() {
+        assert_eq!(detect("treeView-beta\n    \"docs\""), DiagramType::TreeView);
     }
 
     #[test]
-    fn detect_railroad() {
-        assert_eq!(detect("railroad\n  A"), DiagramType::Railroad);
+    fn detect_treeview_lowercase() {
+        assert_eq!(detect("treeview-beta\n    \"docs\""), DiagramType::TreeView);
     }
 
     #[test]
-    fn detect_railroad_beta() {
-        assert_eq!(detect("railroad-beta\n  A"), DiagramType::Railroad);
+    fn render_treeview() {
+        let svg = render(
+            "treeView-beta\n    \"docs\"\n        \"build\"\n",
+            theme::Theme::Default,
+        );
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("tree-view"));
+        assert!(svg.contains("docs"));
     }
 
     #[test]

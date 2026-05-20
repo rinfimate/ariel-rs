@@ -5,6 +5,39 @@
 #![allow(dead_code)]
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    format!(
+        concat!(
+            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
+            "#{id} p{{margin:0;}}",
+            "#{id} .commit-id,#{id} .commit-msg,#{id} .branch-label{{fill:lightgrey;color:lightgrey;font-family:{ff};}}",
+            "#{id} .branch{{stroke-width:1;stroke:#333333;stroke-dasharray:2;}}",
+            "#{id} .commit-label{{font-size:10px;fill:#000021;}}",
+            "#{id} .commit-label-bkg{{font-size:10px;fill:#ffffde;opacity:0.5;}}",
+            "#{id} .tag-label{{font-size:10px;fill:#131300;}}",
+            "#{id} .tag-label-bkg{{fill:#ECECFF;stroke:hsl(240, 60%, 86.2745098039%);}}",
+            "#{id} .tag-hole{{fill:#333;}}",
+            "#{id} .commit-merge{{stroke:#ECECFF;fill:#ECECFF;}}",
+            "#{id} .commit-reverse{{stroke:#ECECFF;fill:#ECECFF;stroke-width:3;}}",
+            "#{id} .commit-highlight-inner{{stroke:#ECECFF;fill:#ECECFF;}}",
+            "#{id} .arrow{{stroke-width:8;stroke-linecap:round;fill:none;}}",
+            "#{id} .gitTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}",
+            "#{id} :root{{--mermaid-font-family:{ff};}}"
+        ),
+        id = id, ff = ff
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 

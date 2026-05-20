@@ -451,3 +451,18 @@ mod tests {
         assert_eq!(d.commits.len(), 7);
     }
 }
+
+#[cfg(test)]
+mod tag_test {
+    #[test]
+    fn tag_with_dot() {
+        let input = "gitGraph\n   commit id: \"1\" tag: \"v1.0\"";
+        let diag = super::parse(input).diagram;
+        let tags: Vec<&str> = diag
+            .commits
+            .iter()
+            .flat_map(|c| c.tags.iter().map(|t| t.as_str()))
+            .collect();
+        assert_eq!(tags, vec!["v1.0"], "tag should be v1.0 not {:?}", tags);
+    }
+}

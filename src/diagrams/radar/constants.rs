@@ -1,77 +1,97 @@
 //! Layout and styling constants for the radar renderer.
+//!
+//! Values are taken directly from the Mermaid JS default config:
+//! chunk-Q52JI7PB.mjs lines 5060-5071 and theme variable defaults.
 
 // ---------------------------------------------------------------------------
-// Colour palette
+// SVG / chart dimensions (all match Mermaid JS defaults)
 // ---------------------------------------------------------------------------
 
-/// Data curve colour palette. Mirrors cScale0-11 from the Mermaid default theme.
-pub const CURVE_COLORS: &[&str] = &[
-    "#4C8BF5", "#FF6B6B", "#48C9B0", "#F5A623", "#9B59B6", "#3498DB", "#E67E22", "#1ABC9C",
-    "#E74C3C", "#2ECC71", "#F39C12", "#8E44AD",
-];
+/// Inner chart width (px) — "config.width" in Mermaid JS.
+pub const CHART_WIDTH: f64 = 600.0;
 
-// ---------------------------------------------------------------------------
-// SVG dimensions
-// ---------------------------------------------------------------------------
+/// Inner chart height (px) — "config.height" in Mermaid JS.
+pub const CHART_HEIGHT: f64 = 600.0;
 
-/// Total SVG width (px).
-pub const SVG_WIDTH: f64 = 600.0;
+/// Top margin (px).
+pub const MARGIN_TOP: f64 = 50.0;
 
-/// Total SVG height (px).
-pub const SVG_HEIGHT: f64 = 450.0;
-
-// ---------------------------------------------------------------------------
-// Margins
-// ---------------------------------------------------------------------------
-
-/// Top margin between the SVG edge and the chart area (px).
-pub const MARGIN_TOP: f64 = 40.0;
-
-/// Right margin (px). Extended by LEGEND_WIDTH + gap when a legend is shown.
-pub const MARGIN_RIGHT: f64 = 40.0;
+/// Right margin (px).
+pub const MARGIN_RIGHT: f64 = 50.0;
 
 /// Bottom margin (px).
-pub const MARGIN_BOTTOM: f64 = 40.0;
+pub const MARGIN_BOTTOM: f64 = 50.0;
 
 /// Left margin (px).
-pub const MARGIN_LEFT: f64 = 40.0;
+pub const MARGIN_LEFT: f64 = 50.0;
+
+// Derived totals
+/// Total SVG width = CHART_WIDTH + MARGIN_LEFT + MARGIN_RIGHT.
+pub const SVG_WIDTH: f64 = CHART_WIDTH + MARGIN_LEFT + MARGIN_RIGHT; // 700
+
+/// Total SVG height = CHART_HEIGHT + MARGIN_TOP + MARGIN_BOTTOM.
+pub const SVG_HEIGHT: f64 = CHART_HEIGHT + MARGIN_TOP + MARGIN_BOTTOM; // 700
+
+// ---------------------------------------------------------------------------
+// Axis rendering
+// ---------------------------------------------------------------------------
+
+/// Factor applied to radius for the end of the axis spoke.
+/// axisScaleFactor = 1 (default). Can be overridden per-diagram.
+pub const AXIS_SCALE_FACTOR: f64 = 1.0;
+
+/// Factor applied to radius for axis label placement.
+/// axisLabelFactor = 1.05 (default).
+pub const AXIS_LABEL_FACTOR: f64 = 1.05;
+
+// ---------------------------------------------------------------------------
+// Curve rendering
+// ---------------------------------------------------------------------------
+
+/// Catmull-Rom tension — matches Mermaid JS curveTension = 0.17.
+/// Note: Mermaid uses this directly (NOT divided by 3).
+pub const CURVE_TENSION: f64 = 0.17;
+
+/// Curve fill opacity.
+pub const CURVE_OPACITY: f64 = 0.5;
+
+/// Curve stroke width (px).
+pub const CURVE_STROKE_WIDTH: f64 = 2.0;
+
+// ---------------------------------------------------------------------------
+// Graticule styling
+// ---------------------------------------------------------------------------
+
+/// Fill/stroke colour for graticule rings.
+pub const GRATICULE_COLOR: &str = "#DEDEDE";
+
+/// Graticule fill opacity.
+pub const GRATICULE_OPACITY: f64 = 0.3;
+
+/// Graticule stroke width (px).
+pub const GRATICULE_STROKE_WIDTH: f64 = 1.0;
 
 // ---------------------------------------------------------------------------
 // Legend
 // ---------------------------------------------------------------------------
 
-/// Width of the legend column (px).
-pub const LEGEND_WIDTH: f64 = 120.0;
-
-/// Side length of each legend colour swatch (px).
-pub const LEGEND_BOX: f64 = 12.0;
+/// Side length of each legend colour swatch (px). Emitted directly in templates.
+#[allow(dead_code)]
+pub const LEGEND_BOX_SIZE: f64 = 12.0;
 
 /// Font size for legend labels (px).
-pub const LEGEND_FONT: f64 = 12.0;
+pub const LEGEND_FONT_SIZE: f64 = 12.0;
+
+/// Vertical spacing between legend rows (px).
+pub const LEGEND_LINE_HEIGHT: f64 = 20.0;
 
 // ---------------------------------------------------------------------------
 // Typography
 // ---------------------------------------------------------------------------
 
 /// Font size for axis labels (px).
-pub const AXIS_LABEL_FONT: f64 = 12.0;
+pub const AXIS_LABEL_FONT_SIZE: f64 = 12.0;
 
-/// Font size for the diagram title (px).
-pub const TITLE_FONT: f64 = 18.0;
-
-// ---------------------------------------------------------------------------
-// Catmull-Rom spline
-// ---------------------------------------------------------------------------
-
-/// Tension factor for the closed Catmull-Rom spline (α = 0.5, standard).
-pub const CATMULL_ROM_ALPHA: f64 = 0.5;
-
-// ---------------------------------------------------------------------------
-// Axis label placement
-// ---------------------------------------------------------------------------
-
-/// Distance beyond the radius tip at which axis labels are placed (px).
-pub const AXIS_LABEL_RADIUS_OFFSET: f64 = 18.0;
-
-/// Cosine threshold for classifying a label as left- or right-aligned vs centred.
-pub const AXIS_LABEL_ANCHOR_THRESHOLD: f64 = 0.1;
+/// Axis stroke width (px). Emitted directly in CSS styles.
+#[allow(dead_code)]
+pub const AXIS_STROKE_WIDTH: f64 = 2.0;

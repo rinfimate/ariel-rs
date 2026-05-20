@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{LinkColor, NodeAlignment, SankeyDiagram};
-use super::templates;
+use super::templates::{self, build_css, esc};
 /// Faithful Rust port of Mermaid's sankeyRenderer.ts + d3-sankey v0.12.3.
 ///
 /// Implements the d3-sankey layout algorithm from scratch (since we can't use npm).
@@ -714,13 +714,6 @@ fn compute_link_breadths(nodes: &mut [LayoutNode], links: &mut [LayoutLink]) {
 
 // ── SVG rendering ──────────────────────────────────────────────────────────────
 
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
-
 /// Generate a Sankey link path (mirrors d3.sankeyLinkHorizontal).
 /// Draws a cubic Bezier from (source_x1, y0) to (target_x0, y1)
 /// with horizontal control points at the midpoint x.
@@ -781,21 +774,6 @@ fn label_position_outlined(node: &LayoutNode, central_layer: usize) -> (f64, &'s
     }
 }
 
-fn build_css(svg_id: &str, ff: &str) -> String {
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:14px;fill:#333;}}",
-            "#{id} .nodes .node rect{{shape-rendering:crispEdges;}}",
-            "#{id} .links .link{{fill:none;stroke-opacity:0.5;}}",
-            "#{id} .node-labels text{{font-size:14px;}}",
-            "#{id} .sankey-label-bg{{stroke:#fff;stroke-width:4px;paint-order:stroke;fill:#fff;opacity:0.8;}}",
-            "#{id} .sankey-label-fg{{}}",
-        ),
-        id = svg_id,
-        ff = ff,
-    )
-}
-
 pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
@@ -829,6 +807,15 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
 
     let _central_layer = find_central_node_layer(nodes);
 
+    // JS: setupGraphViewbox uses the actual SVG bounding box (includes text labels).
+    // Text labels sit at node center y + dy(0.35em) + font descenders ≈ center + 7.9px.
+    // actual_height = max(height, max_label_bottom) matching getBBox() behavior.
+    let label_bottom_offset = 14.0 * 0.35 + 14.0 * 0.217; // dy + descender at 14px ≈ 7.9px
+    let actual_height = nodes
+        .iter()
+        .map(|n| (n.y0 + n.y1) / 2.0 + label_bottom_offset)
+        .fold(height, f64::max);
+
     // Color scheme: assign colors by node insertion index (mirrors d3.scaleOrdinal)
     let get_node_color = |_id: &str, idx: usize| -> &'static str { tableau_color_by_index(idx) };
 
@@ -836,7 +823,7 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
 
     let mut parts: Vec<String> = Vec::new();
 
-    parts.push(templates::svg_root(svg_id, width, height));
+    parts.push(templates::svg_root(svg_id, width, actual_height));
     parts.push(format!("<style>{}</style>", css));
 
     // ── Nodes ─────────────────────────────────────────────────────────────────
@@ -870,11 +857,11 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
 
         let (lx, anchor) = label_position(node, width);
         let ly = (node.y1 + node.y0) / 2.0;
-        let dy = "0em";
+        let dy = "0.35em";
         // Mermaid puts label+value in one text element with a newline between them.
         // SVG's default whitespace normalization collapses the newline to a space,
         // rendering "Homes 40" on a single line — matching the reference output.
-        let text_content = escape(&label);
+        let text_content = esc(&label);
 
         parts.push(templates::node_label_text(
             lx,

@@ -11,7 +11,11 @@ use super::constants::*;
 /// - Edges drawn as cubic bezier paths from node right-edge to node left-edge.
 use super::parser::{BlockDiagram, BlockEdge, BlockNode, BlockShape, RowItem};
 #[allow(unused_imports)]
-use super::templates;
+use super::templates::{
+    self, build_markers, build_style, edge_label_text, edge_path, esc, fmt, fmt_px, node_circle,
+    node_cylinder_ellipse, node_cylinder_rect, node_diamond, node_group, node_hexagon,
+    node_label_fo, node_rect_rounded, node_rect_square, svg_root,
+};
 use crate::text::measure;
 use crate::theme::Theme;
 
@@ -181,11 +185,13 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
 
     let mut out = String::new();
 
-    out.push_str(&format!(
-        "<svg id=\"{}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" style=\"max-width: {}px;\" viewBox=\"{} {} {} {}\" role=\"graphics-document document\" aria-roledescription=\"block\">",
+    out.push_str(&svg_root(
         svg_id,
-        fmt_px(vb_w),
-        fmt(vb_x), fmt(vb_y), fmt(vb_w), fmt(vb_h),
+        &fmt_px(vb_w),
+        &fmt(vb_x),
+        &fmt(vb_y),
+        &fmt(vb_w),
+        &fmt(vb_h),
     ));
 
     // CSS style
@@ -230,23 +236,19 @@ fn render_node(node: &BlockNode, cx: f64, cy: f64, w: f64, h: f64) -> String {
 
     let mut s = String::new();
     // Mermaid uses the SVG id as prefix for node ids
-    s.push_str(&format!(
-        "<g class=\"node default default flowchart-label\" id=\"mermaid-block-{}\" transform=\"translate({}, {})\">",
-        esc(&node.id), fmt(cx), fmt(cy),
+    s.push_str(&node_group(
+        "mermaid-block",
+        &esc(&node.id),
+        &fmt(cx),
+        &fmt(cy),
     ));
 
     match node.shape {
         BlockShape::Square | BlockShape::Default => {
-            s.push_str(&format!(
-                "<rect class=\"basic label-container\" style=\"\" rx=\"0\" ry=\"0\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"></rect>",
-                fmt(-hw), fmt(-hh), fmt(w), fmt(h),
-            ));
+            s.push_str(&node_rect_square(&fmt(-hw), &fmt(-hh), &fmt(w), &fmt(h)));
         }
         BlockShape::RoundedRect => {
-            s.push_str(&format!(
-                "<rect class=\"basic label-container\" style=\"\" rx=\"8\" ry=\"8\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"></rect>",
-                fmt(-hw), fmt(-hh), fmt(w), fmt(h),
-            ));
+            s.push_str(&node_rect_rounded(&fmt(-hw), &fmt(-hh), &fmt(w), &fmt(h)));
         }
         BlockShape::Diamond => {
             let pts = format!(
@@ -260,34 +262,40 @@ fn render_node(node: &BlockNode, cx: f64, cy: f64, w: f64, h: f64) -> String {
                 fmt(-hw),
                 fmt(0.0),
             );
-            s.push_str(&format!(
-                "<polygon points=\"{}\" class=\"basic label-container\" style=\"\"></polygon>",
-                pts,
-            ));
+            s.push_str(&node_diamond(&pts));
         }
         BlockShape::Circle => {
             let r = hw.min(hh);
-            s.push_str(&format!(
-                "<circle cx=\"0\" cy=\"0\" r=\"{}\" class=\"basic label-container\" style=\"\"></circle>",
-                fmt(r),
-            ));
+            s.push_str(&node_circle(&fmt(r)));
         }
         BlockShape::Cylinder => {
             let ry_val = 7.0_f64;
             let body_h = h - ry_val;
             let fill = "#ECECFF";
             let stroke = "#9370DB";
-            s.push_str(&format!(
-                "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" style=\"fill:{};stroke:{};stroke-width:1;\"></rect>",
-                fmt(-hw), fmt(-hh + ry_val), fmt(w), fmt(body_h), fill, stroke,
+            s.push_str(&node_cylinder_rect(
+                &fmt(-hw),
+                &fmt(-hh + ry_val),
+                &fmt(w),
+                &fmt(body_h),
+                fill,
+                stroke,
             ));
-            s.push_str(&format!(
-                "<ellipse cx=\"0\" cy=\"{}\" rx=\"{}\" ry=\"{}\" style=\"fill:{};stroke:{};stroke-width:1;\"></ellipse>",
-                fmt(-hh + ry_val), fmt(hw), fmt(ry_val), fill, stroke,
+            s.push_str(&node_cylinder_ellipse(
+                "0",
+                &fmt(-hh + ry_val),
+                &fmt(hw),
+                &fmt(ry_val),
+                fill,
+                stroke,
             ));
-            s.push_str(&format!(
-                "<ellipse cx=\"0\" cy=\"{}\" rx=\"{}\" ry=\"{}\" style=\"fill:{};stroke:{};stroke-width:1;\"></ellipse>",
-                fmt(-hh + ry_val + body_h), fmt(hw), fmt(ry_val), fill, stroke,
+            s.push_str(&node_cylinder_ellipse(
+                "0",
+                &fmt(-hh + ry_val + body_h),
+                &fmt(hw),
+                &fmt(ry_val),
+                fill,
+                stroke,
             ));
         }
         BlockShape::Hexagon => {
@@ -307,10 +315,7 @@ fn render_node(node: &BlockNode, cx: f64, cy: f64, w: f64, h: f64) -> String {
                 fmt(-hw),
                 fmt(0.0),
             );
-            s.push_str(&format!(
-                "<polygon points=\"{}\" class=\"basic label-container\" style=\"\"></polygon>",
-                pts,
-            ));
+            s.push_str(&node_hexagon(&pts));
         }
     }
 
@@ -324,25 +329,13 @@ fn render_node(node: &BlockNode, cx: f64, cy: f64, w: f64, h: f64) -> String {
     let pad_v = (h - fo_h) / 2.0;
     let label_ty = -(hh - pad_v); // = -hh + pad_v = -(h/2) + (h-fo_h)/2
 
-    s.push_str(&format!(
-        "<g class=\"label\" style=\"\" transform=\"translate({}, {})\">",
-        fmt(-(tw / 2.0)),
-        fmt(label_ty),
+    s.push_str(&node_label_fo(
+        &fmt(-(tw / 2.0)),
+        &fmt(label_ty),
+        &fmt(tw),
+        &fmt(fo_h),
+        &esc(&node.label),
     ));
-    s.push_str("<rect></rect>");
-    s.push_str(&format!(
-        "<foreignObject width=\"{}\" height=\"{}\">",
-        fmt(tw),
-        fmt(fo_h),
-    ));
-    s.push_str("<div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display: table-cell; white-space: nowrap; line-height: 1.5;\">");
-    s.push_str(&format!(
-        "<span class=\"nodeLabel \"><p>{}</p></span>",
-        esc(&node.label)
-    ));
-    s.push_str("</div>");
-    s.push_str("</foreignObject>");
-    s.push_str("</g>");
 
     s.push_str("</g>");
     s
@@ -413,167 +406,27 @@ fn render_edge(
     let marker_end = format!("url(#{}_block-pointEnd)", svg_id);
 
     let mut s = String::new();
-    s.push_str(&format!(
-        "<path d=\"{}\" id=\"{}\" class=\" edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link LS-{} LE-{}\" marker-end=\"{}\"></path>",
-        path, edge_id,
-        edge.from.to_lowercase(), edge.to.to_lowercase(),
-        marker_end,
+    s.push_str(&edge_path(
+        &path,
+        &edge_id,
+        &edge.from.to_lowercase(),
+        &edge.to.to_lowercase(),
+        &marker_end,
     ));
 
     // Edge label if present
     if let Some(ref label) = edge.label {
         if !label.is_empty() {
             let mid_y = (sy + ey) / 2.0;
-            s.push_str(&format!(
-                "<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-size=\"12\" font-family=\"Arial, sans-serif\" fill=\"#333\">{}</text>",
-                fmt(mid_x), fmt(mid_y - 5.0), esc(label),
+            s.push_str(&edge_label_text(
+                &fmt(mid_x),
+                &fmt(mid_y - 5.0),
+                &esc(label),
             ));
         }
     }
 
     s
-}
-
-/// Build the CSS style block (matches Mermaid's block diagram style exactly).
-fn build_style(id: &str, ff: &str) -> String {
-    let mut c = String::new();
-    c.push_str(&format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}"
-    ));
-    c.push_str("@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}");
-    c.push_str("@keyframes dash{to{stroke-dashoffset:0;}}");
-    c.push_str(&format!("#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .error-icon{{fill:#552222;}}"));
-    c.push_str(&format!(
-        "#{id} .error-text{{fill:#552222;stroke:#552222;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-normal{{stroke-width:1px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}"
-    ));
-    c.push_str(&format!("#{id} .edge-pattern-solid{{stroke-dasharray:0;}}"));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}"
-    ));
-    c.push_str(&format!("#{id} .marker{{fill:#333333;stroke:#333333;}}"));
-    c.push_str(&format!("#{id} .marker.cross{{stroke:#333333;}}"));
-    c.push_str(&format!("#{id} svg{{font-family:{ff};font-size:16px;}}"));
-    c.push_str(&format!("#{id} p{{margin:0;}}"));
-    c.push_str(&format!("#{id} .label{{font-family:{ff};color:#333;}}"));
-    c.push_str(&format!("#{id} .cluster-label text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster-label span,#{id} p{{color:#333;}}"));
-    c.push_str(&format!(
-        "#{id} .label text,#{id} span,#{id} p{{fill:#333;color:#333;}}"
-    ));
-    c.push_str(&format!("#{id} .node rect,#{id} .node circle,#{id} .node ellipse,#{id} .node polygon,#{id} .node path{{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}}"));
-    c.push_str(&format!(
-        "#{id} .flowchart-label text{{text-anchor:middle;}}"
-    ));
-    c.push_str(&format!("#{id} .node .label{{text-align:center;}}"));
-    c.push_str(&format!("#{id} .node.clickable{{cursor:pointer;}}"));
-    c.push_str(&format!("#{id} .arrowheadPath{{fill:#333333;}}"));
-    c.push_str(&format!(
-        "#{id} .edgePath .path{{stroke:#333333;stroke-width:2.0px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .flowchart-link{{stroke:#333333;fill:none;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edgeLabel{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edgeLabel p{{margin:0;padding:0;display:inline;}}"
-    ));
-    c.push_str(&format!("#{id} .edgeLabel rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
-    c.push_str(&format!(
-        "#{id} .labelBkg{{background-color:rgba(232,232,232, 0.8);}}"
-    ));
-    c.push_str(&format!("#{id} .node .cluster{{fill:rgba(255, 255, 222, 0.5);stroke:rgba(170, 170, 51, 0.2);box-shadow:rgba(50, 50, 93, 0.25) 0px 13px 27px -5px,rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;stroke-width:1px;}}"));
-    c.push_str(&format!("#{id} .cluster text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster span,#{id} p{{color:#333;}}"));
-    c.push_str(&format!("#{id} div.mermaidTooltip{{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:{ff};font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}}"));
-    c.push_str(&format!(
-        "#{id} .flowchartTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}"
-    ));
-    c.push_str(&format!("#{id} .label-icon{{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}}"));
-    c.push_str(&format!(
-        "#{id} .node .label-icon path{{fill:currentColor;stroke:revert;stroke-width:revert;}}"
-    ));
-    c.push_str(&format!("#{id} .node .neo-node{{stroke:#9370DB;}}"));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node rect,#{id} [data-look=\"neo\"].cluster rect,#{id} [data-look=\"neo\"].node polygon{{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node path{{stroke:#9370DB;stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node .outer-path{{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node .neo-line path{{stroke:#9370DB;filter:none;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node circle{{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node circle .state-start{{fill:#000000;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon{{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon-neo path{{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} :root{{--mermaid-font-family:{ff};}}"));
-    c
-}
-
-/// Build marker definitions matching Mermaid's block diagram markers.
-fn build_markers(svg_id: &str) -> String {
-    let mut m = String::new();
-
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-pointEnd\" class=\"marker block\" viewBox=\"0 0 10 10\" refX=\"6\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\"><path d=\"M 0 0 L 10 5 L 0 10 z\" class=\"arrowMarkerPath\" style=\"stroke-width: 1; stroke-dasharray: 1, 0;\"></path></marker>"
-    ));
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-pointStart\" class=\"marker block\" viewBox=\"0 0 10 10\" refX=\"4.5\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"12\" markerHeight=\"12\" orient=\"auto\"><path d=\"M 0 5 L 10 10 L 10 0 z\" class=\"arrowMarkerPath\" style=\"stroke-width: 1; stroke-dasharray: 1, 0;\"></path></marker>"
-    ));
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-circleEnd\" class=\"marker block\" viewBox=\"0 0 10 10\" refX=\"11\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto\"><circle cx=\"5\" cy=\"5\" r=\"5\" class=\"arrowMarkerPath\" style=\"stroke-width: 1; stroke-dasharray: 1, 0;\"></circle></marker>"
-    ));
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-circleStart\" class=\"marker block\" viewBox=\"0 0 10 10\" refX=\"-1\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto\"><circle cx=\"5\" cy=\"5\" r=\"5\" class=\"arrowMarkerPath\" style=\"stroke-width: 1; stroke-dasharray: 1, 0;\"></circle></marker>"
-    ));
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-crossEnd\" class=\"marker cross block\" viewBox=\"0 0 11 11\" refX=\"12\" refY=\"5.2\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto\"><path d=\"M 1,1 l 9,9 M 10,1 l -9,9\" class=\"arrowMarkerPath\" style=\"stroke-width: 2; stroke-dasharray: 1, 0;\"></path></marker>"
-    ));
-    m.push_str(&format!(
-        "<marker id=\"{svg_id}_block-crossStart\" class=\"marker cross block\" viewBox=\"0 0 11 11\" refX=\"-1\" refY=\"5.2\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto\"><path d=\"M 1,1 l 9,9 M 10,1 l -9,9\" class=\"arrowMarkerPath\" style=\"stroke-width: 2; stroke-dasharray: 1, 0;\"></path></marker>"
-    ));
-
-    m
-}
-
-/// Format a float for SVG attributes — drop trailing zeros, max 3 decimal places.
-fn fmt(v: f64) -> String {
-    let s = format!("{:.3}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-/// Format for pixel-based max-width (Mermaid uses fractional pixels).
-fn fmt_px(v: f64) -> String {
-    let s = format!("{:.6}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]

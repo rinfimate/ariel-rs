@@ -4,6 +4,79 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    use super::constants::{FONT_SIZE, SECTION_STYLES};
+    let mut s = format!(
+        "#{id}{{font-family:{ff};font-size:{fs}px;fill:#333;}}",
+        id = id,
+        ff = ff,
+        fs = FONT_SIZE,
+    );
+
+    for (i, st) in SECTION_STYLES.iter().enumerate() {
+        let idx: i64 = (i as i64) - 1;
+        s.push_str(&format!(
+            "#{id} .section-{idx} rect,#{id} .section-{idx} path,#{id} .section-{idx} circle,#{id} .section-{idx} path{{fill:{fill};}}",
+            id = id, idx = idx, fill = st.fill,
+        ));
+        s.push_str(&format!(
+            "#{id} .section-{idx} text{{fill:{text};}}",
+            id = id,
+            idx = idx,
+            text = st.text,
+        ));
+        s.push_str(&format!(
+            "#{id} .section-edge-{idx}{{stroke:{fill};}}",
+            id = id,
+            idx = idx,
+            fill = st.fill,
+        ));
+        s.push_str(&format!(
+            "#{id} .section-{idx} line{{stroke:{line};stroke-width:3;}}",
+            id = id,
+            idx = idx,
+            line = st.line,
+        ));
+        s.push_str(&format!(
+            "#{id} .node-line-{idx}{{stroke:{line};stroke-width:3;}}",
+            id = id,
+            idx = idx,
+            line = st.line,
+        ));
+    }
+
+    s.push_str(&format!(
+        concat!(
+            "#{id} .edge{{stroke-width:3;}}",
+            "#{id} .timeline-node{{fill:none;}}",
+            "#{id} .node-bkg{{opacity:1;}}",
+            "#{id} p{{margin:0;}}",
+            "#{id} svg{{font-family:{ff};font-size:{fs}px;}}",
+            "#{id} text{{font-family:{ff};fill:#333;}}",
+            "#{id} .section-label{{text-anchor:middle;dominant-baseline:middle;}}",
+            "#{id} .title-text{{font-size:24px;font-weight:bold;fill:#333;text-anchor:middle;}}",
+            "#{id} .activity-line{{stroke:#333;stroke-width:4px;}}",
+            "#{id} .eventWrapper{{filter:brightness(120%);}}",
+            "#{id} .lineWrapper line{{stroke:#ffffff;}}",
+        ),
+        id = id,
+        ff = ff,
+        fs = FONT_SIZE,
+    ));
+
+    s
+}
+
+// ---------------------------------------------------------------------------
 // Arrowhead marker
 // ---------------------------------------------------------------------------
 
@@ -142,6 +215,15 @@ pub fn node_text_group(tx: f64, ty: f64, tspans: &str) -> String {
         tx = tx,
         ty = ty,
         tspans = tspans,
+    )
+}
+
+/// Render a single `<tspan>` for a multi-line text element.
+pub fn text_tspan(dy: &str, text: &str) -> String {
+    format!(
+        "<tspan x=\"0\" dy=\"{dy}\">{text}</tspan>",
+        dy = dy,
+        text = text,
     )
 }
 

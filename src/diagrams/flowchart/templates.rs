@@ -3,6 +3,14 @@
 //! Each function takes typed parameters and returns a `String`.
 //! No rendering logic lives here — only string formatting.
 
+use crate::theme::ThemeVars;
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::{esc, fmt};
+
 // ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
@@ -368,4 +376,118 @@ pub fn node_label_text(
     format!(
         r#"<g class="label" style="{label_color_style}" transform="translate(0, 0)"><text x="0" y="{text_label_y}" text-anchor="middle" font-family="{font_family}" font-size="{font_size}" fill="{text_fill}">{label_text}</text></g>"#,
     )
+}
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_css(id: &str, vars: &ThemeVars) -> String {
+    let pf = vars.primary_color;
+    let ps = vars.primary_border;
+    let cf = vars.cluster_bg;
+    let cs = vars.cluster_border;
+    let ff = vars.font_family;
+    let mut c = String::new();
+    c.push_str(&format!(
+        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}"
+    ));
+    c.push_str("@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}");
+    c.push_str("@keyframes dash{to{stroke-dashoffset:0;}}");
+    c.push_str(&format!("#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}"));
+    c.push_str(&format!("#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}"));
+    c.push_str(&format!("#{id} .error-icon{{fill:#552222;}}"));
+    c.push_str(&format!(
+        "#{id} .error-text{{fill:#552222;stroke:#552222;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edge-thickness-normal{{stroke-width:1px;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}"
+    ));
+    c.push_str(&format!("#{id} .edge-pattern-solid{{stroke-dasharray:0;}}"));
+    c.push_str(&format!(
+        "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}"
+    ));
+    c.push_str(&format!("#{id} .marker{{fill:#333333;stroke:#333333;}}"));
+    c.push_str(&format!("#{id} .marker.cross{{stroke:#333333;}}"));
+    c.push_str(&format!("#{id} svg{{font-family:{ff};font-size:16px;}}"));
+    c.push_str(&format!("#{id} p{{margin:0;}}"));
+    c.push_str(&format!("#{id} .label{{font-family:{ff};color:#333;}}"));
+    c.push_str(&format!("#{id} .cluster-label text{{fill:#333;}}"));
+    c.push_str(&format!("#{id} .cluster-label span{{color:#333;}}"));
+    c.push_str(&format!(
+        "#{id} .cluster-label span p{{background-color:transparent;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .label text,#{id} span{{fill:#333;color:#333;}}"
+    ));
+    c.push_str(&format!("#{id} .node rect,#{id} .node circle,#{id} .node ellipse,#{id} .node polygon,#{id} .node path{{fill:{pf};stroke:{ps};stroke-width:1px;}}"));
+    c.push_str(&format!("#{id} .rough-node .label text,#{id} .node .label text,#{id} .image-shape .label,#{id} .icon-shape .label{{text-anchor:middle;}}"));
+    c.push_str(&format!(
+        "#{id} .node .katex path{{fill:#000;stroke:#000;stroke-width:1px;}}"
+    ));
+    c.push_str(&format!("#{id} .rough-node .label,#{id} .node .label,#{id} .image-shape .label,#{id} .icon-shape .label{{text-align:center;}}"));
+    c.push_str(&format!("#{id} .node.clickable{{cursor:pointer;}}"));
+    c.push_str(&format!(
+        "#{id} .root .anchor path{{fill:#333333!important;stroke-width:0;stroke:#333333;}}"
+    ));
+    c.push_str(&format!("#{id} .arrowheadPath{{fill:#333333;}}"));
+    c.push_str(&format!(
+        "#{id} .edgePath .path{{stroke:#333333;stroke-width:1px;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .flowchart-link{{stroke:#333333;fill:none;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edgeLabel{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .edgeLabel p{{background-color:rgba(232,232,232, 0.8);}}"
+    ));
+    c.push_str(&format!("#{id} .edgeLabel rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
+    c.push_str(&format!(
+        "#{id} .labelBkg{{background-color:rgba(232, 232, 232, 0.5);}}"
+    ));
+    c.push_str(&format!(
+        "#{id} .cluster rect{{fill:{cf};stroke:{cs};stroke-width:1px;}}"
+    ));
+    c.push_str(&format!("#{id} .cluster text{{fill:#333;}}"));
+    c.push_str(&format!("#{id} .cluster span{{color:#333;}}"));
+    c.push_str(&format!("#{id} div.mermaidTooltip{{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:{ff};font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}}"));
+    c.push_str(&format!(
+        "#{id} .flowchartTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}"
+    ));
+    c.push_str(&format!("#{id} rect.text{{fill:none;stroke-width:0;}}"));
+    c.push_str(&format!("#{id} .icon-shape,#{id} .image-shape{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"));
+    c.push_str(&format!("#{id} .icon-shape p,#{id} .image-shape p{{background-color:rgba(232,232,232, 0.8);padding:2px;}}"));
+    c.push_str(&format!("#{id} .icon-shape .label rect,#{id} .image-shape .label rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
+    c.push_str(&format!("#{id} .label-icon{{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}}"));
+    c.push_str(&format!(
+        "#{id} .node .label-icon path{{fill:currentColor;stroke:revert;stroke-width:revert;}}"
+    ));
+    c.push_str(&format!("#{id} .node .neo-node{{stroke:{ps};}}"));
+    c.push_str(&format!("#{id} [data-look=\"neo\"].node rect,#{id} [data-look=\"neo\"].cluster rect,#{id} [data-look=\"neo\"].node polygon{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
+    c.push_str(&format!(
+        "#{id} [data-look=\"neo\"].node path{{stroke:{ps};stroke-width:1px;}}"
+    ));
+    c.push_str(&format!("#{id} [data-look=\"neo\"].node .outer-path{{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
+    c.push_str(&format!(
+        "#{id} [data-look=\"neo\"].node .neo-line path{{stroke:{ps};filter:none;}}"
+    ));
+    c.push_str(&format!("#{id} [data-look=\"neo\"].node circle{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
+    c.push_str(&format!(
+        "#{id} [data-look=\"neo\"].node circle .state-start{{fill:#000000;}}"
+    ));
+    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon{{fill:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
+    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon-neo path{{stroke:{ps};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
+    c.push_str(&format!("#{id} :root{{--mermaid-font-family:{ff};}}"));
+    c
 }

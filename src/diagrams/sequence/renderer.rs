@@ -1,5 +1,5 @@
 use super::constants::*;
-use super::templates;
+use super::templates::{self, defs_svg, esc, sequence_css};
 /// Sequence diagram renderer — faithful port of Mermaid sequenceRenderer.ts
 ///
 /// Algorithm (same as Mermaid):
@@ -12,7 +12,7 @@ use crate::diagrams::sequence::parser::{
     LineType, NotePlacement, ParticipantKind, SeqItem, SequenceDiagram,
 };
 use crate::text::measure;
-use crate::theme::{Theme, ThemeVars};
+use crate::theme::Theme;
 
 // ─── Mermaid default sequence config ───────────────────────────────────────
 // All constants are imported from super::constants via `use super::constants::*`.
@@ -176,13 +176,6 @@ impl Bounds {
 
 // ─── SVG helpers ────────────────────────────────────────────────────────────
 
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
-
 fn actor_rect_svg(x: f64, y: f64, w: f64, h: f64, name: &str, cls: &str) -> String {
     templates::actor_rect(x, y, w, h, &esc(name), cls)
 }
@@ -238,49 +231,6 @@ fn actor_man_svg(cx: f64, box_y: f64, name: &str, cls: &str, idx: usize) -> Stri
 
 fn actor_text_svg(cx: f64, cy: f64, name: &str) -> String {
     templates::actor_text(cx, cy, FONT_SIZE, &esc(name))
-}
-
-/// Mermaid sequence CSS — faithfully copied from reference SVGs
-fn sequence_css(diagram_id: &str, vars: &ThemeVars) -> String {
-    let ff = vars.font_family;
-    format!(
-        r#"#{id}{{font-family:{ff};font-size:{fs}px;fill:#333;}}
-#{id} p{{margin:0;}}
-#{id} .actor{{stroke:#9370DB;fill:#ECECFF;stroke-width:1;}}
-#{id} text.actor>tspan{{fill:black;stroke:none;}}
-#{id} .actor-line{{stroke:#9370DB;}}
-#{id} .messageLine0{{stroke-width:1.5;stroke-dasharray:none;stroke:#333;}}
-#{id} .messageLine1{{stroke-width:1.5;stroke-dasharray:2,2;stroke:#333;}}
-#{id} [id$="-arrowhead"] path{{fill:#333;stroke:#333;}}
-#{id} .sequenceNumber{{fill:white;}}
-#{id} [id$="-sequencenumber"]{{fill:#333;}}
-#{id} [id$="-crosshead"] path{{fill:#333;stroke:#333;}}
-#{id} .messageText{{fill:#333;stroke:none;}}
-#{id} .labelBox{{stroke:#9370DB;fill:#ECECFF;filter:none;}}
-#{id} .labelText,#{id} .labelText>tspan{{fill:black;stroke:none;}}
-#{id} .loopText,#{id} .loopText>tspan{{fill:black;stroke:none;}}
-#{id} .sectionTitle,#{id} .sectionTitle>tspan{{fill:black;stroke:none;}}
-#{id} .loopLine{{stroke-width:2px;stroke-dasharray:2,2;stroke:#9370DB;fill:#9370DB;}}
-#{id} .note{{stroke:#aaaa33;fill:#fff5ad;}}
-#{id} .noteText,#{id} .noteText>tspan{{fill:black;stroke:none;font-weight:normal;}}
-#{id} .activation0{{fill:#f4f4f4;stroke:#666;}}
-#{id} .activation1{{fill:#f4f4f4;stroke:#666;}}
-#{id} .activation2{{fill:#f4f4f4;stroke:#666;}}
-#{id} .actor-man circle,#{id} line{{fill:#ECECFF;stroke-width:2px;}}"#,
-        id = diagram_id,
-        ff = ff,
-        fs = FONT_SIZE as u32,
-    )
-}
-
-fn defs_svg(id: &str) -> String {
-    format!(
-        r##"<defs><marker id="{id}-arrowhead" refX="7.9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M -1 0 L 10 5 L 0 10 z"></path></marker></defs>
-<defs><marker id="{id}-crosshead" markerWidth="15" markerHeight="8" orient="auto" refX="4" refY="4.5"><path fill="none" stroke="#000000" stroke-width="1pt" d="M 1,2 L 6,7 M 6,2 L 1,7" style="stroke-dasharray: 0, 0;"></path></marker></defs>
-<defs><marker id="{id}-filled-head" refX="15.5" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L14,7 L9,1 Z"></path></marker></defs>
-<defs><marker id="{id}-sequencenumber" refX="15" refY="15" markerWidth="60" markerHeight="40" orient="auto"><circle cx="15" cy="15" r="6" fill="#333"></circle></marker></defs>"##,
-        id = id
-    )
 }
 
 // ─── Main render entry point ─────────────────────────────────────────────────
@@ -1064,7 +1014,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     // Style
     svg_parts.push(format!(
         "<style>{}</style>",
-        sequence_css(diagram_id, &vars)
+        sequence_css(diagram_id, vars.font_family, FONT_SIZE as u32)
     ));
     svg_parts.push(String::from("<g></g>"));
 

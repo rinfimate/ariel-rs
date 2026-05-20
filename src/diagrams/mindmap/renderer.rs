@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{MindmapDiagram, MindmapNode, NodeType};
-use super::templates;
+use super::templates::{self, esc};
 use crate::text::measure;
 /// Mindmap renderer — delegates to Mermaid's own JS renderer for pixel-accurate output.
 ///
@@ -256,12 +256,6 @@ fn section_line_color(section: Option<usize>) -> &'static str {
     }
 }
 
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64) -> String {
     let fill = section_fill(node.section, node.is_root);
     match node.node_type {
@@ -297,7 +291,7 @@ fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64) -> String {
 }
 
 fn render_node_text(node: &LayoutNode, cx: f64, cy: f64, ff: &str) -> String {
-    let text = escape_text(&node.descr);
+    let text = esc(&node.descr);
     let color = section_text_color(node.section, node.is_root);
     templates::node_label(cx, cy, ff, FONT_SIZE, color, &text)
 }

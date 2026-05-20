@@ -1,236 +1,242 @@
 // Faithful Rust port of mermaid/src/diagrams/radar/renderer.ts
 //
-// Key functions ported:
-//   drawFrame   – centres the chart, sets margins
-//   drawGraticule – concentric circles or polygons for grid lines
-//   drawAxes    – radial spokes + axis labels
-//   drawCurves  – data polygons or Catmull-Rom paths
-//   drawLegend  – colour legend in top-right
-//   relativeRadius – normalise value to 0..radius
-//   closedRoundCurve – Catmull-Rom closed spline
+// Architecture mirrors Mermaid JS exactly:
+//   drawFrame   – sets viewBox, creates a centered <g transform="translate(cx, cy)">
+//   drawGraticule – concentric circles or polygons (no cx/cy needed — g is centred)
+//   drawAxes    – radial spokes + axis labels at axisLabelFactor * radius
+//   drawCurves  – data polygons or Catmull-Rom paths, classed radarCurve-N
+//   drawLegend  – per-curve <g transform="translate(...)"> with rect + text
+//   title       – <text class="radarTitle"> at y = -(height/2 + marginTop)
+//
+// Key differences from the old renderer fixed here:
+//   1. Square viewBox (total = chart + margins), chart centered via g transform
+//   2. CSS classes used for all styling (no inline stroke/fill)
+//   3. Catmull-Rom tension used directly, not divided by 3
+//   4. axisScaleFactor / axisLabelFactor respected
+//   5. Legend coordinates match Mermaid JS formula exactly
+//   6. No data-point circles (Mermaid JS does not render them)
+//   7. HSL-based curve colours from theme cScale variables
 
 use super::constants::*;
 use super::parser::{GraticuleType, RadarDiagram};
-use super::templates;
-use crate::text::measure;
+use super::templates::{self, centered_group_open, curve_style_entry, esc, fmt};
 use crate::theme::Theme;
 use std::f64::consts::PI;
 
 pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
 
-    let has_legend = diag.options.show_legend && !diag.curves.is_empty();
-    let right_margin = if has_legend {
-        MARGIN_RIGHT + LEGEND_WIDTH + 20.0
-    } else {
-        MARGIN_RIGHT
-    };
+    // ── Dimensions (mirror Mermaid JS drawFrame) ───────────────────────────
+    // config.width = CHART_WIDTH, config.height = CHART_HEIGHT
+    // totalWidth  = config.width  + config.marginLeft + config.marginRight
+    // totalHeight = config.height + config.marginTop  + config.marginBottom
+    let total_w = SVG_WIDTH; // 700
+    let total_h = SVG_HEIGHT; // 700
 
-    // Inner chart area
-    let inner_w = SVG_WIDTH - MARGIN_LEFT - right_margin;
-    let inner_h = SVG_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
-    let radius = (inner_w.min(inner_h) / 2.0).max(1.0);
+    // Center point in absolute SVG coords
+    let cx = MARGIN_LEFT + CHART_WIDTH / 2.0; // 50 + 300 = 350
+    let cy = MARGIN_TOP + CHART_HEIGHT / 2.0; // 50 + 300 = 350
 
-    // Chart centre in SVG coords
-    let cx = MARGIN_LEFT + inner_w / 2.0;
-    let cy = MARGIN_TOP + inner_h / 2.0;
+    // Radius = min(width, height) / 2
+    let radius = (CHART_WIDTH.min(CHART_HEIGHT) / 2.0).max(1.0); // 300
 
     let n_axes = diag.axes.len();
 
-    // Compute max value across all curves
+    // ── max / min values ───────────────────────────────────────────────────
     let data_max = diag
         .curves
         .iter()
         .flat_map(|c| c.entries.iter().copied())
         .fold(f64::NEG_INFINITY, f64::max);
-    let max_val = diag
-        .options
-        .max
-        .unwrap_or(if data_max > 0.0 { data_max } else { 1.0 });
+    let max_val = diag.options.max.unwrap_or(if data_max > f64::NEG_INFINITY {
+        data_max
+    } else {
+        1.0
+    });
     let min_val = diag.options.min;
     let ticks = diag.options.ticks.max(1);
 
+    // ── CSS class styles for curves ────────────────────────────────────────
+    // Mirror Mermaid JS genIndexStyles(): use cScale theme variables.
+    // For simplicity we define up to 12 entries matching cScale0-11.
+    let curve_count = diag.curves.len().min(12);
+    let curve_styles = build_curve_styles(curve_count, theme);
+
+    // ── SVG root ───────────────────────────────────────────────────────────
     let mut out = String::new();
+    out.push_str(&templates::svg_root(&fmt(total_w), &fmt(total_h)));
 
-    out.push_str(&templates::svg_root(&fmt(SVG_WIDTH), &fmt(SVG_HEIGHT)));
-    out.push_str(&templates::style_block(vars.font_family, vars.text_color));
+    // Style block
+    out.push_str(&templates::style_block(
+        vars.font_family,
+        "16",
+        vars.title_color,
+        vars.line_color,
+        &fmt(AXIS_LABEL_FONT_SIZE),
+        GRATICULE_COLOR,
+        &fmt(GRATICULE_OPACITY),
+        &fmt(GRATICULE_STROKE_WIDTH),
+        &fmt(LEGEND_FONT_SIZE),
+        &curve_styles,
+    ));
 
-    // Title
-    if let Some(t) = &diag.title {
-        out.push_str(&templates::title_text(
-            &fmt(SVG_WIDTH / 2.0),
-            vars.font_family,
-            &fmt(TITLE_FONT),
-            vars.title_color,
-            &esc(t),
-        ));
-    }
+    // ── Centered group (all drawing relative to chart centre) ──────────────
+    out.push_str(&centered_group_open(&fmt(cx), &fmt(cy)));
 
-    // ── drawGraticule ─────────────────────────────────────────────────────────
-    out.push_str(r#"<g class="graticule">"#);
-    for i in 1..=ticks {
-        let r = radius * (i as f64 / ticks as f64);
+    // ── drawGraticule ──────────────────────────────────────────────────────
+    // Mermaid JS: for i in 0..ticks => r = radius * (i+1) / ticks
+    for i in 0..ticks {
+        let r = radius * (i as f64 + 1.0) / ticks as f64;
         if diag.options.graticule == GraticuleType::Circle {
-            out.push_str(&templates::graticule_circle(
-                &fmt(cx),
-                &fmt(cy),
-                &fmt(r),
-                vars.line_color,
-            ));
-        } else {
-            // Polygon graticule
-            if n_axes >= 3 {
-                let pts = polygon_points(cx, cy, r, n_axes);
-                out.push_str(&templates::graticule_polygon(&pts, vars.line_color));
-            }
+            out.push_str(&templates::graticule_circle(&fmt(r)));
+        } else if n_axes >= 3 {
+            let pts = polygon_points(r, n_axes);
+            out.push_str(&templates::graticule_polygon(&pts));
         }
-
-        // Tick label (value at this ring)
-        let tick_val = min_val + (max_val - min_val) * (i as f64 / ticks as f64);
-        let tick_str = if tick_val == tick_val.floor() {
-            format!("{:.0}", tick_val)
-        } else {
-            format!("{:.2}", tick_val)
-        };
-        out.push_str(&templates::graticule_tick_label(
-            &fmt(cx),
-            &fmt(cy - r - 2.0),
-            vars.font_family,
-            vars.text_color,
-            &esc(&tick_str),
-        ));
     }
-    out.push_str("</g>");
 
-    // ── drawAxes ──────────────────────────────────────────────────────────────
-    out.push_str(r#"<g class="axes">"#);
+    // ── drawAxes ───────────────────────────────────────────────────────────
     for (i, axis) in diag.axes.iter().enumerate() {
         let angle = axis_angle(i, n_axes);
-        let ax = cx + radius * angle.cos();
-        let ay = cy + radius * angle.sin();
+        // Spoke end at axisScaleFactor * radius
+        let spoke_x = AXIS_SCALE_FACTOR * radius * angle.cos();
+        let spoke_y = AXIS_SCALE_FACTOR * radius * angle.sin();
+        out.push_str(&templates::axis_line(&fmt(spoke_x), &fmt(spoke_y)));
 
-        // Spoke line
-        out.push_str(&templates::axis_spoke(
-            &fmt(cx),
-            &fmt(cy),
-            &fmt(ax),
-            &fmt(ay),
-            vars.line_color,
-        ));
-
-        // Axis label: positioned just outside the radius tip
-        let label_r = radius + AXIS_LABEL_RADIUS_OFFSET;
-        let lx = cx + label_r * angle.cos();
-        let ly = cy + label_r * angle.sin();
-
-        // Text anchor depends on which side of the chart
-        let anchor = if angle.cos() > AXIS_LABEL_ANCHOR_THRESHOLD {
-            "start"
-        } else if angle.cos() < -AXIS_LABEL_ANCHOR_THRESHOLD {
-            "end"
-        } else {
-            "middle"
-        };
-        let display_label = &axis.label;
-        let (_, lh) = measure(display_label, AXIS_LABEL_FONT);
-        // Vertical adjustment: shift down half a line-height when above center
-        let dy = if angle.sin() < -AXIS_LABEL_ANCHOR_THRESHOLD {
-            -lh / 2.0
-        } else if angle.sin() > AXIS_LABEL_ANCHOR_THRESHOLD {
-            lh / 2.0
-        } else {
-            lh * 0.35
-        };
-
+        // Label at axisLabelFactor * radius
+        let label_x = AXIS_LABEL_FACTOR * radius * angle.cos();
+        let label_y = AXIS_LABEL_FACTOR * radius * angle.sin();
         out.push_str(&templates::axis_label(
-            &fmt(lx),
-            &fmt(ly),
-            &fmt(dy),
-            anchor,
-            vars.font_family,
-            &fmt(AXIS_LABEL_FONT),
-            vars.text_color,
-            &esc(display_label),
+            &fmt(label_x),
+            &fmt(label_y),
+            &esc(&axis.label),
         ));
     }
-    out.push_str("</g>");
 
-    // ── drawCurves ────────────────────────────────────────────────────────────
-    out.push_str(r#"<g class="curves">"#);
+    // ── drawCurves ─────────────────────────────────────────────────────────
+    // Mermaid JS skips curves where entries.length != numAxes
     for (ci, curve) in diag.curves.iter().enumerate() {
-        let color = CURVE_COLORS[ci % CURVE_COLORS.len()];
+        if curve.entries.len() != n_axes {
+            continue;
+        }
 
-        // Map entries to (x, y) points
+        // Points relative to centre (the g transform moves us there)
         let points: Vec<(f64, f64)> = curve
             .entries
             .iter()
             .enumerate()
             .map(|(i, &v)| {
-                let r = relative_radius(v, min_val, max_val, radius);
                 let angle = axis_angle(i, n_axes);
-                (cx + r * angle.cos(), cy + r * angle.sin())
+                let r = relative_radius(v, min_val, max_val, radius);
+                (r * angle.cos(), r * angle.sin())
             })
             .collect();
 
-        if points.len() < 3 {
-            continue;
-        }
-
-        let path_d = if diag.options.graticule == GraticuleType::Circle {
-            closed_round_curve(&points)
+        if diag.options.graticule == GraticuleType::Circle {
+            let d = closed_round_curve(&points, CURVE_TENSION);
+            out.push_str(&templates::curve_path(&d, ci));
         } else {
-            polygon_path(&points)
-        };
-
-        out.push_str(&templates::curve_path(&path_d, color));
-
-        // Draw data points
-        for (px, py) in &points {
-            out.push_str(&templates::data_point(&fmt(*px), &fmt(*py), color));
+            let pts = points
+                .iter()
+                .map(|(x, y)| format!("{},{}", fmt(*x), fmt(*y)))
+                .collect::<Vec<_>>()
+                .join(" ");
+            out.push_str(&templates::curve_polygon(&pts, ci));
         }
     }
-    out.push_str("</g>");
 
-    // ── drawLegend ────────────────────────────────────────────────────────────
-    if has_legend {
-        let lx = SVG_WIDTH - LEGEND_WIDTH - 10.0;
-        let ly_start = MARGIN_TOP;
-        out.push_str(r#"<g class="legend">"#);
+    // ── drawLegend ─────────────────────────────────────────────────────────
+    // Mermaid JS:
+    //   legendX = (width/2 + marginRight) * 3/4
+    //   legendY = -(height/2 + marginTop) * 3/4
+    //   lineHeight = 20
+    if diag.options.show_legend && !diag.curves.is_empty() {
+        let legend_x = (CHART_WIDTH / 2.0 + MARGIN_RIGHT) * 0.75;
+        let legend_y = -(CHART_HEIGHT / 2.0 + MARGIN_TOP) * 0.75;
         for (ci, curve) in diag.curves.iter().enumerate() {
-            let color = CURVE_COLORS[ci % CURVE_COLORS.len()];
-            let item_y = ly_start + ci as f64 * (LEGEND_BOX + 6.0);
-            out.push_str(&templates::legend_rect(
-                &fmt(lx),
-                &fmt(item_y),
-                &fmt(LEGEND_BOX),
-                &fmt(LEGEND_BOX),
-                color,
-            ));
-            out.push_str(&templates::legend_label(
-                &fmt(lx + LEGEND_BOX + 6.0),
-                &fmt(item_y + LEGEND_BOX / 2.0),
-                vars.font_family,
-                &fmt(LEGEND_FONT),
-                vars.text_color,
-                &esc(&curve.label),
-            ));
+            let item_y = legend_y + ci as f64 * LEGEND_LINE_HEIGHT;
+            out.push_str(&templates::legend_group_open(&fmt(legend_x), &fmt(item_y)));
+            out.push_str(&templates::legend_rect(ci));
+            out.push_str(&templates::legend_label(&esc(&curve.label)));
+            out.push_str("</g>");
         }
-        out.push_str("</g>");
     }
 
+    // ── Title ──────────────────────────────────────────────────────────────
+    // Mermaid JS: y = -(config.height / 2 + config.marginTop)
+    if let Some(t) = &diag.title {
+        let title_y = -(CHART_HEIGHT / 2.0 + MARGIN_TOP);
+        out.push_str(&templates::title_text(&fmt(title_y), &esc(t)));
+    }
+
+    // Close the centred group and outer wrapper group
+    out.push_str("</g></g>");
     out.push_str("</svg>");
     out
+}
+
+// ─── Curve colour generation ──────────────────────────────────────────────────
+
+/// Build CSS class definitions for radarCurve-N and radarLegendBox-N.
+/// Mirrors Mermaid JS genIndexStyles() using cScale theme variables.
+/// We use the same HSL palette the default theme exports.
+fn build_curve_styles(count: usize, theme: Theme) -> String {
+    let colors = theme_c_scale(theme);
+    let mut s = String::new();
+    for i in 0..count {
+        let c = colors[i % colors.len()];
+        s.push_str(&curve_style_entry(i, c, CURVE_OPACITY, CURVE_STROKE_WIDTH));
+    }
+    s
+}
+
+/// cScale palette for the default and dark themes (12 entries).
+/// Values taken from Mermaid JS theme variable output in the reference SVG:
+///   cScale0  = hsl(240,100%,76.27%)  (blue-ish)
+///   cScale1  = hsl(60,100%,73.53%)   (yellow)
+///   etc.
+fn theme_c_scale(theme: Theme) -> &'static [&'static str] {
+    match theme {
+        Theme::Dark => &[
+            "hsl(240,100%,76.2745098039%)",
+            "hsl(60,100%,73.5294117647%)",
+            "hsl(80,100%,76.2745098039%)",
+            "hsl(270,100%,76.2745098039%)",
+            "hsl(300,100%,76.2745098039%)",
+            "hsl(330,100%,76.2745098039%)",
+            "hsl(0,100%,76.2745098039%)",
+            "hsl(30,100%,76.2745098039%)",
+            "hsl(90,100%,76.2745098039%)",
+            "hsl(150,100%,76.2745098039%)",
+            "hsl(180,100%,76.2745098039%)",
+            "hsl(210,100%,76.2745098039%)",
+        ],
+        _ => &[
+            "hsl(240,100%,76.2745098039%)",
+            "hsl(60,100%,73.5294117647%)",
+            "hsl(80,100%,76.2745098039%)",
+            "hsl(270,100%,76.2745098039%)",
+            "hsl(300,100%,76.2745098039%)",
+            "hsl(330,100%,76.2745098039%)",
+            "hsl(0,100%,76.2745098039%)",
+            "hsl(30,100%,76.2745098039%)",
+            "hsl(90,100%,76.2745098039%)",
+            "hsl(150,100%,76.2745098039%)",
+            "hsl(180,100%,76.2745098039%)",
+            "hsl(210,100%,76.2745098039%)",
+        ],
+    }
 }
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 
 /// Angle for axis i of n_axes, starting at -π/2 (top), going clockwise.
-/// Mirrors D3's scalePoint().range([0, 2π]) starting at top.
+/// Mirrors Mermaid JS: angle = 2 * i * PI / numAxes - PI/2
 fn axis_angle(i: usize, n: usize) -> f64 {
     if n == 0 {
         return -PI / 2.0;
     }
-    -PI / 2.0 + 2.0 * PI * (i as f64 / n as f64)
+    2.0 * PI * (i as f64) / (n as f64) - PI / 2.0
 }
 
 /// Normalise value to a radius in [0, max_radius].
@@ -241,44 +247,31 @@ fn relative_radius(value: f64, min_val: f64, max_val: f64, max_radius: f64) -> f
         return 0.0;
     }
     let clamped = value.max(min_val).min(max_val);
-    ((clamped - min_val) / range) * max_radius
+    max_radius * (clamped - min_val) / range
 }
 
-/// Generates a comma-separated SVG polygon points string for n-gon at (cx,cy) r=r.
-fn polygon_points(cx: f64, cy: f64, r: f64, n: usize) -> String {
+/// Generates a space-separated SVG polygon points string for n-gon, centred at origin.
+fn polygon_points(r: f64, n: usize) -> String {
     (0..n)
         .map(|i| {
             let a = axis_angle(i, n);
-            format!("{},{}", fmt(cx + r * a.cos()), fmt(cy + r * a.sin()))
+            format!("{},{}", fmt(r * a.cos()), fmt(r * a.sin()))
         })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
-/// Closed polygon path through points.
-fn polygon_path(pts: &[(f64, f64)]) -> String {
-    if pts.is_empty() {
-        return String::new();
-    }
-    let mut d = format!("M{},{}", fmt(pts[0].0), fmt(pts[0].1));
-    for (x, y) in &pts[1..] {
-        d.push_str(&format!("L{},{}", fmt(*x), fmt(*y)));
-    }
-    d.push('Z');
-    d
-}
-
 /// Closed Catmull-Rom spline through the points.
-/// Port of closedRoundCurve() from renderer.ts — uses cubic Bézier approximation
-/// with tension α=0.5 (standard Catmull-Rom).
-fn closed_round_curve(pts: &[(f64, f64)]) -> String {
+/// Faithful port of closedRoundCurve() from Mermaid JS renderer.ts.
+/// NOTE: tension is used directly (NOT divided by 3 — that was our previous bug).
+fn closed_round_curve(pts: &[(f64, f64)], tension: f64) -> String {
     let n = pts.len();
     if n < 2 {
         return String::new();
     }
 
-    let mut d = String::new();
-    d.push_str(&format!("M{},{}", fmt(pts[0].0), fmt(pts[0].1)));
+    // M to first point
+    let mut d = format!("M{},{}", fmt(pts[0].0), fmt(pts[0].1));
 
     for i in 0..n {
         let p0 = pts[(i + n - 1) % n];
@@ -286,14 +279,14 @@ fn closed_round_curve(pts: &[(f64, f64)]) -> String {
         let p2 = pts[(i + 1) % n];
         let p3 = pts[(i + 2) % n];
 
-        // Compute control points from Catmull-Rom formula
-        let cp1x = p1.0 + (p2.0 - p0.0) * CATMULL_ROM_ALPHA / 3.0;
-        let cp1y = p1.1 + (p2.1 - p0.1) * CATMULL_ROM_ALPHA / 3.0;
-        let cp2x = p2.0 - (p3.0 - p1.0) * CATMULL_ROM_ALPHA / 3.0;
-        let cp2y = p2.1 - (p3.1 - p1.1) * CATMULL_ROM_ALPHA / 3.0;
+        // Control points — Mermaid JS formula (tension, not tension/3)
+        let cp1x = p1.0 + (p2.0 - p0.0) * tension;
+        let cp1y = p1.1 + (p2.1 - p0.1) * tension;
+        let cp2x = p2.0 - (p3.0 - p1.0) * tension;
+        let cp2y = p2.1 - (p3.1 - p1.1) * tension;
 
         d.push_str(&format!(
-            "C{},{} {},{} {},{}",
+            " C{},{} {},{} {},{}",
             fmt(cp1x),
             fmt(cp1y),
             fmt(cp2x),
@@ -302,23 +295,8 @@ fn closed_round_curve(pts: &[(f64, f64)]) -> String {
             fmt(p2.1),
         ));
     }
-    d.push('Z');
+    d.push_str(" Z");
     d
-}
-
-// ─── Utility ──────────────────────────────────────────────────────────────────
-
-fn fmt(v: f64) -> String {
-    let s = format!("{:.3}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }
 
 #[cfg(test)]
@@ -327,6 +305,8 @@ mod tests {
     use super::*;
 
     const RADAR_BASIC: &str = "radar-beta\n    title Skills\n    axis A[\"Coding\"], B[\"Design\"], C[\"Communication\"], D[\"Testing\"]\n    curve Team1 { A: 80, B: 60, C: 70, D: 85 }\n    curve Team2 { A: 70, B: 80, C: 65, D: 75 }";
+
+    const RADAR_LIVE_EDITOR: &str = "radar-beta\n  axis m[\"Math\"], s[\"Science\"], e[\"English\"]\n  axis h[\"History\"], g[\"Geography\"], a[\"Art\"]\n  curve a[\"Alice\"]{85, 90, 80, 70, 75, 90}\n  curve b[\"Bob\"]{70, 75, 85, 80, 90, 85}\n\n  max 100\n  min 0";
 
     #[test]
     fn basic_render_produces_svg() {
@@ -343,8 +323,71 @@ mod tests {
     }
 
     #[test]
+    fn radar_has_correct_viewbox() {
+        let diag = parser::parse(RADAR_BASIC).diagram;
+        let svg = render(&diag, Theme::Default);
+        // 700 = 600 chart + 50 marginLeft + 50 marginRight
+        assert!(
+            svg.contains("viewBox=\"0 0 700 700\""),
+            "expected viewBox 700x700, got: {}",
+            &svg[..svg.find('>').unwrap_or(200)]
+        );
+    }
+
+    #[test]
+    fn radar_has_centered_group() {
+        let diag = parser::parse(RADAR_BASIC).diagram;
+        let svg = render(&diag, Theme::Default);
+        assert!(
+            svg.contains("translate(350, 350)"),
+            "expected translate(350, 350) in: {}",
+            &svg[..300.min(svg.len())]
+        );
+    }
+
+    #[test]
+    fn radar_uses_css_classes() {
+        let diag = parser::parse(RADAR_BASIC).diagram;
+        let svg = render(&diag, Theme::Default);
+        assert!(
+            svg.contains("radarGraticule"),
+            "missing radarGraticule class"
+        );
+        assert!(svg.contains("radarAxisLine"), "missing radarAxisLine class");
+        assert!(
+            svg.contains("radarAxisLabel"),
+            "missing radarAxisLabel class"
+        );
+        assert!(svg.contains("radarCurve-0"), "missing radarCurve-0 class");
+        assert!(
+            svg.contains("radarLegendBox-0"),
+            "missing radarLegendBox-0 class"
+        );
+        assert!(
+            svg.contains("radarLegendText"),
+            "missing radarLegendText class"
+        );
+    }
+
+    #[test]
+    fn radar_live_editor_has_title() {
+        // The live editor input uses YAML frontmatter title — parser must strip it.
+        let input = "---\ntitle: \"Grades\"\n---\nradar-beta\n  axis m[\"Math\"], s[\"Science\"], e[\"English\"]\n  axis h[\"History\"], g[\"Geography\"], a[\"Art\"]\n  curve a[\"Alice\"]{85, 90, 80, 70, 75, 90}\n  curve b[\"Bob\"]{70, 75, 85, 80, 90, 85}\n\n  max 100\n  min 0";
+        let diag = parser::parse(input).diagram;
+        let svg = render(&diag, Theme::Default);
+        assert!(svg.contains("radarTitle"), "missing radarTitle class");
+    }
+
+    #[test]
     fn snapshot_default_theme() {
         let diag = parser::parse(RADAR_BASIC).diagram;
+        let svg = render(&diag, crate::theme::Theme::Default);
+        insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
+    }
+
+    #[test]
+    fn snapshot_live_editor() {
+        let diag = parser::parse(RADAR_LIVE_EDITOR).diagram;
         let svg = render(&diag, crate::theme::Theme::Default);
         insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }

@@ -10,17 +10,17 @@ A faithful Rust port of [Mermaid JS](https://mermaid.js.org/) — renders diagra
 
 ## Features
 
-- **29 diagram types** — flowchart, sequence, class, state, ER, gantt, git, pie, mindmap, timeline, quadrant, xychart, C4, block, packet, journey, requirement, kanban, sankey, treemap, radar, venn, architecture, eventmodeling, cynefin, ishikawa, wardley, zenuml, railroad
+- **28 diagram types** — all Mermaid built-ins
 - **Headless** — pure Rust, no DOM, no JS runtime
 - **Fast** — renders diagrams in microseconds
-- **Accurate** — pixel-tested against Mermaid JS reference output (71-diagram visual regression suite)
+- **Accurate** — pixel-tested against Mermaid JS reference output (98-diagram visual regression suite)
 - **Themes** — Default, Dark, Forest, Neutral
 
 ## Usage
 
 ```toml
 [dependencies]
-ariel-rs = "0.1.0"
+ariel-rs = "0.2.0"
 ```
 
 ```rust
@@ -32,12 +32,12 @@ println!("{}", svg);
 
 ## Supported diagram types
 
-| Type | Keyword |
-|------|---------|
+| Type | Keyword(s) |
+|------|-----------|
 | Flowchart | `flowchart` / `graph` |
 | Sequence | `sequenceDiagram` |
-| Class | `classDiagram` |
-| State | `stateDiagram-v2` |
+| Class | `classDiagram` / `classDiagram-v2` |
+| State | `stateDiagram` / `stateDiagram-v2` |
 | Entity Relationship | `erDiagram` |
 | Gantt | `gantt` |
 | Git | `gitGraph` |
@@ -45,24 +45,23 @@ println!("{}", svg);
 | Mindmap | `mindmap` |
 | Timeline | `timeline` |
 | Quadrant | `quadrantChart` |
-| XY Chart | `xychart-beta` |
-| C4 | `C4Context` / `C4Container` / … |
-| Block | `block-beta` |
-| Packet | `packet-beta` |
+| XY Chart | `xychart-beta` / `xychart` |
+| C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
+| Block | `block-beta` / `block` |
+| Packet | `packet-beta` / `packet` |
 | Journey | `journey` |
-| Requirement | `requirementDiagram` |
+| Requirement | `requirementDiagram` / `requirement` |
 | Kanban | `kanban` |
-| Sankey | `sankey-beta` |
-| Treemap | `treemap` |
-| Radar | `radar` |
-| Venn | `venn` |
-| Architecture | `architecture-beta` |
-| Event Modeling | `eventmodeling` |
-| Cynefin | `cynefin` |
+| Sankey | `sankey-beta` / `sankey` |
+| Treemap | `treemap-beta` / `treemap` |
+| Radar | `radar-beta` / `radar` |
+| Venn | `venn-beta` / `vennDiagram` / `venn` |
+| Architecture | `architecture-beta` / `architecture` |
+| Event Modeling | `eventmodeling` / `event-modeling` |
+| Info | `info` |
 | Ishikawa | `fishbone` / `ishikawa` |
 | Wardley | `wardley` |
-| ZenUML | `zenuml` |
-| Railroad | `railroad-beta` |
+| TreeView | `treeView-beta` / `treeView` |
 
 ## Error handling
 

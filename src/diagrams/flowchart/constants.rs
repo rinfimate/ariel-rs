@@ -41,6 +41,7 @@ pub const SUBROUTINE_LINE_INSET: f64 = 6.0;
 pub const ASYMMETRIC_BASE_PAD: f64 = 20.0;
 
 /// Depth of the V-notch on the left side of an Asymmetric node (px).
+#[allow(dead_code)]
 pub const ASYMMETRIC_NOTCH_DEPTH: f64 = 10.0;
 
 /// Minimum radius for a Circle node (px).

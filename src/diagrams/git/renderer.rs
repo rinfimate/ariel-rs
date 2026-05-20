@@ -15,7 +15,7 @@ use super::parser::{
 /// - Branch labels rendered as rectangles with text at left margin.
 /// - Colors cycle through THEME_COLOR_LIMIT (8) css classes.
 #[allow(unused_imports)]
-use super::templates;
+use super::templates::{self, build_style, esc};
 use crate::text::measure;
 use crate::theme::Theme;
 use std::collections::HashMap;
@@ -130,7 +130,23 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             // Empirically: h ≈ translate_y + (n-1)*90 + bottom_margin
             //   where bottom_margin = 62.5 - (n-2)*13  (n=2 → 62.5, n=3 → 49.5, etc.)
             let n = diag.branches.len() as f64;
-            let bottom_margin = 62.5 - (n - 2.0) * 13.0;
+            // For n≥3, the bottom margin also depends on the longest commit label
+            // at the lowest branch — longer labels extend further when rotated 45°.
+            // Baseline rect_w ≈31 (short label, e.g. "Hotfix") is baked into 49.5.
+            // Extra extension = (max_rect_w - baseline) * inv_sqrt2.
+            let label_bottom_extra = if n >= 3.0 {
+                let lowest_branch = diag.branches.last().map(|b| b.name.as_str()).unwrap_or("");
+                let max_rect_w = diag
+                    .commits
+                    .iter()
+                    .filter(|c| c.branch == lowest_branch)
+                    .map(|c| measure(&c.id, 10.0).0 * COMMIT_LABEL_FONT_SCALE + 4.0)
+                    .fold(0.0_f64, f64::max);
+                ((max_rect_w - 31.0).max(0.0)) * std::f64::consts::FRAC_1_SQRT_2
+            } else {
+                0.0
+            };
+            let bottom_margin = 62.5 - (n - 2.0) * 13.0 + label_bottom_extra;
             // When tags are present, height is slightly larger (extra 1.47 from Mermaid)
             let tag_h_extra = if has_tags { 1.47 } else { 0.0 };
             let h = (20.0 + tag_top_margin) + (n - 1.0) * 90.0 + bottom_margin + tag_h_extra;
@@ -211,7 +227,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                     tx = bx + BRANCH_LABEL_PADDING,
                     ty = y + 5.0,
                     tc = text_color,
-                    name = escape_text(&branch.name)
+                    name = esc(&branch.name)
                 );
             }
             DiagramDirection::TB => {
@@ -240,7 +256,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                 out += &format!(
                     "<text x=\"{tx:.1}\" y=\"14\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
                     tx = bx + BRANCH_LABEL_PADDING,
-                    name = escape_text(&branch.name)
+                    name = esc(&branch.name)
                 );
             }
             DiagramDirection::BT => {
@@ -272,7 +288,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                     "<text x=\"{tx:.1}\" y=\"{ty:.1}\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
                     tx = bx + BRANCH_LABEL_PADDING,
                     ty = my + 14.0,
-                    name = escape_text(&branch.name)
+                    name = esc(&branch.name)
                 );
             }
         }
@@ -591,12 +607,12 @@ fn draw_commit_bullet(
                 COMMIT_RADIUS,
                 fill,
                 stroke,
-                escape_text(&commit.id)
+                esc(&commit.id)
             );
             if sym == COMMIT_MERGE {
                 *out += &format!(
                     "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"6\" class=\"commit-merge commit{}\" stroke=\"#ECECFF\" fill=\"#ECECFF\"/>",
-                    cp.x, cp.y, escape_text(&commit.id)
+                    cp.x, cp.y, esc(&commit.id)
                 );
             }
             if sym == COMMIT_REVERSE {
@@ -676,7 +692,7 @@ fn draw_commit_label(
                 "<text x=\"{:.3}\" y=\"{:.3}\" class=\"commit-label\">{}</text>",
                 text_x,
                 text_y,
-                escape_text(label)
+                esc(label)
             );
             *out += "</g>";
         }
@@ -690,7 +706,7 @@ fn draw_commit_label(
             *out += &format!(
                 "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#000021\" font-family=\"{ff}\" class=\"commit-label\">{}</text>",
                 lx, ly + label_h - 2.0,
-                escape_text(label),
+                esc(label),
                 ff = ff
             );
         }
@@ -755,7 +771,7 @@ fn draw_commit_tags(
                     "<text y=\"{:.3}\" class=\"tag-label\" x=\"{:.3}\" font-size=\"10\" fill=\"#131300\" font-family=\"{ff}\">{}</text>",
                     badge_mid + 3.2,
                     body_left + 4.0,
-                    escape_text(tag),
+                    esc(tag),
                     ff = ff
                 );
             }
@@ -768,7 +784,7 @@ fn draw_commit_tags(
                 );
                 *out += &format!(
                     "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#333\" font-family=\"{ff}\">{}</text>",
-                    tx, ty + 4.0, escape_text(tag),
+                    tx, ty + 4.0, esc(tag),
                     ff = ff
                 );
             }
@@ -783,35 +799,6 @@ fn build_defs(id: &str) -> String {
     format!(
         "<defs><marker id=\"{id}-arrowhead\" markerWidth=\"10\" markerHeight=\"7\" refX=\"10\" refY=\"3.5\" orient=\"auto\"><polygon points=\"0 0, 10 3.5, 0 7\" fill=\"#333\"/></marker></defs>",
         id = id
-    )
-}
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .commit-id,#{id} .commit-msg,#{id} .branch-label{{fill:lightgrey;color:lightgrey;font-family:{ff};}}",
-            "#{id} .branch{{stroke-width:1;stroke:#333333;stroke-dasharray:2;}}",
-            "#{id} .commit-label{{font-size:10px;fill:#000021;}}",
-            "#{id} .commit-label-bkg{{font-size:10px;fill:#ffffde;opacity:0.5;}}",
-            "#{id} .tag-label{{font-size:10px;fill:#131300;}}",
-            "#{id} .tag-label-bkg{{fill:#ECECFF;stroke:hsl(240, 60%, 86.2745098039%);}}",
-            "#{id} .tag-hole{{fill:#333;}}",
-            "#{id} .commit-merge{{stroke:#ECECFF;fill:#ECECFF;}}",
-            "#{id} .commit-reverse{{stroke:#ECECFF;fill:#ECECFF;stroke-width:3;}}",
-            "#{id} .commit-highlight-inner{{stroke:#ECECFF;fill:#ECECFF;}}",
-            "#{id} .arrow{{stroke-width:8;stroke-linecap:round;fill:none;}}",
-            "#{id} .gitTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}",
-            "#{id} :root{{--mermaid-font-family:{ff};}}"
-        ),
-        id = id, ff = ff
     )
 }
 

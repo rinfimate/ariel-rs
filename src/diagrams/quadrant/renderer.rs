@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::QuadrantDiagram;
-use super::templates;
+use super::templates::{self, build_style, esc, fmt};
 /// Faithful Rust port of Mermaid's quadrantBuilder.ts + quadrantRenderer.ts.
 ///
 /// Layout algorithm is a direct translation of QuadrantBuilder.calculateSpace(),
@@ -442,25 +442,6 @@ fn text_anchor(vert: &str) -> &'static str {
     }
 }
 
-fn fmt(v: f64) -> String {
-    // Strip trailing zeros to keep SVG compact
-    let s = format!("{:.4}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    if s.is_empty() || s == "-" {
-        "0".to_string()
-    } else {
-        s.to_string()
-    }
-}
-
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
-
 fn render_text_el(el: &TextEl) -> String {
     let transform = if el.rotation != 0.0 {
         format!(
@@ -478,33 +459,7 @@ fn render_text_el(el: &TextEl) -> String {
         dominant_baseline(el.horizontal_pos),
         text_anchor(el.vertical_pos),
         &transform,
-        &escape(&el.text),
-    )
-}
-
-// ── build_style ───────────────────────────────────────────────────────────────
-
-fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        r#"#{id}{{font-family:{ff};font-size:16px;fill:#333;}}
-#{id} .quadrant-point-label{{fill:{ptf};font-size:{plfs}px;}}
-#{id} .quadrant-point{{fill:{pf};}}
-#{id} .quadrant-title{{fill:{tf};font-size:{tfs}px;}}
-#{id} .quadrant-xlabel{{fill:{xf};font-size:{xlfs}px;}}
-#{id} .quadrant-ylabel{{fill:{yf};font-size:{ylfs}px;}}
-"#,
-        id = id,
-        ff = ff,
-        ptf = QUADRANT_POINT_TEXT_FILL,
-        plfs = POINT_LABEL_FONT_SIZE,
-        // CSS class still uses the NaN hsl value (overridden by inline attribute anyway)
-        pf = QUADRANT_POINT_FILL,
-        tf = QUADRANT_TITLE_FILL,
-        tfs = TITLE_FONT_SIZE,
-        xf = QUADRANT_X_AXIS_TEXT_FILL,
-        xlfs = X_AXIS_LABEL_FONT_SIZE,
-        yf = QUADRANT_Y_AXIS_TEXT_FILL,
-        ylfs = Y_AXIS_LABEL_FONT_SIZE,
+        &esc(&el.text),
     )
 }
 

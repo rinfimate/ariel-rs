@@ -6,11 +6,11 @@ pub(crate) mod templates;
 use crate::error::ParseError;
 use crate::theme::Theme;
 
-pub(crate) fn validate(_diagram: &parser::ZenUmlDiagram) -> Vec<ParseError> {
+pub(crate) fn validate(_diagram: &parser::TreeViewDiagram) -> Vec<ParseError> {
     vec![]
 }
 
-/// Render a ZenUML sequence diagram from Mermaid syntax to SVG.
+/// Render a Mermaid treeView-beta diagram to SVG.
 pub fn render_html(input: &str, theme: Theme) -> String {
     let mut result = parser::parse(input);
     result.errors.extend(validate(&result.diagram));

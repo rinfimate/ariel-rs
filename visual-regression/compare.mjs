@@ -128,7 +128,10 @@ for (const file of refPngs) {
   const icon = status === 'PASS' ? '✓' : status === 'WARN' ? '~' : '✗';
   console.log(`  ${icon}  ${name}: ${status}  (${detail})`);
 
-  results.push({ name, status, mad: parseFloat(madPct), pdiff: parseFloat(pdiffPct), sizeMismatch });
+  const refW = refPng.width, refH = refPng.height;
+  const rustW = rustPng.width, rustH = rustPng.height;
+  results.push({ name, status, mad: parseFloat(madPct), pdiff: parseFloat(pdiffPct), sizeMismatch,
+                 refW, refH, rustW, rustH });
 
   if (status === 'PASS') pass++;
   else if (status === 'WARN') warn++;

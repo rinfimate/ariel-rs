@@ -91,6 +91,8 @@ pub struct C4Boundary {
     pub id: String,
     pub label: String,
     pub boundary_type: String,
+    /// The id of the enclosing boundary, or None for top-level boundaries.
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -175,10 +177,12 @@ pub fn parse(input: &str) -> crate::error::ParseResult<C4Diagram> {
 
         // Boundary declarations (may open a block with `{` on same line or next)
         if let Some(bd) = try_parse_boundary(&line) {
+            let parent_id = boundary_stack.last().cloned();
             diag.boundaries.push(C4Boundary {
                 id: bd.0.clone(),
                 label: bd.1,
                 boundary_type: bd.2,
+                parent_id,
             });
             // If line ends with `{`, push to stack
             if line.trim_end().ends_with('{') {

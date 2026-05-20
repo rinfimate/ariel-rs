@@ -50,16 +50,27 @@ pub struct KanbanItem {
     pub id: String,
     pub label: String,
     pub shape: NodeShape,
+    pub priority: Option<String>,
+    pub ticket: Option<String>,
+    pub assigned: Option<String>,
+}
+
+pub struct KanbanConfig {
+    pub ticket_base_url: Option<String>,
 }
 
 pub struct KanbanDiagram {
     pub sections: Vec<KanbanSection>,
+    pub config: KanbanConfig,
 }
 
 /// Parse a kanban diagram from Mermaid syntax.
 /// Mirrors the logic of kanbanDb.ts addNode + getData.
 pub fn parse(input: &str) -> crate::error::ParseResult<KanbanDiagram> {
     let mut sections: Vec<KanbanSection> = Vec::new();
+
+    // Extract ticketBaseUrl from YAML front-matter config if present
+    let ticket_base_url = extract_ticket_base_url(input);
 
     // Strip YAML front-matter (--- ... ---) if present
     let body = strip_frontmatter(input);
@@ -128,10 +139,18 @@ pub fn parse(input: &str) -> crate::error::ParseResult<KanbanDiagram> {
             });
         } else {
             // This is an item within the current section
-            let (id, label, shape) = parse_item(trimmed, &mut item_counter);
+            let (id, label, shape, priority, ticket, assigned) =
+                parse_item(trimmed, &mut item_counter);
             item_counter += 1;
 
-            let item = KanbanItem { id, label, shape };
+            let item = KanbanItem {
+                id,
+                label,
+                shape,
+                priority,
+                ticket,
+                assigned,
+            };
 
             if let Some(ref mut sec) = current_section {
                 sec.items.push(item);
@@ -144,7 +163,10 @@ pub fn parse(input: &str) -> crate::error::ParseResult<KanbanDiagram> {
         sections.push(sec);
     }
 
-    crate::error::ParseResult::ok(KanbanDiagram { sections })
+    crate::error::ParseResult::ok(KanbanDiagram {
+        sections,
+        config: KanbanConfig { ticket_base_url },
+    })
 }
 
 /// Strip YAML front matter (--- ... ---) from input, returning the remainder.
@@ -202,16 +224,57 @@ fn parse_node_id_and_label(content: &str, counter: &mut usize) -> (String, Strin
 ///   id["Label"]@{ ticket: MC-2037, priority: Very High }
 ///   id[Label]
 ///   id
-fn parse_item(content: &str, counter: &mut usize) -> (String, String, NodeShape) {
-    // Strip YAML metadata @{ ... } if present
-    let content_no_meta = if let Some(at_pos) = content.find("@{") {
-        content[..at_pos].trim_end()
+fn parse_item(
+    content: &str,
+    counter: &mut usize,
+) -> (
+    String,
+    String,
+    NodeShape,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    // Extract YAML metadata @{ ... } if present
+    let (content_no_meta, priority, ticket, assigned) = if let Some(at_pos) = content.find("@{") {
+        let meta = content[at_pos..].trim();
+        let priority = extract_meta_value(meta, "priority");
+        let ticket = extract_meta_value(meta, "ticket");
+        let assigned = extract_meta_value(meta, "assigned");
+        (content[..at_pos].trim_end(), priority, ticket, assigned)
     } else {
-        content
+        (content, None, None, None)
     };
 
-    // Parse id + shape/label from content_no_meta
-    parse_item_content(content_no_meta.trim(), counter)
+    let (id, label, shape) = parse_item_content(content_no_meta.trim(), counter);
+    (id, label, shape, priority, ticket, assigned)
+}
+
+/// Extract a value from @{ key: 'value' } metadata string.
+fn extract_meta_value(meta: &str, key: &str) -> Option<String> {
+    let search = format!("{key}:");
+    let pos = meta.find(&search)?;
+    let rest = meta[pos + search.len()..].trim_start();
+    let value = rest.trim_start_matches('\'').trim_start_matches('"');
+    let end = value.find(['\'', '"', ',', '}']).unwrap_or(value.len());
+    Some(value[..end].trim().to_string())
+}
+
+/// Extract ticketBaseUrl from YAML front-matter config block.
+fn extract_ticket_base_url(input: &str) -> Option<String> {
+    let trimmed = input.trim_start();
+    if !trimmed.starts_with("---") {
+        return None;
+    }
+    let end = trimmed.find("\n---")?;
+    let frontmatter = &trimmed[3..end];
+    let pos = frontmatter.find("ticketBaseUrl")?;
+    let rest = frontmatter[pos + "ticketBaseUrl".len()..]
+        .trim_start_matches(':')
+        .trim_start();
+    let value = rest.trim_start_matches('\'').trim_start_matches('"');
+    let quote_end = value.find(['\'', '"', '\n']).unwrap_or(value.len());
+    Some(value[..quote_end].trim().to_string())
 }
 
 /// Parse id + bracket-label + shape from content (without @{ } metadata).

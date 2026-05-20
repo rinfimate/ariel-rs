@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{AxisData, Orientation, PlotData, XyChart};
-use super::templates;
+use super::templates::{self, build_style, escape_attr, escape_text, fmt};
 /// Faithful Rust port of Mermaid's xychart renderer.
 ///
 /// Architecture mirrors the TypeScript source exactly:
@@ -1125,7 +1125,9 @@ pub fn render(chart: &XyChart, theme: Theme, _use_foreign_object: bool) -> Strin
 
     // SVG root
     out.push_str(&templates::svg_root(id, WIDTH as i64, HEIGHT as i64));
-    out.push_str(&format!("<style>{}</style>", build_style(id, ff)));
+    out.push_str("<style>");
+    out.push_str(&build_style(id, ff));
+    out.push_str("</style>");
 
     // Background rect (mirrors xychartRenderer.ts background rect)
     out.push_str(&templates::main_group_with_bg(
@@ -1260,34 +1262,6 @@ fn render_paths(data: &[PathElem]) -> String {
         .join("")
 }
 
-// ── Utility functions ─────────────────────────────────────────────────────────
-
-/// Format a f64 value with reasonable precision, stripping trailing zeros.
-fn fmt(v: f64) -> String {
-    let v = if v.abs() < 1e-10 { 0.0 } else { v };
-    let s = format!("{:.3}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    if s.is_empty() || s == "-" {
-        "0".to_string()
-    } else {
-        s.to_string()
-    }
-}
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 /// Generate nice tick values matching D3's `scale.ticks(count)` algorithm.
 ///
 /// D3 uses `tickIncrement(start, stop, count)` with thresholds:
@@ -1342,26 +1316,6 @@ fn format_tick_value(v: f64) -> String {
         let s = s.trim_end_matches('.');
         s.to_string()
     }
-}
-
-fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} .main{{}}",
-            "#{id} text{{font-family:{ff};}}",
-            "#{id} .chart-title text{{font-size:{tfs}px;fill:{tc};text-anchor:middle;dominant-baseline:middle;}}",
-            "#{id} .left-axis path,#{id} .bottom-axis path,#{id} .top-axis path{{fill:none;stroke:#333;}}",
-            "#{id} .left-axis .label text,#{id} .bottom-axis .label text,#{id} .top-axis .label text{{fill:#333;font-size:{lfs}px;}}",
-            "#{id} .plot rect{{opacity:0.85;}}",
-            "#{id} .plot path{{fill:none;}}",
-        ),
-        id = id,
-        ff = ff,
-        tfs = TITLE_FONT_SIZE as i64,
-        tc = TITLE_COLOR,
-        lfs = AXIS_LABEL_FONT_SIZE as i64,
-    )
 }
 
 #[cfg(test)]

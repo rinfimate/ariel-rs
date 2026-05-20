@@ -4,6 +4,50 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::fmt;
+
+pub fn escape_text(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+pub fn escape_attr(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    use super::constants::{AXIS_LABEL_FONT_SIZE, TITLE_COLOR, TITLE_FONT_SIZE};
+    format!(
+        concat!(
+            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
+            "#{id} .main{{}}",
+            "#{id} text{{font-family:{ff};}}",
+            "#{id} .chart-title text{{font-size:{tfs}px;fill:{tc};text-anchor:middle;dominant-baseline:middle;}}",
+            "#{id} .left-axis path,#{id} .bottom-axis path,#{id} .top-axis path{{fill:none;stroke:#333;}}",
+            "#{id} .left-axis .label text,#{id} .bottom-axis .label text,#{id} .top-axis .label text{{fill:#333;font-size:{lfs}px;}}",
+            "#{id} .plot rect{{opacity:0.85;}}",
+            "#{id} .plot path{{fill:none;}}",
+        ),
+        id = id,
+        ff = ff,
+        tfs = TITLE_FONT_SIZE as i64,
+        tc = TITLE_COLOR,
+        lfs = AXIS_LABEL_FONT_SIZE as i64,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 

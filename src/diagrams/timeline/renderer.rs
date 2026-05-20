@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{TimelineDiagram, TimelineTask};
-use super::templates;
+use super::templates::{self, build_style, esc, text_tspan};
 /// Faithful Rust port of Mermaid's timelineRenderer.ts + svgDraw.js.
 ///
 /// Layout algorithm (mirrors the JS draw() function exactly):
@@ -80,75 +80,6 @@ use crate::theme::Theme;
 //   cScale9 text: black    (150° teal = medium)
 //   cScale10 text: black   (180° cyan = light)
 //   cScale11 text: black   (210° blue = medium)
-
-struct SectionStyle {
-    fill: &'static str, // hsl fill for path/circle/rect
-    line: &'static str, // hsl stroke for line separator
-    text: &'static str, // fill for text
-}
-
-const SECTION_STYLES: [SectionStyle; 12] = [
-    SectionStyle {
-        fill: "hsl(240, 100%, 76.2745098039%)",
-        line: "hsl(60, 100%, 86.2745098039%)",
-        text: "#ffffff",
-    },
-    SectionStyle {
-        fill: "hsl(60, 100%, 73.5294117647%)",
-        line: "hsl(240, 100%, 83.5294117647%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(80, 100%, 76.2745098039%)",
-        line: "hsl(260, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(270, 100%, 76.2745098039%)",
-        line: "hsl(90, 100%, 86.2745098039%)",
-        text: "#ffffff",
-    },
-    SectionStyle {
-        fill: "hsl(300, 100%, 76.2745098039%)",
-        line: "hsl(120, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(330, 100%, 76.2745098039%)",
-        line: "hsl(150, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(0, 100%, 76.2745098039%)",
-        line: "hsl(180, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(30, 100%, 76.2745098039%)",
-        line: "hsl(210, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(90, 100%, 76.2745098039%)",
-        line: "hsl(270, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(150, 100%, 76.2745098039%)",
-        line: "hsl(330, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(180, 100%, 76.2745098039%)",
-        line: "hsl(0, 100%, 86.2745098039%)",
-        text: "black",
-    },
-    SectionStyle {
-        fill: "hsl(210, 100%, 76.2745098039%)",
-        line: "hsl(30, 100%, 86.2745098039%)",
-        text: "black",
-    },
-];
 
 fn section_fill(idx: usize) -> &'static str {
     SECTION_STYLES[idx % SECTION_STYLES.len()].fill
@@ -242,13 +173,6 @@ fn count_lines(text: &str, max_width: f64) -> usize {
 }
 
 // ── SVG helpers ───────────────────────────────────────────────────────────────
-
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
 
 /// Build the SVG path for a node background.
 /// Mirrors defaultBkg in svgDraw.js (r=5, rd=5).
@@ -351,11 +275,7 @@ fn build_tspans(text: &str, max_width: f64) -> String {
         } else {
             format!("{:.1}em", line_height_em)
         };
-        out.push_str(&format!(
-            "<tspan x=\"0\" dy=\"{dy}\">{text}</tspan>",
-            dy = dy,
-            text = escape(line),
-        ));
+        out.push_str(&text_tspan(&dy, &esc(line)));
     }
     out.push_str("</text>");
     out
@@ -365,80 +285,6 @@ fn build_tspans(text: &str, max_width: f64) -> String {
 
 fn arrowhead_marker(id: &str) -> String {
     templates::arrowhead_marker(id)
-}
-
-// ── CSS style ─────────────────────────────────────────────────────────────────
-//
-// Mirrors the full Mermaid timeline CSS block, using the same HSL values.
-// Important: CSS class selectors (not inline styles) set fills/strokes so
-// the SVG appearance exactly matches the Mermaid reference.
-
-fn build_style(id: &str, ff: &str) -> String {
-    let mut s = format!(
-        "#{id}{{font-family:{ff};font-size:{fs}px;fill:#333;}}",
-        id = id,
-        ff = ff,
-        fs = FONT_SIZE,
-    );
-
-    // section--1 (index 0) … section-10 (index 11)
-    for (i, st) in SECTION_STYLES.iter().enumerate() {
-        let idx: i64 = (i as i64) - 1;
-        // The CSS selectors match Mermaid's generated stylesheet exactly:
-        //   .section-N rect, .section-N path, .section-N circle, .section-N path { fill: ... }
-        //   .section-N text { fill: black|#ffffff }
-        //   .section-N line { stroke: ...; stroke-width: 3; }
-        s.push_str(&format!(
-            "#{id} .section-{idx} rect,#{id} .section-{idx} path,#{id} .section-{idx} circle,#{id} .section-{idx} path{{fill:{fill};}}",
-            id = id, idx = idx, fill = st.fill,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-{idx} text{{fill:{text};}}",
-            id = id,
-            idx = idx,
-            text = st.text,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-edge-{idx}{{stroke:{fill};}}",
-            id = id,
-            idx = idx,
-            fill = st.fill,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-{idx} line{{stroke:{line};stroke-width:3;}}",
-            id = id,
-            idx = idx,
-            line = st.line,
-        ));
-        // node-line-N class (used on the horizontal separator below node text)
-        s.push_str(&format!(
-            "#{id} .node-line-{idx}{{stroke:{line};stroke-width:3;}}",
-            id = id,
-            idx = idx,
-            line = st.line,
-        ));
-    }
-
-    s.push_str(&format!(
-        concat!(
-            "#{id} .edge{{stroke-width:3;}}",
-            "#{id} .timeline-node{{fill:none;}}",
-            "#{id} .node-bkg{{opacity:1;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} svg{{font-family:{ff};font-size:{fs}px;}}",
-            "#{id} text{{font-family:{ff};fill:#333;}}",
-            "#{id} .section-label{{text-anchor:middle;dominant-baseline:middle;}}",
-            "#{id} .title-text{{font-size:24px;font-weight:bold;fill:#333;text-anchor:middle;}}",
-            "#{id} .activity-line{{stroke:#333;stroke-width:4px;}}",
-            "#{id} .eventWrapper{{filter:brightness(120%);}}",
-            "#{id} .lineWrapper line{{stroke:#ffffff;}}",
-        ),
-        id = id,
-        ff = ff,
-        fs = FONT_SIZE,
-    ));
-
-    s
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
@@ -579,7 +425,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
     // Mirrors JS: title.x = box.width / 2 - LEFT_MARGIN (for non-neo look)
     let title_x = box_width_before_line / 2.0 - LEFT_MARGIN;
     let title_svg = if let Some(title) = &diag.title {
-        templates::title_text(title_x, &escape(title))
+        templates::title_text(title_x, &esc(title))
     } else {
         String::new()
     };
@@ -667,7 +513,7 @@ fn draw_section_box(
         text_x,
         text_y,
         text_color,
-        &escape(label),
+        &esc(label),
     )
 }
 

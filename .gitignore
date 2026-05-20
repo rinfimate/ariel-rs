@@ -17,3 +17,4 @@ visual-regression/compare_all.html
 visual-regression/node_modules/
 REFACTOR_PLAN.md
 ROADMAP.md
+.claude/

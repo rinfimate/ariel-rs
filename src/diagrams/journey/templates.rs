@@ -4,6 +4,23 @@
 //! No rendering logic lives here — only string formatting.
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::esc;
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(id: &str, ff: &str) -> String {
+    format!(
+        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}@keyframes dash{{to{{stroke-dashoffset:0;}}}}#{id} .mouth{{stroke:#666;}}#{id} line{{stroke:#333;}}#{id} .legend{{fill:#333;font-family:{ff};}}#{id} .label text{{fill:#333;}}#{id} .label{{color:#333;}}#{id} .face{{fill:#FFF8DC;stroke:#999;}}#{id} .task-type-0,#{id} .section-type-0{{fill:#ECECFF;}}#{id} .task-type-1,#{id} .section-type-1{{fill:#ffffde;}}#{id} .task-type-2,#{id} .section-type-2{{fill:hsl(304, 100%, 96.2745098039%);}}#{id} .task-type-3,#{id} .section-type-3{{fill:hsl(124, 100%, 93.5294117647%);}}#{id} .task-type-4,#{id} .section-type-4{{fill:hsl(176, 100%, 96.2745098039%);}}#{id} .task-type-5,#{id} .section-type-5{{fill:hsl(-4, 100%, 93.5294117647%);}}#{id} .task-type-6,#{id} .section-type-6{{fill:hsl(8, 100%, 96.2745098039%);}}#{id} .task-type-7,#{id} .section-type-7{{fill:hsl(188, 100%, 93.5294117647%);}}",
+        id = id, ff = ff,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
@@ -172,9 +189,9 @@ pub fn task_label(
 // ---------------------------------------------------------------------------
 
 /// Render the diagram title `<text>` element.
-pub fn title_text(tx: i64, ff: &str, title: &str) -> String {
+pub fn title_text(tx: i64, _ff: &str, title: &str) -> String {
     format!(
-        "<text x=\"{tx}\" font-size=\"4ex\" font-weight=\"bold\" y=\"25\" fill=\"\" font-family=\"{ff}\">{title}</text>",
+        r#"<text x="{tx}" font-size="4ex" font-weight="bold" y="25" fill="" font-family="&quot;trebuchet ms&quot;, verdana, arial, sans-serif">{title}</text>"#,
     )
 }
 

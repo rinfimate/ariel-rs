@@ -19,10 +19,14 @@ const madColor = (r) => {
   return '#d4edda';                   // still PASS
 };
 
-const passing = results.filter(r => r.status === 'PASS' || r.status === 'WARN');
+// Sort: FAIL first, then WARN, then PASS — so failures are easy to find at the top
+const sorted = [...results].sort((a, b) => {
+  const order = { FAIL: 0, WARN: 1, MISSING: 2, PASS: 3 };
+  return (order[a.status] ?? 4) - (order[b.status] ?? 4);
+});
 
 let sections = '';
-for (const r of passing) {
+for (const r of sorted) {
   const name = r.name;
   const refPath  = join(REF_DIR,  name + '.svg');
   const rustPath = join(RUST_DIR, name + '.svg');
@@ -34,15 +38,21 @@ for (const r of passing) {
     // Replace the generic diagram ID with a diagram-specific one so that
     // CSS rules from one embedded SVG don't bleed into another on the same page.
     const uid = `mermaid-svg-rust-${name}`;
+    // Replace base SVG ID — also catches treemap's mermaid-svg-0 pattern
+    rustSvg = rustSvg.replace(/mermaid-svg-0/g, uid + '-0');
     rustSvg = rustSvg.replace(/mermaid-svg(?!-)/g, uid);
     rustSvg = rustSvg.replace(/mermaid-seq(?!-)/g, uid);
   } catch {}
 
-  const sizeNote = r.sizeMismatch ? ` | ${r.sizeMismatch}` : '';
   const mad = r.mad ?? 100, pdiff = r.pdiff ?? 100;
+  const sizeInfo = (r.refW && r.rustW)
+    ? ` [ref ${r.refW}×${r.refH} | rust ${r.rustW}×${r.rustH}]`
+    : (r.sizeMismatch ? ` | ${r.sizeMismatch}` : '');
+  const statusPrefix = (r.status === 'FAIL' || r.status === 'WARN' || r.status === 'MISSING')
+    ? `${r.status} — ` : '';
   const badge = r.status === 'MISSING'
     ? 'MISSING — no Rust output'
-    : `MAD ${mad.toFixed(3)}%  PDIFF ${pdiff.toFixed(3)}%${sizeNote}`;
+    : `${statusPrefix}MAD ${mad.toFixed(3)}%  PDIFF ${pdiff.toFixed(3)}%${sizeInfo}`;
   const bg = madColor(r);
 
   // Wide diagrams (gantt, xychart, sankey, timeline, architecture, block) stack vertically
@@ -72,9 +82,14 @@ for (const r of passing) {
 
 // Build table of contents
 let toc = '<ul class="toc">';
-for (const r of passing) {
+for (const r of sorted) {
   const bg = madColor(r);
-  toc += `<li style="background:${bg}"><a href="#${r.name}">${r.name}</a> <span>${r.status === 'MISSING' ? 'MISSING' : r.status === 'FAIL' ? 'FAIL' : (r.mad??0).toFixed(3)+'%'}</span></li>`;
+  const tocName = r.status === 'FAIL' || r.status === 'MISSING'
+    ? `<strong>${r.name} ${r.status}</strong>`
+    : r.status === 'WARN'
+    ? `<strong>${r.name} WARN</strong>`
+    : r.name;
+  toc += `<li style="background:${bg}"><a href="#${r.name}">${tocName}</a></li>`;
 }
 toc += '</ul>';
 
@@ -111,7 +126,7 @@ h1 { font-size: 18px; margin: 16px 20px 4px; }
 </style>
 </head><body>
 <h1>ariel-rs — All Corpus Diagrams</h1>
-<p class="summary">${passing.length} shown (PASS/WARN) &nbsp;|&nbsp; ${failCount} hidden (FAIL/MISSING — will appear once fixed) &nbsp;|&nbsp; Left = Mermaid JS reference &nbsp;&nbsp; Right = Rust output</p>
+<p class="summary">${results.length} diagrams &nbsp;|&nbsp; FAIL/MISSING shown first &nbsp;|&nbsp; Left = Mermaid JS reference &nbsp;&nbsp; Right = Rust output</p>
 ${toc}
 ${sections}
 </body></html>`;

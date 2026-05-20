@@ -26,8 +26,11 @@ pub struct VennIntersection {
 
 #[derive(Debug, Clone)]
 pub struct VennTextNode {
+    #[allow(dead_code)]
     pub sets: Vec<String>, // sorted set identifiers this text belongs to
+    #[allow(dead_code)]
     pub id: String,
+    #[allow(dead_code)]
     pub label: Option<String>,
 }
 
@@ -42,6 +45,7 @@ pub struct VennDiagram {
     pub title: Option<String>,
     pub sets: Vec<VennSet>,
     pub intersections: Vec<VennIntersection>,
+    #[allow(dead_code)]
     pub text_nodes: Vec<VennTextNode>,
     pub style_entries: Vec<VennStyleEntry>,
 }
@@ -82,7 +86,8 @@ pub fn parse(input: &str) -> crate::error::ParseResult<VennDiagram> {
             .strip_prefix("title ")
             .or_else(|| trimmed.strip_prefix("title\t"))
         {
-            title = Some(normalize_text(rest.trim()));
+            // Venn title preserves quotes — Mermaid JS does not strip them.
+            title = Some(rest.trim().to_string());
             continue;
         }
         if trimmed == "title" {

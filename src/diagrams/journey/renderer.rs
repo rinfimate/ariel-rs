@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::JourneyDiagram;
-use super::templates;
+use super::templates::{self, build_style, esc};
 /// Faithful Rust port of Mermaid's journeyRenderer.ts + svgDraw.js (user journey).
 ///
 /// Layout algorithm mirrors journeyRenderer.ts draw() exactly:
@@ -94,7 +94,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
         ));
         out.push_str(&templates::actor_label(
             (legend_y + 7.0) as i64,
-            &escape_text(&actor.name),
+            &esc(&actor.name),
         ));
         legend_y += ACTOR_LEGEND_STEP;
     }
@@ -127,7 +127,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
                     si,
                     tx,
                     ty,
-                    &escape_text(name),
+                    &esc(name),
                     ff,
                 ));
             };
@@ -225,7 +225,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
                     TASK_LINE_TOP as i64,
                     actor.position,
                     actor.color,
-                    &escape_text(&actor.name),
+                    &esc(&actor.name),
                 ));
             }
         }
@@ -240,7 +240,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
             SECTION_HEIGHT as i64,
             text_cx,
             text_cy,
-            &escape_text(&task.task),
+            &esc(&task.task),
             ff,
         ));
 
@@ -249,11 +249,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
 
     // ── Title ────────────────────────────────────────────────────────────────
     if let Some(ref title) = diag.title {
-        out.push_str(&templates::title_text(
-            LEFT_MARGIN as i64,
-            ff,
-            &escape_text(title),
-        ));
+        out.push_str(&templates::title_text(LEFT_MARGIN as i64, ff, &esc(title)));
     }
 
     // ── Activity line ────────────────────────────────────────────────────────
@@ -268,19 +264,6 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
 
     out.push_str("</svg>");
     out
-}
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}@keyframes dash{{to{{stroke-dashoffset:0;}}}}#{id} .mouth{{stroke:#666;}}#{id} line{{stroke:#333;}}#{id} .legend{{fill:#333;font-family:{ff};}}#{id} .label text{{fill:#333;}}#{id} .label{{color:#333;}}#{id} .face{{fill:#FFF8DC;stroke:#999;}}#{id} .task-type-0,#{id} .section-type-0{{fill:#ECECFF;}}#{id} .task-type-1,#{id} .section-type-1{{fill:#ffffde;}}#{id} .task-type-2,#{id} .section-type-2{{fill:hsl(304, 100%, 96.2745098039%);}}#{id} .task-type-3,#{id} .section-type-3{{fill:hsl(124, 100%, 93.5294117647%);}}#{id} .task-type-4,#{id} .section-type-4{{fill:hsl(176, 100%, 96.2745098039%);}}#{id} .task-type-5,#{id} .section-type-5{{fill:hsl(-4, 100%, 93.5294117647%);}}#{id} .task-type-6,#{id} .section-type-6{{fill:hsl(8, 100%, 96.2745098039%);}}#{id} .task-type-7,#{id} .section-type-7{{fill:hsl(188, 100%, 93.5294117647%);}}",
-        id = id, ff = ff,
-    )
 }
 
 #[cfg(test)]

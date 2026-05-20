@@ -3,8 +3,10 @@
 
 use super::constants::*;
 use super::parser::{ClassDiagram, ClassNode, ClassRelation, EndType, LineStyle};
-#[allow(unused_imports)]
-use super::templates;
+use super::templates::{
+    self as tmpl, build_css, build_markers, drop_shadow_filter, drop_shadow_filter_small,
+    edge_label_empty, edge_label_fo, edge_label_text, esc, fmt, svg_root, terminal_label_fo,
+};
 use crate::text::measure;
 use crate::theme::{Theme, ThemeVars};
 use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel, Point};
@@ -130,12 +132,7 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
 
     let mut out = String::new();
 
-    out.push_str(&format!(
-        r#"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="classDiagram" style="max-width: {w}px;" viewBox="0 0 {w} {h}" role="graphics-document document" aria-roledescription="class">"#,
-        id = svg_id,
-        w = fmt(graph_w),
-        h = fmt(graph_h),
-    ));
+    out.push_str(&svg_root(svg_id, &fmt(graph_w), &fmt(graph_h)));
 
     out.push_str("<style>");
     out.push_str(&css);
@@ -172,13 +169,12 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
                 };
                 let marker_start = marker_start_attr(svg_id, rel);
                 let marker_end = marker_end_attr(svg_id, rel);
-                out.push_str(&format!(
-                    r#"<path d="{d}" id="{eid}" class="{cls}" style=";;;" data-edge="true" data-et="edge" data-id="{eid}" data-look="classic"{ms}{me}></path>"#,
-                    d = path_d,
-                    eid = edge_id,
-                    cls = classes,
-                    ms = marker_start,
-                    me = marker_end,
+                out.push_str(&tmpl::edge_path(
+                    &path_d,
+                    &edge_id,
+                    classes,
+                    &marker_start,
+                    &marker_end,
                 ));
             }
         }
@@ -198,30 +194,27 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
                 let (raw_fo_w, _) = measure(&rel.title, TITLE_FONT_SIZE);
                 let fo_w = raw_fo_w * CONTENT_SCALE;
                 if use_foreign_object {
-                    out.push_str(&format!(
-                        r#"<g class="edgeLabel" transform="translate({mx}, {my})"><g class="label" data-id="{eid}" transform="translate({ox}, -12)"><foreignObject width="{fw}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel "><p>{text}</p></span></div></foreignObject></g></g>"#,
-                        mx = fmt(mid.0), my = fmt(mid.1),
-                        eid = edge_id,
-                        ox = fmt(-fo_w / 2.0),
-                        fw = fmt(fo_w),
-                        text = esc(&rel.title),
+                    out.push_str(&edge_label_fo(
+                        &fmt(mid.0),
+                        &fmt(mid.1),
+                        &edge_id,
+                        &fmt(-fo_w / 2.0),
+                        &fmt(fo_w),
+                        &esc(&rel.title),
                     ));
                 } else {
-                    out.push_str(&format!(
-                        r##"<g class="edgeLabel" transform="translate({mx}, {my})"><rect x="{ox}" y="-12" width="{fw}" height="24" fill="{pf}" stroke="none"></rect><text x="0" y="5" text-anchor="middle" font-family="{ff}" font-size="16" fill="#131300">{text}</text></g>"##,
-                        mx = fmt(mid.0), my = fmt(mid.1),
-                        ox = fmt(-fo_w / 2.0),
-                        fw = fmt(fo_w),
-                        pf = vars.primary_color,
-                        ff = vars.font_family,
-                        text = esc(&rel.title),
+                    out.push_str(&edge_label_text(
+                        &fmt(mid.0),
+                        &fmt(mid.1),
+                        &fmt(-fo_w / 2.0),
+                        &fmt(fo_w),
+                        vars.primary_color,
+                        vars.font_family,
+                        &esc(&rel.title),
                     ));
                 }
             } else {
-                out.push_str(&format!(
-                    r#"<g class="edgeLabel"><g class="label" data-id="{eid}" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel "></span></div></foreignObject></g></g>"#,
-                    eid = edge_id,
-                ));
+                out.push_str(&edge_label_empty(&edge_id));
             }
 
             // Render start/end cardinality labels (title1 = near id1, title2 = near id2)
@@ -230,27 +223,19 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
             //   title1 → 'start_right' position (left of edge near source)
             //   title2 → 'end_left'   position (right of edge near target)
             if use_foreign_object {
-                let render_card_label = |text: &str, cx: f64, cy: f64| -> String {
-                    // CSS `.edgeTerminals{font-size:11px}` — measure at 11px with TEXT_SCALE
-                    const TERMINAL_SCALE: f64 = 1.117;
-                    let (fw_raw, _) = measure(text, 11.0);
-                    let fw = fw_raw * TERMINAL_SCALE;
-                    // width in style = char_count * 9px (Mermaid's setTerminalWidth)
-                    let style_w = text.len() * 9;
-                    format!(
-                        r#"<g class="edgeTerminals" transform="translate({cx}, {cy})"><g class="inner" transform="translate(0, -8.25)"><foreignObject width="{fw}" height="16.5" style="width: {sw}px; height: 12px;"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="edgeLabel "><p>{text}</p></span></div></foreignObject></g></g>"#,
-                        cx = fmt(cx),
-                        cy = fmt(cy),
-                        fw = fmt(fw),
-                        sw = style_w,
-                        text = esc(text),
-                    )
-                };
                 // terminalMarkerSize: Mermaid passes `edge.arrowTypeStart ? 10 : 0`.
                 // In Mermaid class-diagram rendering the arrowType strings are always set
                 // (e.g. 'none', 'dependencyEnd', etc.) so arrowTypeStart/End are always
                 // truthy JS strings — both terminals always receive terminalMarkerSize = 10.
                 let terminal_marker_size: f64 = 10.0;
+
+                let render_card_label = |text: &str, cx: f64, cy: f64| -> String {
+                    // CSS `.edgeTerminals{font-size:11px}` — measure at 11px with TERMINAL_SCALE
+                    let (fw_raw, _) = measure(text, 11.0);
+                    let fw = fw_raw * TERMINAL_SCALE;
+                    let style_w = text.len() * 9;
+                    terminal_label_fo(&fmt(cx), &fmt(cy), &fmt(fw), style_w, &esc(text))
+                };
 
                 if !rel.title1.is_empty() && pts.len() >= 2 {
                     // title1 near source → 'start_right' position
@@ -304,14 +289,8 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
 
     out.push_str("</g>"); // root
 
-    out.push_str(&format!(
-        "<defs><filter id=\"{0}-drop-shadow\" height=\"130%\" width=\"130%\"><feDropShadow dx=\"4\" dy=\"4\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"#000000\"></feDropShadow></filter></defs>",
-        svg_id
-    ));
-    out.push_str(&format!(
-        "<defs><filter id=\"{0}-drop-shadow-small\" height=\"150%\" width=\"150%\"><feDropShadow dx=\"2\" dy=\"2\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"#000000\"></feDropShadow></filter></defs>",
-        svg_id
-    ));
+    out.push_str(&drop_shadow_filter(svg_id));
+    out.push_str(&drop_shadow_filter_small(svg_id));
 
     out.push_str("</svg>");
     out
@@ -347,8 +326,8 @@ fn class_box_size(cls: &ClassNode) -> (f64, f64) {
     for ann in &cls.annotations {
         // Use actual guillemet characters (U+00AB, U+00BB) that Mermaid displays —
         // these are narrower than ASCII "<<>>" and match the reference foreignObject widths.
-        let ann_text = format!("\u{00AB}{}\u{00BB}", ann);
-        let (raw_w, _) = measure(&ann_text, FONT_SIZE);
+        // Measure with actual Unicode chars; render with HTML entities to avoid encoding issues.
+        let (raw_w, _) = measure(&format!("\u{00AB}{}\u{00BB}", ann), FONT_SIZE);
         max_centred_w = max_centred_w.max(raw_w * CONTENT_SCALE);
     }
 
@@ -496,7 +475,7 @@ fn render_class_node(
     for (i, ann) in cls.annotations.iter().enumerate() {
         // Row i centre is at ann_top_y + i*24 + 12 (absolute).
         // Relative to ann_group_y (= ann_top_y): offset = i*24 + 12.
-        let ann_text = format!("\u{00AB}{}\u{00BB}", esc(ann));
+        let ann_text = format!("&laquo;{}&raquo;", esc(ann));
         let row_centre_rel = i as f64 * ANNOTATION_H + ANNOTATION_H / 2.0;
         let (raw_ann_w, _) = measure(&format!("\u{00AB}{}\u{00BB}", ann), FONT_SIZE);
         let ann_w = raw_ann_w * CONTENT_SCALE;
@@ -647,175 +626,6 @@ fn marker_end_attr(svg_id: &str, rel: &ClassRelation) -> String {
         EndType::Aggregation => format!(r#" marker-end="url(#{}_class-aggregationEnd)""#, svg_id),
         EndType::Arrow => format!(r#" marker-end="url(#{}_class-dependencyEnd)""#, svg_id),
     }
-}
-
-// ─── CSS ──────────────────────────────────────────────────────────────────────
-
-fn build_css(id: &str, vars: &ThemeVars) -> String {
-    let pb = vars.primary_border;
-    let pf = vars.primary_color;
-    let lc = vars.line_color;
-    let ff = vars.font_family;
-    let mut c = String::new();
-
-    c.push_str(&format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}"
-    ));
-    c.push_str("@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}");
-    c.push_str("@keyframes dash{to{stroke-dashoffset:0;}}");
-    c.push_str(&format!("#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}"));
-    c.push_str(&format!("#{id} .error-icon{{fill:#552222;}}"));
-    c.push_str(&format!(
-        "#{id} .error-text{{fill:#552222;stroke:#552222;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-normal{{stroke-width:1px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}"
-    ));
-    c.push_str(&format!("#{id} .edge-pattern-solid{{stroke-dasharray:0;}}"));
-    c.push_str(&format!(
-        "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}"
-    ));
-    c.push_str(&format!("#{id} .marker{{fill:#333333;stroke:#333333;}}"));
-    c.push_str(&format!("#{id} .marker.cross{{stroke:#333333;}}"));
-    c.push_str(&format!("#{id} svg{{font-family:{ff};font-size:16px;}}"));
-    c.push_str(&format!("#{id} p{{margin:0;}}"));
-    c.push_str(&format!(
-        "#{id} g.classGroup text{{fill:{pb};stroke:none;font-family:{ff};font-size:10px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} g.classGroup text .title{{font-weight:bolder;}}"
-    ));
-    c.push_str(&format!("#{id} .cluster-label text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster-label span{{color:#333;}}"));
-    c.push_str(&format!(
-        "#{id} .cluster-label span p{{background-color:transparent;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .cluster rect{{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} .cluster text{{fill:#333;}}"));
-    c.push_str(&format!("#{id} .cluster span{{color:#333;}}"));
-    c.push_str(&format!(
-        "#{id} .nodeLabel,#{id} .edgeLabel{{color:#131300;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .noteLabel .nodeLabel,#{id} .noteLabel .edgeLabel{{color:black;}}"
-    ));
-    c.push_str(&format!("#{id} .edgeLabel .label rect{{fill:{pf};}}"));
-    c.push_str(&format!("#{id} .label text{{fill:#131300;}}"));
-    c.push_str(&format!("#{id} .labelBkg{{background:{pf};}}"));
-    c.push_str(&format!("#{id} .edgeLabel .label span{{background:{pf};}}"));
-    c.push_str(&format!("#{id} .classTitle{{font-weight:bolder;}}"));
-    c.push_str(&format!("#{id} .node rect,#{id} .node circle,#{id} .node ellipse,#{id} .node polygon,#{id} .node path{{fill:{pf};stroke:{pb};stroke-width:1;}}"));
-    c.push_str(&format!("#{id} .divider{{stroke:{pb};stroke-width:1;}}"));
-    c.push_str(&format!("#{id} g.clickable{{cursor:pointer;}}"));
-    c.push_str(&format!(
-        "#{id} g.classGroup rect{{fill:{pf};stroke:{pb};}}"
-    ));
-    c.push_str(&format!(
-        "#{id} g.classGroup line{{stroke:{pb};stroke-width:1;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .classLabel .box{{stroke:none;stroke-width:0;fill:{pf};opacity:0.5;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .classLabel .label{{fill:{pb};font-size:10px;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .relation{{stroke:{lc};stroke-width:1;fill:none;}}"
-    ));
-    c.push_str(&format!("#{id} .dashed-line{{stroke-dasharray:3;}}"));
-    c.push_str(&format!("#{id} .dotted-line{{stroke-dasharray:1 2;}}"));
-    c.push_str(&format!("#{id} [id$=\"-compositionStart\"],#{id} .composition{{fill:#333333!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-compositionEnd\"],#{id} .composition{{fill:#333333!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-dependencyStart\"],#{id} .dependency{{fill:#333333!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-dependencyEnd\"],#{id} .dependency{{fill:#333333!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-extensionStart\"],#{id} .extension{{fill:transparent!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-extensionEnd\"],#{id} .extension{{fill:transparent!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-aggregationStart\"],#{id} .aggregation{{fill:transparent!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-aggregationEnd\"],#{id} .aggregation{{fill:transparent!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-lollipopStart\"],#{id} .lollipop{{fill:{pf}!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!("#{id} [id$=\"-lollipopEnd\"],#{id} .lollipop{{fill:{pf}!important;stroke:#333333!important;stroke-width:1;}}"));
-    c.push_str(&format!(
-        "#{id} .edgeTerminals{{font-size:11px;line-height:initial;}}"
-    ));
-    c.push_str(&format!(
-        "#{id} .classTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}"
-    ));
-    c.push_str(&format!("#{id} .edgeLabel[data-look=\"neo\"]{{background-color:rgba(232,232,232, 0.8);text-align:center;}}"));
-    c.push_str(&format!(
-        "#{id} .edgeLabel[data-look=\"neo\"] p{{background-color:rgba(232,232,232, 0.8);}}"
-    ));
-    c.push_str(&format!("#{id} .edgeLabel[data-look=\"neo\"] rect{{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}}"));
-    c.push_str(&format!("#{id} .label-icon{{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}}"));
-    c.push_str(&format!(
-        "#{id} .node .label-icon path{{fill:currentColor;stroke:revert;stroke-width:revert;}}"
-    ));
-    c.push_str(&format!("#{id} .node .neo-node{{stroke:{pb};}}"));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node rect,#{id} [data-look=\"neo\"].cluster rect,#{id} [data-look=\"neo\"].node polygon{{stroke:{pb};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node path{{stroke:{pb};stroke-width:1px;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node .outer-path{{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node .neo-line path{{stroke:{pb};filter:none;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].node circle{{stroke:{pb};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!(
-        "#{id} [data-look=\"neo\"].node circle .state-start{{fill:#000000;}}"
-    ));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon{{fill:{pb};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} [data-look=\"neo\"].icon-shape .icon-neo path{{stroke:{pb};filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}}"));
-    c.push_str(&format!("#{id} :root{{--mermaid-font-family:{ff};}}"));
-
-    c
-}
-
-// ─── SVG Markers ─────────────────────────────────────────────────────────────
-
-fn build_markers(id: &str) -> String {
-    let mut m = String::new();
-    // Aggregation (diamond, hollow)
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-aggregationStart" class="marker aggregation class" refX="18" refY="7" markerWidth="190" markerHeight="240" orient="auto"><path d="M 18,7 L9,13 L1,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-aggregationEnd" class="marker aggregation class" refX="1" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L1,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-aggregationStart-margin" class="marker aggregation class" refX="15" refY="7" markerWidth="190" markerHeight="240" orient="auto" markerUnits="userSpaceOnUse"><path d="M 18,7 L9,13 L1,7 L9,1 Z" style="stroke-width: 2;"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-aggregationEnd-margin" class="marker aggregation class" refX="1" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse"><path d="M 18,7 L9,13 L1,7 L9,1 Z" style="stroke-width: 2;"></path></marker></defs>"#));
-
-    // Extension (inheritance triangle, hollow)
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-extensionStart" class="marker extension class" refX="18" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse"><path d="M 1,7 L18,13 V 1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-extensionEnd" class="marker extension class" refX="1" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 1,1 V 13 L18,7 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<marker id="{id}_class-extensionStart-margin" class="marker extension class" refX="18" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 20 14"><polygon points="10,7 18,13 18,1" style="stroke-width: 2; stroke-dasharray: 0;"></polygon></marker>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-extensionEnd-margin" class="marker extension class" refX="9" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 20 14"><polygon points="10,1 10,13 18,7" style="stroke-width: 2; stroke-dasharray: 0;"></polygon></marker></defs>"#));
-
-    // Composition (diamond, filled)
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-compositionStart" class="marker composition class" refX="18" refY="7" markerWidth="190" markerHeight="240" orient="auto"><path d="M 18,7 L9,13 L1,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-compositionEnd" class="marker composition class" refX="1" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L1,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-compositionStart-margin" class="marker composition class" refX="15" refY="7" markerWidth="190" markerHeight="240" orient="auto" markerUnits="userSpaceOnUse"><path viewBox="0 0 15 15" d="M 18,7 L9,13 L1,7 L9,1 Z" style="stroke-width: 0;"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-compositionEnd-margin" class="marker composition class" refX="3.5" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse"><path d="M 18,7 L9,13 L1,7 L9,1 Z" style="stroke-width: 0;"></path></marker></defs>"#));
-
-    // Dependency (open arrow)
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-dependencyStart" class="marker dependency class" refX="6" refY="7" markerWidth="190" markerHeight="240" orient="auto"><path d="M 5,7 L9,13 L1,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-dependencyEnd" class="marker dependency class" refX="13" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L14,7 L9,1 Z"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-dependencyStart-margin" class="marker dependency class" refX="4" refY="7" markerWidth="190" markerHeight="240" orient="auto" markerUnits="userSpaceOnUse"><path d="M 5,7 L9,13 L1,7 L9,1 Z" style="stroke-width: 0;"></path></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-dependencyEnd-margin" class="marker dependency class" refX="16" refY="7" markerWidth="20" markerHeight="28" orient="auto" markerUnits="userSpaceOnUse"><path d="M 18,7 L9,13 L14,7 L9,1 Z" style="stroke-width: 0;"></path></marker></defs>"#));
-
-    // Lollipop
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-lollipopStart" class="marker lollipop class" refX="13" refY="7" markerWidth="190" markerHeight="240" orient="auto"><circle fill="transparent" cx="7" cy="7" r="6"></circle></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-lollipopEnd" class="marker lollipop class" refX="1" refY="7" markerWidth="190" markerHeight="240" orient="auto"><circle fill="transparent" cx="7" cy="7" r="6"></circle></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-lollipopStart-margin" class="marker lollipop class" refX="13" refY="7" markerWidth="190" markerHeight="240" orient="auto" markerUnits="userSpaceOnUse"><circle fill="transparent" cx="7" cy="7" r="6" stroke-width="2"></circle></marker></defs>"#));
-    m.push_str(&format!(r#"<defs><marker id="{id}_class-lollipopEnd-margin" class="marker lollipop class" refX="1" refY="7" markerWidth="190" markerHeight="240" orient="auto" markerUnits="userSpaceOnUse"><circle fill="transparent" cx="7" cy="7" r="6" stroke-width="2"></circle></marker></defs>"#));
-
-    m
 }
 
 // ─── Edge path ────────────────────────────────────────────────────────────────
@@ -984,24 +794,6 @@ fn calc_terminal_label_position(
     };
 
     (x, y)
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-fn fmt(v: f64) -> String {
-    let s = format!("{:.7}", v);
-    let s = s.trim_end_matches('0');
-    let s = s.trim_end_matches('.');
-    s.to_string()
-}
-
-fn esc(s: &str) -> String {
-    // First convert HTML named entities to Unicode, then XML-escape for SVG
-    let s = crate::svg::html_entities_to_unicode(s);
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]

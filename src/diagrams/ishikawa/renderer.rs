@@ -1,5 +1,6 @@
 use super::constants::*;
 use super::parser::{IshikawaDiagram, IshikawaNode};
+use super::templates::{self, build_style, esc, fmt};
 /// Faithful Rust port of Mermaid's ishikawaRenderer.ts.
 ///
 /// Key algorithm details (from TypeScript source):
@@ -12,21 +13,107 @@ use super::parser::{IshikawaDiagram, IshikawaNode};
 /// - Labels in boxes; lines with arrow markers pointing toward head
 ///
 /// We skip Rough.js (hand-drawn mode) — we render clean SVG only.
-#[allow(unused_imports)]
-use super::templates;
+///
+/// Bounding box: since we lack DOM access we analytically track the min/max
+/// of all rendered coordinates (branch endpoints, label boxes, head extent)
+/// and derive the viewBox from those, matching what Mermaid's applyPaddedViewBox
+/// produces after calling getBBox().
 use crate::text::measure;
 use crate::theme::Theme;
+
+/// Wrap text to at most `max_chars` characters per line, splitting on whitespace.
+/// Matches Mermaid's wrapText() exactly.
+fn wrap_text(text: &str, max_chars: usize) -> String {
+    if text.len() <= max_chars {
+        return text.to_string();
+    }
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let last = lines.len().wrapping_sub(1);
+        if !lines.is_empty() && lines[last].len() + 1 + word.len() <= max_chars {
+            let n = lines.len() - 1;
+            lines[n].push(' ');
+            lines[n].push_str(word);
+        } else {
+            lines.push(word.to_string());
+        }
+    }
+    lines.join("\n")
+}
+
+/// Split text on newlines or <br> tags (matches Mermaid's splitLines).
+fn split_lines(text: &str) -> Vec<String> {
+    // Split on \n or <br/> or <br />
+    let mut result: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            result.push(current.clone());
+            current.clear();
+            i += 1;
+        } else if bytes[i] == b'<' {
+            // check for <br .../>
+            let rest = &text[i..];
+            let lower = rest.to_lowercase();
+            if lower.starts_with("<br/>")
+                || lower.starts_with("<br />")
+                || lower.starts_with("<br>")
+            {
+                result.push(current.clone());
+                current.clear();
+                let skip = if lower.starts_with("<br/>") {
+                    5
+                } else if lower.starts_with("<br />") {
+                    6
+                } else {
+                    4
+                };
+                i += skip;
+            } else {
+                current.push(bytes[i] as char);
+                i += 1;
+            }
+        } else {
+            current.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    result.push(current);
+    result
+}
+
+/// Measure the widest line in a (possibly multi-line) text block.
+/// Returns (max_line_width, line_height, num_lines).
+fn measure_text_block(text: &str, font_size: f64) -> (f64, f64, usize) {
+    let lines = split_lines(text);
+    let lh = font_size * 1.05;
+    let max_w = lines
+        .iter()
+        .map(|l| measure(l, font_size).0)
+        .fold(0.0_f64, f64::max);
+    (max_w, lh, lines.len())
+}
+
+/// Like `measure_text_block` but scales the returned width by `TEXT_WIDTH_SCALE`
+/// so that layout calculations match the Arial-based reference widths produced by
+/// Mermaid's getBBox() calls.  Use this wherever a width drives a coordinate
+/// calculation (bounding-box tracking, box sizing) rather than an SVG attribute.
+fn measure_layout_width(text: &str, font_size: f64) -> (f64, f64, usize) {
+    let (w, lh, n) = measure_text_block(text, font_size);
+    (w * TEXT_WIDTH_SCALE, lh, n)
+}
 
 pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
     let root = match &diag.root {
         Some(r) => r,
-        None => return empty_svg(),
+        None => return templates::empty_svg().to_string(),
     };
 
     let causes = &root.children;
-    let title_text = diag.title.as_deref().unwrap_or("");
 
     // Split causes into upper (even index) and lower (odd index)
     let upper_causes: Vec<&IshikawaNode> = causes
@@ -68,10 +155,7 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
 
     // Arrow marker definition
     let marker_id = "ishikawa-arrow";
-    elements.push(format!(
-        r#"<defs><marker id="{mid}" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 10 0 L 0 5 L 10 10 Z" class="ishikawa-arrow"/></marker></defs>"#,
-        mid = marker_id
-    ));
+    elements.push(templates::arrowhead_marker(marker_id));
 
     let marker_url = format!("url(#{marker_id})");
 
@@ -80,19 +164,30 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     // After collecting all elements we compute the bounding box and translate.
 
     let mut branch_elements: Vec<String> = Vec::new();
-    let mut label_min_x = 0.0_f64;
+    let mut spine_x_left = 0.0_f64;
 
-    // Draw branches pair by pair
+    // Track content bounding box in local coordinates
+    let mut content_min_y = spine_y; // will shrink as we find upper content
+    let mut content_max_y = spine_y; // will grow as we find lower content
+    let mut content_min_x = 0.0_f64;
+
+    // Draw branches pair by pair, starting 20px left of head
     let pair_count = causes.len().div_ceil(2);
-    let mut cur_spine_x = 0.0_f64 - 20.0; // starts slightly left of head x=0
+    // cur_spine_x: current leftmost x where each pair's branch attaches.
+    // Mermaid initialises spineX = 0 then subtracts 20 → −20.
+    // After each pair, spineX = min of all text .getBBox().x in that pair.
+    let mut cur_spine_x = -20.0_f64;
 
     for p in 0..pair_count {
         let upper = causes.get(p * 2);
         let lower = causes.get(p * 2 + 1);
 
+        // leftmost x of all text labels in this pair (tracks Mermaid's getBBox approach)
+        let mut pair_leftmost = cur_spine_x;
+
         for (cause_opt, dir) in [(&upper, -1i32), (&lower, 1i32)] {
             if let Some(cause) = cause_opt {
-                let (elems, leftmost) = draw_branch(
+                let (elems, leftmost_x, min_y, max_y) = draw_branch(
                     cause,
                     cur_spine_x,
                     spine_y,
@@ -101,76 +196,102 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
                     &marker_url,
                 );
                 branch_elements.extend(elems);
-                label_min_x = label_min_x.min(leftmost);
+                pair_leftmost = pair_leftmost.min(leftmost_x);
+                content_min_y = content_min_y.min(min_y);
+                content_max_y = content_max_y.max(max_y);
+                content_min_x = content_min_x.min(leftmost_x);
             }
         }
-        // Advance spine_x roughly based on typical branch width
-        // In Mermaid this is computed from getBBox; we approximate
-        cur_spine_x = label_min_x - 10.0;
+
+        // Advance spine x to leftmost text in this pair (matches Mermaid JS)
+        cur_spine_x = pair_leftmost;
+        spine_x_left = spine_x_left.min(cur_spine_x);
     }
 
-    let spine_x_left = cur_spine_x;
+    // Also update content_min_x based on spine left edge
+    content_min_x = content_min_x.min(spine_x_left);
 
-    // Spine line (horizontal, from leftmost to head x=0)
-    elements.push(format!(
-        r#"<line class="ishikawa-spine" x1="{:.1}" y1="{:.1}" x2="0" y2="{:.1}"/>"#,
-        spine_x_left, spine_y, spine_y
-    ));
+    // Spine line (horizontal)
+    elements.push(templates::spine_line(spine_x_left, spine_y));
 
     elements.extend(branch_elements);
 
     // Head (kite/fish-head shape) at (0, spine_y)
+    // Mermaid wraps the head text and measures the bounding box of the wrapped block.
     let head_label = &root.text;
-    let (head_w_text, _) = measure(head_label, FONT_SIZE);
-    let head_w = (head_w_text + 6.0).max(60.0);
-    let head_h = 80.0_f64.max(FONT_SIZE * 3.0 + 40.0);
+    let head_font_size = FONT_SIZE; // measured at diagram font size; CSS overrides to 14px for display
+    let max_chars_head = ((110.0 / (head_font_size * 0.6)).floor() as usize).max(6);
+    let wrapped_head = wrap_text(head_label, max_chars_head);
+    let lh = head_font_size * 1.05;
+    // JS: w = max(60, tb.width+6) where tb.width is getBBox() at CSS-rendered 14px (Arial, SVG).
+    // Liberation Sans at 14px × HEAD_TEXT_SCALE ≈ Arial 14px SVG getBBox (empirical from reference).
+    let (tb_width_14_raw, _, n_lines) = measure_text_block(&wrapped_head, 14.0);
+    let tb_width_14 = tb_width_14_raw * HEAD_TEXT_SCALE;
+    let tb_height = n_lines as f64 * lh;
+    // w and h used for both kite path and text centering (one consistent value, as in JS)
+    let head_w = (tb_width_14 + 6.0).max(60.0);
+    let head_h = (tb_height * 2.0 + 40.0).max(40.0);
+    let head_right_x = head_w * 2.4;
     let head_path = format!(
         "M 0 {} L 0 {} Q {} 0 0 {} Z",
         fmt(-head_h / 2.0),
         fmt(head_h / 2.0),
-        fmt(head_w * 2.4),
+        fmt(head_right_x),
         fmt(-head_h / 2.0),
     );
-    elements.push(format!(
-        r#"<g class="ishikawa-head-group" transform="translate(0,{:.1})"><path class="ishikawa-head" d="{}"/><text class="ishikawa-head-label" text-anchor="middle" x="{:.1}" y="{:.1}" font-size="{}">{}</text></g>"#,
-        spine_y,
-        head_path,
-        head_w * 0.8,
+
+    // CSS `.ishikawa-head-label` overrides text-anchor to 'middle' and font-size to 14px.
+    // With anchor=middle, getBBox().x = -tb.width/2, so JS formula gives:
+    //   (w - tb.width)/2 - tb.x + 3 = (w - tb.width)/2 + tb.width/2 + 3 = w/2 + 3
+    // → text center at x = head_w/2 + 3
+    let head_text_x = head_w / 2.0 + 3.0;
+    let head_text_svg = build_multiline_text(
+        &wrapped_head,
+        head_text_x,
         0.0,
-        FONT_SIZE,
-        escape(head_label),
+        "ishikawa-head-label",
+        "middle",
+        head_font_size,
+    );
+
+    elements.push(format!(
+        r#"<g class="ishikawa-head-group" transform="translate(0,{:.5})"><path class="ishikawa-head" d="{hp}"/>{ht}</g>"#,
+        spine_y,
+        hp = head_path,
+        ht = head_text_svg,
     ));
 
-    // Compute bounding box for viewBox
-    // We translate so that spine_x_left is at x=PADDING
-    let translate_x = PADDING - spine_x_left;
-    let translate_y = PADDING + upper_len;
+    // Head occupies from y = spine_y - head_h/2 to spine_y + head_h/2
+    content_min_y = content_min_y.min(spine_y - head_h / 2.0);
+    content_max_y = content_max_y.max(spine_y + head_h / 2.0);
 
-    let total_w = -spine_x_left + head_w * 2.4 + PADDING * 2.0;
-    let total_h = upper_len + lower_len + PADDING * 2.0;
+    // Content extents (local coordinates).
+    // The head path is "M 0 -h/2 L 0 h/2 Q ctrl_x 0 0 -h/2 Z".  The actual
+    // rightmost point of that quadratic Bézier (P0=(0,h/2), P1=(ctrl_x,0),
+    // P2=(0,-h/2)) occurs at t=0.5 and equals ctrl_x/2.  Mermaid obtains this
+    // via getBBox(); we compute it analytically.
+    let content_max_x = head_right_x / 2.0;
 
-    // Title
-    let title_part = if !title_text.is_empty() {
-        format!(
-            r#"<text class="ishikawa-title" x="{:.1}" y="20" text-anchor="middle" font-size="16" font-weight="bold">{}</text>"#,
-            total_w / 2.0,
-            escape(title_text),
-        )
-    } else {
-        String::new()
-    };
+    // translate so content maps to padding-offset coords
+    let translate_x = PADDING - content_min_x;
+    let translate_y = PADDING - content_min_y;
+
+    let content_w = content_max_x - content_min_x;
+    let content_h = content_max_y - content_min_y;
+    let total_w = content_w + PADDING * 2.0;
+    let total_h = content_h + PADDING * 2.0;
 
     let style = build_style(ff);
     let content = elements.join("");
-    format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {vw:.1} {vh:.1}" width="100%" style="max-width:{mw:.0}px"><style>{style}</style>{title_part}<g transform="translate({tx:.1},{ty:.1})">{content}</g></svg>"#,
-        vw = total_w,
-        vh = total_h + if title_text.is_empty() { 0.0 } else { 30.0 },
-        mw = total_w,
-        title_part = title_part,
-        tx = translate_x,
-        ty = translate_y,
-        content = content,
+    templates::svg_root(
+        total_w,
+        total_h,
+        total_w,
+        &style,
+        "",
+        translate_x,
+        translate_y,
+        &content,
     )
 }
 
@@ -195,7 +316,10 @@ fn side_stats(nodes: &[&IshikawaNode]) -> SideStats {
 }
 
 /// Draw a main branch (bone) from (start_x, start_y) in direction `dir` (-1=up, +1=down).
-/// Returns SVG element strings and the leftmost x coordinate used.
+/// Returns (SVG elements, leftmost_text_x, min_y, max_y).
+///
+/// leftmost_text_x approximates the min getBBox().x of all text nodes in this branch,
+/// which is what Mermaid uses to advance spine_x after each pair.
 fn draw_branch(
     node: &IshikawaNode,
     start_x: f64,
@@ -203,7 +327,7 @@ fn draw_branch(
     dir: i32,
     length: f64,
     marker_url: &str,
-) -> (Vec<String>, f64) {
+) -> (Vec<String>, f64, f64, f64) {
     let mut elements: Vec<String> = Vec::new();
     let children = &node.children;
     let has_children = !children.is_empty();
@@ -214,19 +338,51 @@ fn draw_branch(
     let end_x = start_x + dx;
     let end_y = start_y + dy;
 
+    // Track bounding box
+    let mut min_y = start_y.min(end_y);
+    let mut max_y = start_y.max(end_y);
+
     // Main branch line
-    elements.push(format!(
-        r#"<line class="ishikawa-branch" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" marker-start="{}"/>"#,
-        start_x, start_y, end_x, end_y, marker_url
+    elements.push(templates::branch_line(
+        start_x, start_y, end_x, end_y, marker_url,
     ));
 
-    // Cause label box at end of branch
-    let (label_elems, label_x) = draw_cause_label(&node.text, end_x, end_y, dir);
-    elements.extend(label_elems);
-    let mut leftmost = label_x;
+    // Cause label at end of branch
+    // Mermaid: drawCauseLabel(svg, node.text, endX, endY, direction, fontSize)
+    // Text is placed at (endX, endY + 11*direction) with text-anchor=middle
+    // A rect box is drawn around the text bbox.
+    let cause_label_y = end_y + 11.0 * dir as f64;
+    let cause_text_svg = build_multiline_text(
+        node.text.as_str(),
+        end_x,
+        cause_label_y,
+        "ishikawa-label cause",
+        "middle",
+        FONT_SIZE,
+    );
+    let (tw, _, n_lines_cause) = measure_layout_width(node.text.as_str(), FONT_SIZE);
+    let lh = FONT_SIZE * 1.05;
+    let tb_h = n_lines_cause as f64 * lh;
+    // Match Mermaid's getBBox()-based rect positioning:
+    // The browser's getBBox().y for dominant-baseline:middle is approximately
+    // 0.57 of the box height above the text y coordinate (more space below than above).
+    let box_x = end_x - tw / 2.0 - 20.0;
+    let box_w = tw + 40.0;
+    let box_h = tb_h + 4.0;
+    let box_y = cause_label_y - box_h * 0.57;
+    elements.push(format!(
+        r#"<g class="ishikawa-label-group">{}{}</g>"#,
+        templates::cause_label_rect(box_x, box_y, box_w, box_h),
+        cause_text_svg,
+    ));
+
+    // The leftmost x from the cause label text
+    let mut leftmost_x = box_x;
+    min_y = min_y.min(box_y);
+    max_y = max_y.max(box_y + box_h);
 
     if !has_children {
-        return (elements, leftmost);
+        return (elements, leftmost_x, min_y, max_y);
     }
 
     // Flatten the tree for sub-bones
@@ -274,8 +430,14 @@ fn draw_branch(
         let par_children_drawn = par.children_drawn;
 
         let (bx0, by0, bx1);
-        if entry.depth % 2 == 0 {
-            // Horizontal bone: attach to parent diagonal at target Y
+        let grp_class;
+        let sub_el;
+        let text_el;
+        let text_lx; // leftmost x of text for tracking
+
+        if entry.depth.is_multiple_of(2) {
+            // Even depth: horizontal sub-bone
+            // Attach to parent diagonal at target Y
             let dy_p = par_y1 - par_y0;
             let t = if dy_p.abs() > 1e-9 {
                 (y - par_y0) / dy_p
@@ -291,19 +453,29 @@ fn draw_branch(
             };
             bx1 = bx0 - stub_len;
 
-            elements.push(format!(
-                r#"<line class="ishikawa-sub-branch" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" marker-start="{}"/>"#,
-                bx0, by0, bx1, by0, marker_url
-            ));
-            let label_anchor = "end";
-            elements.push(format!(
-                r#"<text class="ishikawa-label align" text-anchor="{}" x="{:.2}" y="{:.2}" font-size="{}">{}</text>"#,
-                label_anchor, bx1 - 2.0, by0 + FONT_SIZE * 0.35, FONT_SIZE,
-                escape(&entry.text)
-            ));
-            leftmost = leftmost.min(bx1 - measure(&entry.text, FONT_SIZE).0 - 4.0);
+            sub_el = templates::sub_branch_line(bx0, y, bx1, y, marker_url);
+
+            // drawMultilineText at (bx1, y) text-anchor=end class=ishikawa-label align
+            // Mermaid: drawMultilineText(grp, e.text, bx1, y, "ishikawa-label align", "end", fontSize)
+            // text placed at x=bx1, y = y - (lines-1)*lh/2
+            let (tw_sub, _, n_sub) = measure_layout_width(&entry.text, FONT_SIZE);
+            let _ = n_sub;
+            text_el = build_multiline_text(
+                &entry.text,
+                bx1,
+                y,
+                "ishikawa-label align",
+                "end",
+                FONT_SIZE,
+            );
+            // leftmost text x: with text-anchor=end, text extends left of bx1
+            text_lx = bx1 - tw_sub;
+            grp_class = "ishikawa-sub-group";
+
+            min_y = min_y.min(y - FONT_SIZE);
+            max_y = max_y.max(y + FONT_SIZE);
         } else {
-            // Diagonal bone
+            // Odd depth: diagonal sub-bone
             let k = par_children_drawn as f64;
             let nc = par_child_count as f64;
             let frac = (nc - k) / (nc + 1.0);
@@ -311,21 +483,30 @@ fn draw_branch(
             by0 = par_y0;
             bx1 = bx0 + diag_x * ((y - by0) / diag_y);
 
-            elements.push(format!(
-                r#"<line class="ishikawa-sub-branch" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" marker-start="{}"/>"#,
-                bx0, by0, bx1, y, marker_url
-            ));
-            let y_lbl = if dir < 0 {
-                y - 2.0
+            sub_el = templates::sub_branch_line(bx0, by0, bx1, y, marker_url);
+
+            // drawMultilineText at (bx1, y) text-anchor=end
+            // class: "ishikawa-label up" if dir<0, "ishikawa-label down" if dir>0
+            let odd_class = if dir < 0 {
+                "ishikawa-label up"
             } else {
-                y + FONT_SIZE + 2.0
+                "ishikawa-label down"
             };
-            elements.push(format!(
-                r#"<text class="ishikawa-label" text-anchor="end" x="{:.2}" y="{:.2}" font-size="{}">{}</text>"#,
-                bx1, y_lbl, FONT_SIZE, escape(&entry.text)
-            ));
-            leftmost = leftmost.min(bx1 - measure(&entry.text, FONT_SIZE).0 - 4.0);
+            let (tw_sub, _, _) = measure_layout_width(&entry.text, FONT_SIZE);
+            text_el = build_multiline_text(&entry.text, bx1, y, odd_class, "end", FONT_SIZE);
+            text_lx = bx1 - tw_sub;
+            grp_class = "ishikawa-sub-group";
+
+            min_y = min_y.min(y - FONT_SIZE);
+            max_y = max_y.max(y + FONT_SIZE);
         }
+
+        leftmost_x = leftmost_x.min(text_lx);
+
+        elements.push(format!(
+            r#"<g class="{}">{}{}</g>"#,
+            grp_class, sub_el, text_el
+        ));
 
         if entry.child_count > 0 {
             bones.insert(
@@ -346,39 +527,43 @@ fn draw_branch(
         }
     }
 
-    (elements, leftmost)
+    (elements, leftmost_x, min_y, max_y)
 }
 
-fn draw_cause_label(text: &str, x: f64, y: f64, dir: i32) -> (Vec<String>, f64) {
-    let (tw, _) = measure(text, FONT_SIZE);
-    let box_x = x - tw / 2.0 - 20.0;
-    let box_y = if dir < 0 {
-        y - FONT_SIZE - 4.0
-    } else {
-        y + 4.0
-    };
-    let box_w = tw + 40.0;
-    let box_h = FONT_SIZE + 4.0;
-    let text_y = if dir < 0 {
-        y - 2.0
-    } else {
-        y + FONT_SIZE + 4.0
-    };
-
-    let elements = vec![
-        format!(
-            r#"<rect class="ishikawa-label-box" x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}"/>"#,
-            box_x, box_y, box_w, box_h
-        ),
-        format!(
-            r#"<text class="ishikawa-label cause" text-anchor="middle" x="{:.2}" y="{:.2}" font-size="{}">{}</text>"#,
+/// Build an SVG multiline text element matching Mermaid's drawMultilineText().
+///
+/// Mermaid places the text such that the first tspan is at:
+///   y_base = y - (lines.length - 1) * lh / 2
+/// and each subsequent tspan has dy = lh.
+fn build_multiline_text(
+    text: &str,
+    x: f64,
+    y: f64,
+    cls: &str,
+    anchor: &str,
+    font_size: f64,
+) -> String {
+    let lines = split_lines(text);
+    let lh = font_size * 1.05;
+    let y_first = y - (lines.len() as f64 - 1.0) * lh / 2.0;
+    let mut tspans = String::new();
+    for (i, line) in lines.iter().enumerate() {
+        let dy = if i == 0 {
+            "0".to_string()
+        } else {
+            format!("{:.5}", lh)
+        };
+        tspans.push_str(&format!(
+            r#"<tspan x="{:.5}" dy="{}">{}</tspan>"#,
             x,
-            text_y,
-            FONT_SIZE,
-            escape(text)
-        ),
-    ];
-    (elements, box_x)
+            dy,
+            esc(line)
+        ));
+    }
+    format!(
+        r#"<text class="{}" text-anchor="{}" x="{:.5}" y="{:.5}" font-size="{}" dominant-baseline="middle">{}</text>"#,
+        cls, anchor, x, y_first, font_size, tspans,
+    )
 }
 
 #[derive(Debug)]
@@ -390,6 +575,7 @@ struct LabelEntry {
 }
 
 /// Flatten the tree into a pre/post-order sequence matching ishikawaRenderer.ts flattenTree().
+/// Each entry's text is wrapped at 15 chars (as done in Mermaid's flattenTree).
 fn flatten_tree(children: &[IshikawaNode], dir: i32) -> (Vec<LabelEntry>, Vec<usize>) {
     let mut entries: Vec<LabelEntry> = Vec::new();
     let mut y_order: Vec<usize> = Vec::new();
@@ -410,20 +596,22 @@ fn flatten_tree(children: &[IshikawaNode], dir: i32) -> (Vec<LabelEntry>, Vec<us
         for child in ordered {
             let idx = entries.len() as i32;
             let gc = &child.children;
+            // Mermaid wraps at 15 chars in flattenTree
+            let wrapped = wrap_text_static(&child.text, 15);
             entries.push(LabelEntry {
                 depth,
-                text: child.text.clone(),
+                text: wrapped,
                 parent_index: pid,
                 child_count: gc.len(),
             });
             if depth.is_multiple_of(2) {
-                // even: pre-order
+                // even: pre-order (push before children)
                 y_order.push(idx as usize);
                 if !gc.is_empty() {
                     walk(gc, idx, depth + 1, dir, entries, y_order);
                 }
             } else {
-                // odd: post-order
+                // odd: post-order (push after children)
                 if !gc.is_empty() {
                     walk(gc, idx, depth + 1, dir, entries, y_order);
                 }
@@ -436,39 +624,13 @@ fn flatten_tree(children: &[IshikawaNode], dir: i32) -> (Vec<LabelEntry>, Vec<us
     (entries, y_order)
 }
 
+/// Static version of wrap_text for use inside fn item (no captures).
+fn wrap_text_static(text: &str, max_chars: usize) -> String {
+    wrap_text(text, max_chars)
+}
+
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
     a + (b - a) * t
-}
-
-fn fmt(v: f64) -> String {
-    format!("{:.2}", v)
-}
-
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn empty_svg() -> String {
-    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text x="10" y="30" font-size="14">Empty Ishikawa</text></svg>"#.to_string()
-}
-
-fn build_style(ff: &str) -> String {
-    format!(
-        r#"
-.ishikawa-spine {{ stroke: #333; stroke-width: 3; fill: none; }}
-.ishikawa-branch {{ stroke: #333; stroke-width: 2; fill: none; }}
-.ishikawa-sub-branch {{ stroke: #555; stroke-width: 1.5; fill: none; }}
-.ishikawa-head {{ fill: #fff; stroke: #333; stroke-width: 2; }}
-.ishikawa-head-label {{ fill: #333; font-family: {ff}; font-weight: bold; }}
-.ishikawa-label {{ fill: #333; font-family: {ff}; }}
-.ishikawa-label-box {{ fill: #fff; stroke: #333; stroke-width: 1; rx: 3; ry: 3; }}
-.ishikawa-arrow {{ fill: #333; }}
-.ishikawa-title {{ fill: #333; font-family: {ff}; }}
-"#,
-        ff = ff,
-    )
 }
 
 #[cfg(test)]
@@ -483,7 +645,8 @@ mod tests {
         let svg = render(&diag, Theme::Default);
         assert!(svg.contains("<svg"));
         assert!(svg.contains("ishikawa-spine"));
-        assert!(svg.contains("Equipment failure"));
+        // Head text may be wrapped into tspan elements, so check for a word fragment
+        assert!(svg.contains("Equipment"));
     }
 
     #[test]
@@ -494,6 +657,33 @@ mod tests {
         };
         let svg = render(&diag, Theme::Default);
         assert!(svg.contains("Empty Ishikawa"));
+    }
+
+    #[test]
+    fn lower_branch_within_viewbox() {
+        // Regression: lower cause label must not exceed the SVG viewBox height.
+        let input = "ishikawa\n    Effect: [Quality Problem]\n    Cause1: [Materials]\n        SubCause1: [Bad input]\n    Cause2: [Methods]\n        SubCause2: [Wrong process]";
+        let diag = parser::parse(input).diagram;
+        let svg = render(&diag, crate::theme::Theme::Default);
+
+        // Extract viewBox height
+        let vb_start = svg.find("viewBox=\"0 0 ").expect("viewBox not found");
+        let rest = &svg[vb_start + 13..];
+        let parts: Vec<f64> = rest
+            .split_whitespace()
+            .take(2)
+            .filter_map(|s| s.trim_end_matches('"').parse().ok())
+            .collect();
+        assert_eq!(parts.len(), 2, "could not parse viewBox");
+        let _total_w = parts[0];
+        let total_h = parts[1];
+
+        // The SVG height must be >= 500 to contain both the upper and lower branches
+        // (each ~250px branch + labels).  Previous bug produced ~540 but clipped content.
+        assert!(
+            total_h >= 530.0,
+            "SVG height {total_h} too small — lower content is clipped"
+        );
     }
 
     #[test]

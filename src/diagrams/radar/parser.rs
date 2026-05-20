@@ -62,7 +62,8 @@ pub struct RadarDiagram {
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 pub fn parse(input: &str) -> crate::error::ParseResult<RadarDiagram> {
-    let mut title: Option<String> = None;
+    // Extract title from YAML frontmatter if present
+    let mut title: Option<String> = extract_frontmatter_title(input);
     let mut axes: Vec<RadarAxis> = Vec::new();
     let mut curves: Vec<RadarCurve> = Vec::new();
     let mut options = RadarOptions::default();
@@ -112,7 +113,10 @@ pub fn parse(input: &str) -> crate::error::ParseResult<RadarDiagram> {
         }
         // end options
         if in_options
-            && (trimmed == "end" || trimmed.starts_with("axes") || trimmed.starts_with("curve"))
+            && (trimmed == "end"
+                || trimmed.starts_with("axes")
+                || trimmed.starts_with("axis")
+                || trimmed.starts_with("curve"))
         {
             in_options = false;
             // fall-through to handle current line
@@ -121,9 +125,17 @@ pub fn parse(input: &str) -> crate::error::ParseResult<RadarDiagram> {
             continue;
         }
 
-        // axes declaration: "axes name1 ["label1"], name2 ["label2"], ..."
-        if let Some(stripped) = trimmed.strip_prefix("axes") {
-            let rest = stripped.trim();
+        // axes/axis declaration: "axis name1 ["label1"], name2 ["label2"], ..."
+        //   Accepts both "axis" (singular, used in live-editor) and "axes" (plural).
+        //   The keyword must be followed by whitespace or end-of-line, not a letter
+        //   (to avoid matching config keys like "axisScaleFactor").
+        let is_word_boundary = |s: &&str| s.is_empty() || s.starts_with(char::is_whitespace);
+        let axis_rest_opt = trimmed
+            .strip_prefix("axes")
+            .filter(is_word_boundary)
+            .or_else(|| trimmed.strip_prefix("axis").filter(is_word_boundary));
+        if let Some(rest) = axis_rest_opt {
+            let rest = rest.trim();
             for part in rest.split(',') {
                 let part = part.trim();
                 if part.is_empty() {
@@ -138,24 +150,57 @@ pub fn parse(input: &str) -> crate::error::ParseResult<RadarDiagram> {
             continue;
         }
 
-        // curve declaration: "curve name ["label"]: v1, v2, v3"
-        //   or reference-style: "curve name ["label"]: axis1: v1, axis2: v2"
+        // curve declaration variants:
+        //   "curve name ["label"]: v1, v2, v3"          (colon-separated values)
+        //   "curve name ["label"]{v1, v2, v3}"          (brace-separated values)
+        //   "curve name ["label"]: axis1: v1, axis2: v2" (reference style)
+        //   "curve name ["label"] { A: v1, B: v2 }"     (Langium grammar style)
         if let Some(stripped) = trimmed.strip_prefix("curve") {
             let rest = stripped.trim();
-            if let Some(colon_pos) = rest.find(':') {
-                let head = rest[..colon_pos].trim();
-                let vals_str = rest[colon_pos + 1..].trim();
-                let (name, label) = parse_name_label(head);
 
-                // Parse values — either plain numbers or "axis: value" pairs
-                let entries = parse_curve_values(vals_str, &axes);
+            // Brace-style: "name["label"]{...}" or "name { ... }"
+            let (head, vals_str) = if let Some(brace_pos) = rest.find('{') {
+                let h = rest[..brace_pos].trim();
+                let inner = rest[brace_pos + 1..].trim_end_matches('}').trim();
+                (h, inner)
+            } else if let Some(colon_pos) = rest.find(':') {
+                // Colon style: find the first colon that separates name from values.
+                // Name may contain a bracket label like name["label"] with no colon inside.
+                let h = rest[..colon_pos].trim();
+                let v = rest[colon_pos + 1..].trim();
+                (h, v)
+            } else {
+                continue;
+            };
 
-                curves.push(RadarCurve {
-                    label: label.unwrap_or(name),
-                    entries,
-                });
-            }
+            let (name, label) = parse_name_label(head);
+            let entries = parse_curve_values(vals_str, &axes);
+
+            curves.push(RadarCurve {
+                label: label.unwrap_or(name),
+                entries,
+            });
             continue;
+        }
+
+        // Standalone "max N" and "min N" directives (top-level, not inside options block)
+        if let Some(rest) = trimmed.strip_prefix("max") {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                let rest = rest.trim();
+                if let Ok(v) = rest.parse::<f64>() {
+                    options.max = Some(v);
+                }
+                continue;
+            }
+        }
+        if let Some(rest) = trimmed.strip_prefix("min") {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                let rest = rest.trim();
+                if let Ok(v) = rest.parse::<f64>() {
+                    options.min = v;
+                }
+                continue;
+            }
         }
     }
 
@@ -252,4 +297,25 @@ fn parse_curve_values(vals_str: &str, axes: &[RadarAxis]) -> Vec<f64> {
             .map(|p| p.trim().parse::<f64>().unwrap_or(0.0))
             .collect()
     }
+}
+
+/// Extract `title:` value from YAML frontmatter block (--- ... ---).
+fn extract_frontmatter_title(input: &str) -> Option<String> {
+    let trimmed = input.trim_start();
+    if !trimmed.starts_with("---") {
+        return None;
+    }
+    let after = &trimmed[3..];
+    let end = after.find("\n---")?;
+    let frontmatter = &after[..end];
+    for line in frontmatter.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("title:") {
+            let val = rest.trim().trim_matches('"').trim_matches('\'').trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
 }

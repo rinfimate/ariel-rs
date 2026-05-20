@@ -79,8 +79,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<MindmapDiagram> {
     for raw_line in input.lines() {
         let trimmed = raw_line.trim_end();
 
-        // Skip blank lines and comments
-        if trimmed.trim().is_empty() || trimmed.trim().starts_with("%%") {
+        // Skip blank lines, comments, and ::icon() / ::class() directives
+        if trimmed.trim().is_empty()
+            || trimmed.trim().starts_with("%%")
+            || trimmed.trim().starts_with("::")
+        {
             continue;
         }
 

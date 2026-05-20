@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{PacketDiagram, PacketField};
-use super::templates;
+use super::templates::{self, build_style, esc, fmt};
 /// Faithful Rust port of Mermaid's packetRenderer.ts.
 ///
 /// Layout algorithm (matches packetRenderer.ts / drawWord):
@@ -141,6 +141,14 @@ fn build_words(fields: &[PacketField]) -> Vec<Vec<PacketField>> {
         let end = field.end;
         let label = field.label.clone();
 
+        // Advance row to the one containing `start` (handles gaps in bit ranges)
+        while row * BITS_PER_ROW <= start {
+            if !current_word.is_empty() {
+                words.push(std::mem::take(&mut current_word));
+            }
+            row += 1;
+        }
+
         loop {
             // Does this segment fit within the current row?
             let row_end_bit = row * BITS_PER_ROW - 1; // last bit of current row (inclusive)
@@ -178,41 +186,6 @@ fn build_words(fields: &[PacketField]) -> Vec<Vec<PacketField>> {
     }
 
     words
-}
-
-fn build_style(id: &str, ff: &str) -> String {
-    // Matches mermaid's packet styles (defaultPacketStyleOptions)
-    format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}\
-        #{id} .packetByte{{font-size:10px;}}\
-        #{id} .packetByte.start{{fill:black;}}\
-        #{id} .packetByte.end{{fill:black;}}\
-        #{id} .packetLabel{{fill:black;font-size:12px;}}\
-        #{id} .packetTitle{{fill:black;font-size:14px;}}\
-        #{id} .packetBlock{{stroke:black;stroke-width:1;fill:#efefef;}}\
-        #{id} :root{{--mermaid-font-family:{ff};}}",
-        id = id,
-        ff = ff,
-    )
-}
-
-fn fmt(v: f64) -> String {
-    // Format without unnecessary decimals, matching mermaid's d3 integer output
-    if v == v.floor() && v.abs() < 1e12 {
-        format!("{}", v as i64)
-    } else {
-        let s = format!("{:.4}", v);
-        let s = s.trim_end_matches('0');
-        let s = s.trim_end_matches('.');
-        s.to_string()
-    }
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]

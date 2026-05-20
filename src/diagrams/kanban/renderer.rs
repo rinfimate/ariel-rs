@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{KanbanDiagram, KanbanSection, NodeShape};
-use super::templates;
+use super::templates::{self, assignee_label, build_css, esc, priority_line, ticket_link};
 /// Faithful Rust port of Mermaid's kanbanRenderer.ts.
 ///
 /// Layout algorithm (column-based, NOT dagre):
@@ -15,18 +15,56 @@ use super::templates;
 ///   - viewBox: "90 -310 W H" where W = 15 + n_cols*205, H = max_col_h + 20.
 ///
 /// This port faithfully replicates the Mermaid coordinate system and CSS class scheme.
+use crate::text::measure;
 use crate::theme::Theme;
 
-// ── SVG helpers ────────────────────────────────────────────────────────────────
+// ── Layout math ────────────────────────────────────────────────────────────────
 
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+/// Estimate card height for a given item, accounting for text wrapping and metadata row.
+fn item_height_full(item: &crate::diagrams::kanban::parser::KanbanItem) -> f64 {
+    let base = item_height(&item.label);
+    // Add a metadata row if ticket or assigned is present
+    if item.ticket.is_some() || item.assigned.is_some() {
+        base + 12.0
+    } else {
+        base
+    }
 }
 
-// ── Layout math ────────────────────────────────────────────────────────────────
+/// Estimate card height for a given label, accounting for text wrapping.
+/// Mirrors Mermaid's getBBox()-based approach as a static approximation.
+fn item_height(label: &str) -> f64 {
+    // Mermaid renders kanban labels at 16px — use 16px for wrapping estimation
+    // so items wrap at the same point the browser would wrap them.
+    let (text_w, _) = measure(label, FONT_SIZE);
+    let lines = ((text_w * TEXT_SCALE) / AVAILABLE_WIDTH).ceil().max(1.0);
+    (lines * LINE_HEIGHT + V_PADDING).max(ITEM_HEIGHT)
+}
+
+/// Map a priority string to its stroke color.
+fn priority_color(priority: &str) -> Option<&'static str> {
+    match priority.to_lowercase().as_str() {
+        "very high" => Some("red"),
+        "high" => Some("orange"),
+        "low" => Some("blue"),
+        "very low" => Some("lightblue"),
+        _ => None,
+    }
+}
+
+/// foreignObject height for a given label (full card, no metadata).
+fn fo_height(label: &str) -> f64 {
+    item_height(label) - 4.0
+}
+
+/// Text-only height — just the wrapped lines, no padding.
+/// Used when a metadata row is present so we can position label + metadata cleanly.
+#[allow(dead_code)]
+fn text_height(label: &str) -> f64 {
+    let (text_w, _) = measure(label, FONT_SIZE);
+    let lines = ((text_w * TEXT_SCALE) / AVAILABLE_WIDTH).ceil().max(1.0);
+    lines * LINE_HEIGHT
+}
 
 /// Column left-edge x position (0-based index).
 fn col_left_x(idx: usize) -> f64 {
@@ -38,22 +76,29 @@ fn col_center_x(idx: usize) -> f64 {
     col_left_x(idx) + SECTION_WIDTH / 2.0
 }
 
-/// Column height for a given number of items.
-/// Mirrors Mermaid: 79 for 1 item, +49 per additional item, min 50 for 0 items.
-fn col_height(n_items: usize) -> f64 {
-    if n_items == 0 {
-        50.0
-    } else {
-        79.0 + (n_items as f64 - 1.0) * (ITEM_HEIGHT + ITEM_GAP)
+/// Column height accounting for variable item heights (text wrapping + metadata).
+fn col_height_dynamic(items: &[crate::diagrams::kanban::parser::KanbanItem]) -> f64 {
+    if items.is_empty() {
+        return 50.0;
     }
+    let total: f64 = items
+        .iter()
+        .map(|it| item_height_full(it) + ITEM_GAP)
+        .sum::<f64>()
+        - ITEM_GAP;
+    LABEL_HEIGHT + total + 10.0
 }
 
-/// Y center of item at position `item_idx` (0-based) within the column.
-/// First item center = COL_TOP + LABEL_HEIGHT + ITEM_HEIGHT/2
-///                   = -300 + 25 + 22 = -253
-/// Each subsequent item is (ITEM_HEIGHT + ITEM_GAP) = 49 below.
-fn item_center_y(item_idx: usize) -> f64 {
-    COL_TOP + LABEL_HEIGHT + ITEM_HEIGHT / 2.0 + item_idx as f64 * (ITEM_HEIGHT + ITEM_GAP)
+/// Cumulative Y centers for each item in a section, accounting for variable heights.
+fn item_center_ys(items: &[crate::diagrams::kanban::parser::KanbanItem]) -> Vec<f64> {
+    let mut ys = Vec::with_capacity(items.len());
+    let mut y = COL_TOP + LABEL_HEIGHT;
+    for item in items {
+        let h = item_height_full(item);
+        ys.push(y + h / 2.0);
+        y += h + ITEM_GAP;
+    }
+    ys
 }
 
 // ── HSL section color palette (mirrors Mermaid's kanban CSS generation) ────────
@@ -65,116 +110,6 @@ fn item_center_y(item_idx: usize) -> f64 {
 //
 // We embed the same CSS classes as Mermaid so the PNG renderer applies them.
 
-// section-N text color: white for section where hue makes it dark enough
-fn section_text_color(section_idx: usize) -> &'static str {
-    match section_idx {
-        2 => "#ffffff",
-        _ => "black",
-    }
-}
-
-// ── CSS generation ─────────────────────────────────────────────────────────────
-
-fn build_css(svg_id: &str, ff: &str) -> String {
-    let mut s = format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .edge{{stroke-width:3;}}",
-        ),
-        id = svg_id,
-        ff = ff,
-    );
-
-    // section--1 (default/fallback)
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section--1 rect,#{id} .section--1 path,#{id} .section--1 circle,",
-            "#{id} .section--1 polygon,#{id} .section--1 path{{",
-            "fill:hsl(240, 100%, {l});stroke:hsl(240, 100%, {l});}}",
-            "#{id} .section--1 text{{fill:#ffffff;}}",
-        ),
-        id = svg_id,
-        l = SECTION_L,
-    ));
-
-    // section-0
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section-0 rect,#{id} .section-0 path,#{id} .section-0 circle,",
-            "#{id} .section-0 polygon,#{id} .section-0 path{{",
-            "fill:hsl({h}, 100%, {l});stroke:hsl({h}, 100%, {l});}}",
-            "#{id} .section-0 text{{fill:black;}}",
-        ),
-        id = svg_id,
-        h = SECTION_HUES[0],
-        l = SECTION_L_0,
-    ));
-
-    // section-1 through section-10
-    for (i, &hue) in SECTION_HUES.iter().enumerate().skip(1) {
-        let text_color = section_text_color(i);
-        let (l, _ld) = if i == 0 {
-            (SECTION_L_0, SECTION_L_0_DARK)
-        } else {
-            (SECTION_L, SECTION_L_DARK)
-        };
-        s.push_str(&format!(
-            concat!(
-                "#{id} .section-{idx} rect,#{id} .section-{idx} path,#{id} .section-{idx} circle,",
-                "#{id} .section-{idx} polygon,#{id} .section-{idx} path{{",
-                "fill:hsl({h}, 100%, {l});stroke:hsl({h}, 100%, {l});}}",
-                "#{id} .section-{idx} text{{fill:{tc};}}",
-            ),
-            id = svg_id,
-            idx = i,
-            h = hue,
-            l = l,
-            tc = text_color,
-        ));
-    }
-
-    // Node (card) styles
-    s.push_str(&format!(
-        concat!(
-            "#{id} .node rect,#{id} .node circle,#{id} .node ellipse,",
-            "#{id} .node polygon,#{id} .node path{{",
-            "fill:white;stroke:#9370DB;stroke-width:1px;}}",
-            "#{id} .kanban-ticket-link{{fill:white;stroke:#9370DB;text-decoration:underline;}}",
-        ),
-        id = svg_id,
-    ));
-
-    // kanban-label
-    s.push_str(&format!(
-        concat!(
-            "#{id} .kanban-label{{",
-            "dy:1em;alignment-baseline:middle;text-anchor:middle;",
-            "dominant-baseline:middle;text-align:center;}}",
-        ),
-        id = svg_id,
-    ));
-
-    // cluster-label / label
-    s.push_str(&format!(
-        "#{id} .cluster-label,#{id} .label{{color:#333;fill:#333;}}",
-        id = svg_id,
-    ));
-
-    // section-root
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section-root rect,#{id} .section-root path,",
-            "#{id} .section-root circle,#{id} .section-root polygon{{",
-            "fill:hsl(240, 100%, 46.2745098039%);}}",
-            "#{id} .section-root text{{fill:#ffffff;}}",
-        ),
-        id = svg_id,
-    ));
-
-    s
-}
-
 // ── Section rendering ──────────────────────────────────────────────────────────
 
 /// Render a single column section.
@@ -185,24 +120,24 @@ fn render_section_and_items(
     sec_idx: usize, // 1-based
     col_idx: usize, // 0-based
     svg_id: &str,
+    ticket_base_url: Option<&str>,
 ) -> (String, String) {
     let cx = col_center_x(col_idx);
     let lx = col_left_x(col_idx);
     let col_top = COL_TOP;
-    let n = section.items.len();
-    let col_h = col_height(n);
+    let col_h = col_height_dynamic(&section.items);
+    let item_centers = item_center_ys(&section.items);
 
     // ── Section column rect ──────────────────────────────────────────────────
-    let mut sec_svg = templates::section_group_open(sec_idx, svg_id, &escape(&section.id));
+    let mut sec_svg = templates::section_group_open(sec_idx, svg_id, &esc(&section.id));
 
     sec_svg.push_str(&templates::section_rect(lx, col_top, SECTION_WIDTH, col_h));
 
-    // Column header label
-    let label_x = cx;
+    // Column header label — full-width foreignObject centered in the column.
     sec_svg.push_str(&templates::section_label_fo(
-        label_x - 80.0,
+        lx + 20.0,
         col_top,
-        &escape(&section.label),
+        &esc(&section.label),
     ));
 
     sec_svg.push_str("</g>");
@@ -210,17 +145,14 @@ fn render_section_and_items(
     // ── Items ────────────────────────────────────────────────────────────────
     let mut items_svg = String::new();
     let item_w_half = ITEM_WIDTH / 2.0;
-    let item_h_half = ITEM_HEIGHT / 2.0;
 
     for (item_idx, item) in section.items.iter().enumerate() {
-        let icy = item_center_y(item_idx);
+        let icy = item_centers[item_idx];
+        let dyn_h = item_height_full(item);
+        let item_h_half = dyn_h / 2.0;
+        let has_meta = item.ticket.is_some() || item.assigned.is_some();
 
-        items_svg.push_str(&templates::item_group_open(
-            svg_id,
-            &escape(&item.id),
-            cx,
-            icy,
-        ));
+        items_svg.push_str(&templates::item_group_open(svg_id, &esc(&item.id), cx, icy));
 
         // Card rect (shape determines style)
         let (rx_val, _shape_extra) = match item.shape {
@@ -230,16 +162,16 @@ fn render_section_and_items(
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
                     -item_h_half + 4.0,
-                    ITEM_WIDTH - 20.0,
                     ITEM_WIDTH - 10.0,
-                    &escape(&item.label),
+                    ITEM_WIDTH - 10.0,
+                    fo_height(&item.label),
+                    &esc(&item.label),
                 ));
                 items_svg.push_str("</g>");
                 continue;
             }
             NodeShape::RoundedRect => (item_h_half / 2.0, None::<String>),
             NodeShape::Hexagon => {
-                // Polygon
                 let dx = item_w_half / 2.0;
                 let pts = format!(
                     "{:.2},{:.2} {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
@@ -260,9 +192,10 @@ fn render_section_and_items(
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
                     -item_h_half / 2.0,
-                    ITEM_WIDTH - 20.0,
                     ITEM_WIDTH - 10.0,
-                    &escape(&item.label),
+                    ITEM_WIDTH - 10.0,
+                    fo_height(&item.label),
+                    &esc(&item.label),
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -270,19 +203,19 @@ fn render_section_and_items(
             NodeShape::Cloud => (item_h_half, None),
             NodeShape::Bang => (4.0, None),
             NodeShape::Default => {
-                // No border
                 items_svg.push_str(&templates::item_default_rect(
                     -item_w_half,
                     -item_h_half,
                     ITEM_WIDTH,
-                    ITEM_HEIGHT,
+                    dyn_h,
                 ));
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
                     -item_h_half / 2.0 - 6.0,
-                    ITEM_WIDTH - 20.0,
                     ITEM_WIDTH - 10.0,
-                    &escape(&item.label),
+                    ITEM_WIDTH - 10.0,
+                    fo_height(&item.label),
+                    &esc(&item.label),
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -296,29 +229,87 @@ fn render_section_and_items(
             -item_w_half,
             -item_h_half,
             ITEM_WIDTH,
-            ITEM_HEIGHT,
+            dyn_h,
         ));
 
-        // Primary label: translate(-82.5, -12) — mirrors Mermaid's label placement
+        // Primary label — position depends on whether metadata row is present.
+        let (label_ty, label_fo_h) = if has_meta {
+            // Label occupies top portion, metadata row follows immediately after.
+            let ty = -(item_h_half - 4.0);
+            let fh = text_height(&item.label);
+            (ty, fh)
+        } else {
+            (-item_h_half + 10.0, fo_height(&item.label))
+        };
         items_svg.push_str(&templates::item_label_fo(
             -item_w_half + 10.0,
-            -item_h_half + 10.0,
-            estimate_text_width(&item.label, 16.0),
+            label_ty,
             ITEM_WIDTH - 10.0,
-            &escape(&item.label),
+            ITEM_WIDTH - 10.0,
+            label_fo_h,
+            &esc(&item.label),
         ));
 
-        // Secondary label slots (empty) — mirrors Mermaid structure
-        items_svg.push_str(&templates::item_label_empty(
-            -item_w_half + 10.0,
-            item_h_half - 10.0,
-            ITEM_WIDTH - 10.0,
-        ));
-        items_svg.push_str(&templates::item_label_empty(
-            item_w_half - 10.0,
-            item_h_half - 10.0,
-            ITEM_WIDTH - 10.0,
-        ));
+        // Ticket + assignee metadata row — positioned immediately below the label.
+        if has_meta {
+            let meta_y = label_ty + label_fo_h;
+            // Ticket number as clickable link (left side)
+            if let Some(ref ticket) = item.ticket {
+                let ticket_url = ticket_base_url
+                    .map(|u| u.replace("#TICKET#", ticket))
+                    .unwrap_or_default();
+                if ticket_url.is_empty() {
+                    items_svg.push_str(&templates::item_label_fo_fixed(
+                        -item_w_half + 10.0,
+                        meta_y,
+                        60.0,
+                        60.0,
+                        24.0,
+                        &esc(ticket),
+                    ));
+                } else {
+                    items_svg.push_str(&ticket_link(
+                        &ticket_url,
+                        -item_w_half + 10.0,
+                        meta_y,
+                        &esc(ticket),
+                    ));
+                }
+            }
+            // Assignee (right side) — nowrap so names don't get cut off.
+            if let Some(ref assigned) = item.assigned {
+                items_svg.push_str(&assignee_label(
+                    -5.0,
+                    meta_y,
+                    item_w_half + 5.0,
+                    &esc(assigned),
+                ));
+            }
+        } else {
+            // Empty secondary label slots — mirrors Mermaid structure
+            items_svg.push_str(&templates::item_label_empty(
+                -item_w_half + 10.0,
+                item_h_half - 10.0,
+                ITEM_WIDTH - 10.0,
+            ));
+            items_svg.push_str(&templates::item_label_empty(
+                item_w_half - 10.0,
+                item_h_half - 10.0,
+                ITEM_WIDTH - 10.0,
+            ));
+        }
+
+        // Priority indicator — colored vertical line on left edge of card.
+        if let Some(ref p) = item.priority {
+            if let Some(color) = priority_color(p) {
+                items_svg.push_str(&priority_line(
+                    -item_w_half + 2.0,
+                    -item_h_half + 2.0,
+                    item_h_half - 2.0,
+                    color,
+                ));
+            }
+        }
 
         items_svg.push_str("</g>");
     }
@@ -328,6 +319,7 @@ fn render_section_and_items(
 
 /// Rough text width estimation (for foreignObject sizing only).
 /// Uses 0.6 * font_size * char_count as approximation.
+#[allow(dead_code)]
 fn estimate_text_width(text: &str, font_size: f64) -> f64 {
     text.len() as f64 * font_size * 0.6
 }
@@ -349,7 +341,7 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
     let max_col_h = diag
         .sections
         .iter()
-        .map(|s| col_height(s.items.len()))
+        .map(|s| col_height_dynamic(&s.items))
         .fold(0.0_f64, f64::max);
 
     // viewBox dimensions
@@ -369,7 +361,9 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
         vb_h as u64,
     ));
 
-    out.push_str(&format!("<style>{css}</style>"));
+    out.push_str("<style>");
+    out.push_str(&css);
+    out.push_str("</style>");
 
     // Empty g (matches Mermaid structure)
     out.push_str("<g></g>");
@@ -380,7 +374,13 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
 
     for (i, section) in diag.sections.iter().enumerate() {
         let sec_idx = i + 1; // 1-based
-        let (sec_svg, items_svg) = render_section_and_items(section, sec_idx, i, svg_id);
+        let (sec_svg, items_svg) = render_section_and_items(
+            section,
+            sec_idx,
+            i,
+            svg_id,
+            diag.config.ticket_base_url.as_deref(),
+        );
         sections_svg.push_str(&sec_svg);
         items_svg_parts.push(items_svg);
     }
@@ -421,7 +421,12 @@ mod tests {
 
     #[test]
     fn empty_kanban_produces_svg() {
-        let diag = KanbanDiagram { sections: vec![] };
+        let diag = KanbanDiagram {
+            sections: vec![],
+            config: crate::diagrams::kanban::parser::KanbanConfig {
+                ticket_base_url: None,
+            },
+        };
         let svg = render(&diag, Theme::Default);
         assert!(svg.contains("<svg"));
     }
@@ -446,14 +451,14 @@ mod tests {
 
     #[test]
     fn viewbox_matches_mermaid() {
-        // 3 columns: vb_w = 15 + 3*205 = 630, vb_h = 148 (max col h=128 + 20)
+        // 3 columns: vb_w = 15 + 3*205 = 630
         let input = "kanban\n  Todo\n    id1[Write blog post]\n    id2[Plan vacation]\n  In Progress\n    id3[Write code]\n  Done\n    id4[Create diagrams]";
         let diag = parser::parse(input).diagram;
         let svg = render(&diag, Theme::Default);
         assert!(
-            svg.contains(r#"viewBox="90 -310 630 148""#),
-            "viewBox mismatch: {}",
-            &svg[..500]
+            svg.contains(r#"viewBox="90 -310 630 "#),
+            "viewBox width mismatch: {}",
+            &svg[..200]
         );
     }
 

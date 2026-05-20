@@ -4,6 +4,45 @@
 //! No rendering logic lives here — only string formatting.
 #![allow(dead_code)]
 
+use super::constants::FONT_SIZE;
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+pub use crate::diagrams::util::{esc, fmt};
+
+// ---------------------------------------------------------------------------
+// CSS
+// ---------------------------------------------------------------------------
+
+pub fn build_style(ff: &str) -> String {
+    format!(
+        r#"
+.ishikawa .ishikawa-spine,
+.ishikawa .ishikawa-branch,
+.ishikawa .ishikawa-sub-branch {{
+  stroke: #333333;
+  stroke-width: 2;
+  fill: none;
+}}
+.ishikawa .ishikawa-sub-branch {{ stroke-width: 1; }}
+.ishikawa .ishikawa-arrow {{ fill: #333333; }}
+.ishikawa .ishikawa-head {{ fill: #ECECFF; stroke: #333333; stroke-width: 2; }}
+.ishikawa .ishikawa-label-box {{ fill: #ECECFF; stroke: #333333; stroke-width: 2; }}
+.ishikawa text {{ font-family: {ff}; font-size: {fs}px; fill: #333; }}
+.ishikawa .ishikawa-head-label {{ font-weight: 600; text-anchor: middle; dominant-baseline: middle; font-size: 14px; }}
+.ishikawa .ishikawa-label {{ text-anchor: end; }}
+.ishikawa .ishikawa-label.cause {{ text-anchor: middle; dominant-baseline: middle; }}
+.ishikawa .ishikawa-label.align {{ text-anchor: end; dominant-baseline: middle; }}
+.ishikawa .ishikawa-label.up {{ dominant-baseline: baseline; }}
+.ishikawa .ishikawa-label.down {{ dominant-baseline: hanging; }}
+"#,
+        ff = ff,
+        fs = FONT_SIZE as usize,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Arrow marker
 // ---------------------------------------------------------------------------
@@ -33,7 +72,7 @@ pub fn svg_root(
     content: &str,
 ) -> String {
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {vw:.1} {vh:.1}" width="100%" style="max-width:{mw:.0}px"><style>{style}</style>{title_part}<g transform="translate({tx:.1},{ty:.1})">{content}</g></svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {vw:.5} {vh:.5}" width="100%" style="max-width:{mw:.0}px"><style>{style}</style>{title_part}<g class="ishikawa" transform="translate({tx:.5},{ty:.5})">{content}</g></svg>"#,
         vw = vw,
         vh = vh,
         mw = mw,
@@ -52,7 +91,7 @@ pub fn svg_root(
 /// Render the main spine `<line>`.
 pub fn spine_line(x1: f64, y: f64) -> String {
     format!(
-        r#"<line class="ishikawa-spine" x1="{:.1}" y1="{:.1}" x2="0" y2="{:.1}"/>"#,
+        r#"<line class="ishikawa-spine" x1="{:.5}" y1="{:.5}" x2="0" y2="{:.5}"/>"#,
         x1, y, y,
     )
 }
@@ -64,7 +103,7 @@ pub fn spine_line(x1: f64, y: f64) -> String {
 /// Render a main branch `<line>` (diagonal, with marker-start arrowhead).
 pub fn branch_line(x1: f64, y1: f64, x2: f64, y2: f64, marker_url: &str) -> String {
     format!(
-        r#"<line class="ishikawa-branch" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" marker-start="{}"/>"#,
+        r#"<line class="ishikawa-branch" x1="{:.5}" y1="{:.5}" x2="{:.5}" y2="{:.5}" marker-start="{}"/>"#,
         x1, y1, x2, y2, marker_url,
     )
 }
@@ -72,7 +111,7 @@ pub fn branch_line(x1: f64, y1: f64, x2: f64, y2: f64, marker_url: &str) -> Stri
 /// Render a sub-branch `<line>` (with marker-start arrowhead).
 pub fn sub_branch_line(x1: f64, y1: f64, x2: f64, y2: f64, marker_url: &str) -> String {
     format!(
-        r#"<line class="ishikawa-sub-branch" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" marker-start="{}"/>"#,
+        r#"<line class="ishikawa-sub-branch" x1="{:.5}" y1="{:.5}" x2="{:.5}" y2="{:.5}" marker-start="{}"/>"#,
         x1, y1, x2, y2, marker_url,
     )
 }
@@ -100,7 +139,7 @@ pub fn sub_label_diagonal(x: f64, y: f64, font_size: f64, text: &str) -> String 
 /// Render a cause label box `<rect>`.
 pub fn cause_label_rect(x: f64, y: f64, w: f64, h: f64) -> String {
     format!(
-        r#"<rect class="ishikawa-label-box" x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}"/>"#,
+        r#"<rect class="ishikawa-label-box" x="{:.5}" y="{:.5}" width="{:.5}" height="{:.5}"/>"#,
         x, y, w, h,
     )
 }
