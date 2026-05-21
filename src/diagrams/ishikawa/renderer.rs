@@ -331,6 +331,7 @@ fn side_stats(nodes: &[&IshikawaNode]) -> SideStats {
 ///
 /// leftmost_text_x approximates the min getBBox().x of all text nodes in this branch,
 /// which is what Mermaid uses to advance spine_x after each pair.
+#[allow(clippy::too_many_arguments)]
 fn draw_branch(
     node: &IshikawaNode,
     start_x: f64,
@@ -570,7 +571,7 @@ fn build_multiline_text(
 ) -> String {
     build_multiline_text_weighted(text, x, y, cls, anchor, font_size, "", fill)
 }
-
+#[allow(clippy::too_many_arguments)]
 fn build_multiline_text_weighted(
     text: &str,
     x: f64,

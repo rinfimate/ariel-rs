@@ -67,14 +67,6 @@ pub fn section_fill_color(sec_idx: usize, theme: Theme) -> String {
     }
 }
 
-/// Return the text color for a given section index and theme.
-pub fn section_text_color(theme: Theme) -> &'static str {
-    match theme {
-        Theme::Dark => "#ccc",
-        _ => "black",
-    }
-}
-
 /// Per-section header text colour (for themes with varying text per section index).
 pub fn section_header_text(sec_idx: usize, theme: Theme) -> &'static str {
     match theme {

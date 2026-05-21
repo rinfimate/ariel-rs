@@ -39,7 +39,7 @@ fn main() {
     for (name, diagram_text) in entries {
         dagre_dgl_rs::util::reset_id_counter();
 
-        let svg = ariel_rs::render(&diagram_text, theme.clone());
+        let svg = ariel_rs::render(&diagram_text, theme);
 
         if svg.contains("Syntax error in text") || svg.contains("Unrecognized diagram type") {
             skipped += 1;

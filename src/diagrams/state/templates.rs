@@ -175,6 +175,7 @@ pub fn node_choice(dom_id: &str, cx: f64, cy: f64, vars: &ThemeVars) -> String {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn node_note(
     dom_id: &str,
     cx: f64,

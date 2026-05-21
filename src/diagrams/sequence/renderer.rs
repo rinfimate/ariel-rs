@@ -176,6 +176,7 @@ impl Bounds {
 
 // ─── SVG helpers ────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn actor_rect_svg(
     x: f64,
     y: f64,
@@ -190,6 +191,7 @@ fn actor_rect_svg(
 }
 
 /// Render an actor-man (stick figure) at actor box position (top or bottom)
+#[allow(clippy::too_many_arguments)]
 /// cx = center x, box_y = top of the actor box area (y=0 for top, bottom_actor_y for bottom)
 fn actor_man_svg(
     cx: f64,
@@ -1096,8 +1098,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 ctrl,
                 ci,
                 diagram_id,
-                &vars.primary_color,
-                &vars.sequence_loop_color,
+                vars.primary_color,
+                vars.sequence_loop_color,
                 vars.signal_color,
             )
         })
@@ -1112,7 +1114,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 mm,
                 diagram_id,
                 auto_number,
-                &vars.signal_color,
+                vars.signal_color,
                 vars.text_color,
                 if matches!(theme, Theme::Dark) {
                     "black"
@@ -1175,8 +1177,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 &actor.name,
                 "actor-bottom",
                 ai + actor_order.len(),
-                &vars.primary_color,
-                &vars.sequence_actor_border,
+                vars.primary_color,
+                vars.sequence_actor_border,
                 vars.text_color,
             ));
         } else {
@@ -1188,8 +1190,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.height,
                 &actor.name,
                 "actor-bottom",
-                &vars.primary_color,
-                &vars.sequence_actor_border,
+                vars.primary_color,
+                vars.sequence_actor_border,
             ));
             g.push_str(&actor_text_svg(
                 actor.cx(),
@@ -1217,7 +1219,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             lifeline_start,
             lifeline_end,
             &esc(&actor.name),
-            &vars.sequence_actor_border,
+            vars.sequence_actor_border,
         ));
         // Top actor box
         if is_actor_man {
@@ -1227,8 +1229,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 &actor.name,
                 "actor-top",
                 ai,
-                &vars.primary_color,
-                &vars.sequence_actor_border,
+                vars.primary_color,
+                vars.sequence_actor_border,
                 vars.text_color,
             ));
         } else {
@@ -1240,8 +1242,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.height,
                 &actor.name,
                 "actor-top",
-                &vars.primary_color,
-                &vars.sequence_actor_border,
+                vars.primary_color,
+                vars.sequence_actor_border,
             ));
             g.push_str(&actor_text_svg(
                 actor.cx(),

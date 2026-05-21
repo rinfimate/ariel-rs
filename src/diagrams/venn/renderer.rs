@@ -658,29 +658,6 @@ fn sets_key(sets: &[String]) -> String {
     s.join("|")
 }
 
-/// Darken a CSS named color or hex color by ~30% (for set label text).
-fn darken_color(color: &str) -> String {
-    // Handle hex colors
-    if color.starts_with('#') && color.len() == 7 {
-        if let (Ok(r), Ok(g), Ok(b)) = (
-            u8::from_str_radix(&color[1..3], 16),
-            u8::from_str_radix(&color[3..5], 16),
-            u8::from_str_radix(&color[5..7], 16),
-        ) {
-            let factor = 0.6_f64;
-            return format!(
-                "#{:02X}{:02X}{:02X}",
-                (r as f64 * factor) as u8,
-                (g as f64 * factor) as u8,
-                (b as f64 * factor) as u8,
-            );
-        }
-    }
-    // Named colors — return as-is (darken is only used for label readability,
-    // the reference JS uses darken(baseColor, 30) which works on hex)
-    color.to_string()
-}
-
 // ─── Main render ──────────────────────────────────────────────────────────────
 
 pub fn render(diag: &VennDiagram, theme: Theme) -> String {

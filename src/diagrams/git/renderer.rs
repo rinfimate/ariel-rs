@@ -610,6 +610,7 @@ fn draw_commit_label(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_commit_tags(
     out: &mut String,
     commit: &Commit,

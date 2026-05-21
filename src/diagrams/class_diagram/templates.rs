@@ -75,6 +75,7 @@ pub fn edge_path(
 // ---------------------------------------------------------------------------
 
 /// Render a class diagram edge label as a plain SVG `<text>` element.
+#[allow(clippy::too_many_arguments)]
 pub fn edge_label_text(
     mx: &str,
     my: &str,

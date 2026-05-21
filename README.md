@@ -1,3 +1,5 @@
+<img src="assets/ariel.png" alt="ariel-rs" width="80"/>
+
 # ariel-rs
 
 [![CI](https://github.com/rinfimate/ariel-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/rinfimate/ariel-rs/actions/workflows/ci.yml)

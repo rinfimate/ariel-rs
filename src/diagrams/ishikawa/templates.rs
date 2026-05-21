@@ -161,6 +161,7 @@ pub fn cause_label_text(x: f64, y: f64, font_size: f64, text: &str, color: &str)
 // ---------------------------------------------------------------------------
 
 /// Render the fish head group containing the kite path and label text.
+#[allow(clippy::too_many_arguments)]
 pub fn head_group(
     spine_y: f64,
     head_path: &str,

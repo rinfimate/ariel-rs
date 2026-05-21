@@ -777,7 +777,7 @@ fn label_position_outlined(node: &LayoutNode, central_layer: usize) -> (f64, &'s
 pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
-    let line_color = vars.line_color;
+    let _line_color = vars.line_color;
     let label_color = vars.text_color;
     let svg_id = SVG_ID;
     let conf = &diag.config;

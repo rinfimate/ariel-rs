@@ -143,6 +143,7 @@ fn item_center_ys(items: &[crate::diagrams::kanban::parser::KanbanItem]) -> Vec<
 /// Render a single column section.
 /// Returns: (section_svg, items_svg) — sections go in <g class="sections">,
 /// items go in <g class="items">.
+#[allow(clippy::too_many_arguments)]
 fn render_section_and_items(
     section: &KanbanSection,
     sec_idx: usize, // 1-based

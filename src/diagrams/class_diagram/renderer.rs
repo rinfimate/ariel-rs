@@ -648,6 +648,7 @@ fn label_pos_near(pts: &[Point], is_source: bool) -> (f64, f64) {
 // terminalMarkerSize = 10 when an arrow marker is present, 0 otherwise.
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum TerminalPos {
     StartRight,
     EndLeft,

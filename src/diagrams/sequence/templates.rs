@@ -25,6 +25,7 @@ pub fn svg_root(id: &str, max_w: u64, vbx: f64, vby: i64, vbw: u64, vbh: u64) ->
 // ---------------------------------------------------------------------------
 
 /// Render a rectangular actor box (`<rect>`).
+#[allow(clippy::too_many_arguments)]
 pub fn actor_rect(
     x: f64,
     y: f64,

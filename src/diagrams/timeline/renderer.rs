@@ -631,7 +631,7 @@ fn draw_tasks(
             max_task_height,
             false,
             theme,
-            &shadow_filter,
+            shadow_filter,
         );
 
         parts.push(templates::task_wrapper(master_x, master_y, &task_svg));
@@ -676,6 +676,7 @@ fn draw_tasks(
 // ── Draw events ───────────────────────────────────────────────────────────────
 
 /// Mirrors drawEvents() in timelineRenderer.ts.
+#[allow(clippy::too_many_arguments)]
 fn draw_events_append(
     events: &[String],
     section_idx: usize,

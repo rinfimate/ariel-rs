@@ -73,8 +73,7 @@ fn swimlane_props(frame: &EmFrame, swimlanes: &HashMap<i64, Swimlane>) -> Swimla
                         .clone()
                         .unwrap_or_else(|| LABEL_UI_AUTOMATION.to_string()),
                 }
-            } else if namespace.is_some() {
-                let ns = namespace.unwrap();
+            } else if let Some(ns) = namespace {
                 SwimlaneProps {
                     index: find_next_available_index(swimlanes, SWIMLANE_UI_IDX, SWIMLANE_UI_MAX),
                     label: format!("{}{}", LABEL_UI_AUTOMATION_PREFIX, ns),
@@ -94,8 +93,7 @@ fn swimlane_props(frame: &EmFrame, swimlanes: &HashMap<i64, Swimlane>) -> Swimla
                         .clone()
                         .unwrap_or_else(|| LABEL_COMMAND_READMODEL.to_string()),
                 }
-            } else if namespace.is_some() {
-                let ns = namespace.unwrap();
+            } else if let Some(ns) = namespace {
                 SwimlaneProps {
                     index: find_next_available_index(swimlanes, SWIMLANE_CMD_IDX, SWIMLANE_CMD_MAX),
                     label: format!("{}{}", LABEL_COMMAND_READMODEL_PREFIX, ns),
@@ -115,8 +113,7 @@ fn swimlane_props(frame: &EmFrame, swimlanes: &HashMap<i64, Swimlane>) -> Swimla
                         .clone()
                         .unwrap_or_else(|| LABEL_EVENTS.to_string()),
                 }
-            } else if namespace.is_some() {
-                let ns = namespace.unwrap();
+            } else if let Some(ns) = namespace {
                 SwimlaneProps {
                     index: find_next_available_index(swimlanes, SWIMLANE_EVT_IDX, SWIMLANE_EVT_MAX),
                     label: format!("{}{}", LABEL_EVENTS_PREFIX, ns),
@@ -302,20 +299,17 @@ fn evolve_frame_positioned(
     let sp = swimlane_props(frame, &state.swimlanes);
 
     // Ensure swimlane exists
-    if !state.swimlanes.contains_key(&sp.index) {
+    if let std::collections::hash_map::Entry::Vacant(e) = state.swimlanes.entry(sp.index) {
         let ns = extract_namespace(&frame.entity_id);
-        state.swimlanes.insert(
-            sp.index,
-            Swimlane {
-                index: sp.index,
-                label: sp.label.clone(),
-                namespace: ns,
-                r: 0.0,
-                y: sp.index as f64 * SWIMLANE_MIN_HEIGHT + SWIMLANE_GAP,
-                height: SWIMLANE_MIN_HEIGHT,
-                max_height: SWIMLANE_MIN_HEIGHT,
-            },
-        );
+        e.insert(Swimlane {
+            index: sp.index,
+            label: sp.label.clone(),
+            namespace: ns,
+            r: 0.0,
+            y: sp.index as f64 * SWIMLANE_MIN_HEIGHT + SWIMLANE_GAP,
+            height: SWIMLANE_MIN_HEIGHT,
+            max_height: SWIMLANE_MIN_HEIGHT,
+        });
     } else {
         // Update label if it changed (namespace sub-swimlane)
         state.swimlanes.get_mut(&sp.index).unwrap().label = sp.label.clone();

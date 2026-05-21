@@ -174,12 +174,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<EventModelDiagram> {
             .strip_prefix("data ")
             .or_else(|| trimmed.strip_prefix("data\t"))
         {
-            let name_tok = rest
-                .trim()
-                .split_whitespace()
-                .next()
-                .unwrap_or("")
-                .to_string();
+            let name_tok = rest.split_whitespace().next().unwrap_or("").to_string();
             // Inline single-line block: data Foo { ... }
             if let Some(brace_pos) = rest.find('{') {
                 let after = rest[brace_pos + 1..].trim();
@@ -382,18 +377,18 @@ fn tokenize_frame(s: &str) -> Vec<String> {
 /// Mirrors the `EM_DATA_INLINE` terminal: `/\{(.*)\}|"(.*)"|'(.*)'/`
 fn extract_inline_data(s: &str) -> Option<String> {
     let s = s.trim();
-    if s.starts_with('{') {
+    if let Some(rest_brace) = s.strip_prefix('{') {
         if let Some(end) = s.rfind('}') {
             return Some(s[1..end].trim().to_string());
         }
-        return Some(s[1..].trim().to_string());
+        return Some(rest_brace.trim().to_string());
     }
     if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
         return Some(s[1..s.len() - 1].to_string());
     }
     // backtick-type prefix: "`json`{ ... }"
-    if s.starts_with('`') {
-        if let Some(end_bt) = s[1..].find('`') {
+    if let Some(rest_bt) = s.strip_prefix('`') {
+        if let Some(end_bt) = rest_bt.find('`') {
             let after = s[end_bt + 2..].trim();
             return extract_inline_data(after);
         }

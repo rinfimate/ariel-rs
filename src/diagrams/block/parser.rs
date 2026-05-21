@@ -31,7 +31,8 @@ pub struct BlockNode {
     pub id: String,
     pub label: String,
     pub shape: BlockShape,
-    pub col_span: usize,             // how many columns this occupies
+    #[allow(dead_code)]
+    pub col_span: usize, // how many columns this occupies
     pub is_group: bool,              // true for nested block:id nodes
     pub group_children: Vec<String>, // ordered child node IDs (for nested blocks)
     pub style: Option<String>,       // user inline style from `style X fill:...,stroke:...`
@@ -222,9 +223,8 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
             let cur_len: usize = current_row_items.iter().map(item_span).sum();
             let new_len: usize = items.iter().map(item_span).sum();
             // Flush current row if: overflow, OR columns=1 (each item on its own row)
-            let should_flush = cur_len > 0
-                && ((cur_len + new_len > current_columns && current_columns > 1)
-                    || current_columns <= 1);
+            let should_flush =
+                cur_len > 0 && (current_columns <= 1 || cur_len + new_len > current_columns);
             if should_flush {
                 diag.rows.push(BlockRow {
                     items: std::mem::take(&mut current_row_items),
@@ -234,7 +234,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
 
             // Auto-flush row when columns reached or columns=1
             let total: usize = current_row_items.iter().map(item_span).sum();
-            if (total >= current_columns && current_columns > 1) || current_columns <= 1 {
+            if total >= current_columns || current_columns <= 1 {
                 diag.rows.push(BlockRow {
                     items: std::mem::take(&mut current_row_items),
                 });

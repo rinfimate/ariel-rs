@@ -369,27 +369,6 @@ pub fn node_subroutine_line(x: &str, y1: &str, y2: &str, stroke: &str) -> String
     )
 }
 
-/// Render a node label using a plain SVG `<text>` element.
-/// `label_tx` — x offset of the label group (0 for most shapes; non-zero for asymmetric).
-pub fn node_label_text(
-    label_color_style: &str,
-    text_label_y: i32,
-    font_family: &str,
-    font_size: f64,
-    text_fill: &str,
-    label_text: &str,
-) -> String {
-    node_label_text_xy(
-        label_color_style,
-        0,
-        text_label_y,
-        font_family,
-        font_size,
-        text_fill,
-        label_text,
-    )
-}
-
 /// Render a node label with explicit x and y offsets for the group transform.
 #[allow(clippy::too_many_arguments)]
 pub fn node_label_text_xy(

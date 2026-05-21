@@ -26,10 +26,6 @@ pub const TEXT_POSITION: f64 = 0.75;
 /// Stroke width drawn on the outer pie circle border (px).
 pub const OUTER_STROKE_WIDTH: f64 = 2.0;
 
-/// Scale factor applied to measured legend text widths to account for browser
-/// rendering differences relative to ab_glyph glyph metrics at 17 px Arial.
-pub const LEGEND_TEXT_SCALE: f64 = 1.1173;
-
 /// Font size used for legend text labels (px).
 pub const LEGEND_FONT_SIZE: f64 = 17.0;
 

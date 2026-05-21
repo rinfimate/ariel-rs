@@ -183,7 +183,7 @@ fn get_next_fitting_block(
     row: u32,
     bits_per_row: u32,
 ) -> (PacketBlock, Option<(u32, u32)>) {
-    if end + 1 <= row * bits_per_row {
+    if end < row * bits_per_row {
         (
             PacketBlock {
                 start,
@@ -210,6 +210,7 @@ fn get_next_fitting_block(
 
 /// Parse a `PacketBlock` line.
 /// Returns `(start, end, bits, label)` — any of start/end/bits may be None.
+#[allow(clippy::type_complexity)]
 fn parse_block_line(line: &str) -> Option<(Option<u32>, Option<u32>, Option<u32>, String)> {
     // "+N: label" — relative bits form
     if let Some(rest) = line.strip_prefix('+') {
