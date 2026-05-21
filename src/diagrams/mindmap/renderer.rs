@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{MindmapDiagram, MindmapNode, NodeType};
-use super::templates::{self, esc};
+use super::templates::{self, esc, node_group_open};
 use crate::text::measure;
 /// Mindmap renderer — delegates to Mermaid's own JS renderer for pixel-accurate output.
 ///
@@ -16,7 +16,7 @@ use crate::theme::Theme;
 
 /// Render by calling the mermaid_render.mjs Node.js helper.
 /// Returns Some(svg) on success, None if Node.js / the script is unavailable.
-fn render_via_nodejs(input_text: &str) -> Option<String> {
+fn render_via_nodejs(input_text: &str, theme: Theme) -> Option<String> {
     use std::io::Write;
     use std::process::Command;
 
@@ -40,10 +40,18 @@ fn render_via_nodejs(input_text: &str) -> Option<String> {
         return None;
     }
 
-    // Run: node visual-regression/mermaid_render.mjs <tmp_file>
+    let theme_name = match theme {
+        Theme::Dark => "dark",
+        Theme::Forest => "forest",
+        Theme::Neutral => "neutral",
+        _ => "default",
+    };
+
+    // Run: node visual-regression/mermaid_render.mjs <tmp_file> <theme>
     let output = Command::new("node")
         .arg(script_path)
         .arg(&tmp_path)
+        .arg(theme_name)
         .output()
         .ok()?;
 
@@ -228,36 +236,44 @@ fn layout_subtree(
     }
 }
 
-fn section_fill(section: Option<usize>, is_root: bool) -> &'static str {
-    if is_root {
-        ROOT_FILL
-    } else if let Some(s) = section {
-        SECTION_FILLS[s % 11]
-    } else {
-        SECTION_FILLS[0]
+struct MindmapColors<'a> {
+    root_fill: &'a str,
+    root_text: &'a str,
+    section_fills: &'a [&'a str],
+    section_text: &'a [&'a str],
+    section_lines: &'a [&'a str],
+}
+
+impl<'a> MindmapColors<'a> {
+    fn fill(&self, section: Option<usize>, is_root: bool) -> &'a str {
+        if is_root {
+            self.root_fill
+        } else if let Some(s) = section {
+            self.section_fills[s % 11]
+        } else {
+            self.section_fills[0]
+        }
+    }
+    fn text(&self, section: Option<usize>, is_root: bool) -> &'a str {
+        if is_root {
+            self.root_text
+        } else if let Some(s) = section {
+            self.section_text[s % 11]
+        } else {
+            self.section_text[0]
+        }
+    }
+    fn line(&self, section: Option<usize>) -> &'a str {
+        if let Some(s) = section {
+            self.section_lines[s % 11]
+        } else {
+            self.section_lines[0]
+        }
     }
 }
 
-fn section_text_color(section: Option<usize>, is_root: bool) -> &'static str {
-    if is_root {
-        ROOT_TEXT_COLOR
-    } else if let Some(s) = section {
-        SECTION_TEXT_COLORS[s % 11]
-    } else {
-        SECTION_TEXT_COLORS[0]
-    }
-}
-
-fn section_line_color(section: Option<usize>) -> &'static str {
-    if let Some(s) = section {
-        SECTION_LINE_COLORS[s % 11]
-    } else {
-        SECTION_LINE_COLORS[0]
-    }
-}
-
-fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64) -> String {
-    let fill = section_fill(node.section, node.is_root);
+fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64, col: &MindmapColors) -> String {
+    let fill = col.fill(node.section, node.is_root);
     match node.node_type {
         NodeType::Circle => {
             let r = node.width / 2.0;
@@ -272,7 +288,7 @@ fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64) -> String {
                 node.width - 2.0 * NODE_RECT_RX, NODE_SHAPE_H,
                 -(node.width - 2.0 * NODE_RECT_RX)
             );
-            let lc = section_line_color(node.section);
+            let lc = col.line(node.section);
             let ly = cy + hh + 5.0;
             templates::node_rect_with_line(
                 cx,
@@ -290,23 +306,31 @@ fn render_node_shape(node: &LayoutNode, cx: f64, cy: f64) -> String {
     }
 }
 
-fn render_node_text(node: &LayoutNode, cx: f64, cy: f64, ff: &str) -> String {
+fn render_node_text(node: &LayoutNode, cx: f64, cy: f64, ff: &str, col: &MindmapColors) -> String {
     let text = esc(&node.descr);
-    let color = section_text_color(node.section, node.is_root);
+    let color = col.text(node.section, node.is_root);
     templates::node_label(cx, cy, ff, FONT_SIZE, color, &text)
 }
 
-fn render_edge(px: f64, py: f64, cx: f64, cy: f64, section: Option<usize>) -> String {
+fn render_edge(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+    section: Option<usize>,
+    col: &MindmapColors,
+) -> String {
     let mid_x = (px + cx) / 2.0;
-    let color = if let Some(s) = section {
-        SECTION_FILLS[s % 11]
-    } else {
-        SECTION_FILLS[0]
-    };
+    let color = col.fill(section, false);
     templates::edge(px, py, mid_x, cx, cy, color)
 }
 
-fn render_fallback(diag: &MindmapDiagram, ff: &str) -> String {
+fn render_fallback(
+    diag: &MindmapDiagram,
+    ff: &str,
+    text_color: &str,
+    col: &MindmapColors,
+) -> String {
     let root = match &diag.root {
         Some(r) => r,
         None => return templates::empty_svg().to_string(),
@@ -339,8 +363,10 @@ fn render_fallback(diag: &MindmapDiagram, ff: &str) -> String {
 
     let svg_id = "mermaid-mindmap";
     let css = format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}\n#{id} .mindmap-node-label{{}}\n#{id} .mindmap-edge{{stroke-linecap:round;}}\n#{id} p{{margin:0;}}\n",
-        id = svg_id, ff = ff,
+        "#{id}{{font-family:{ff};font-size:16px;fill:{text_color};}}\n#{id} .mindmap-node-label{{}}\n#{id} .mindmap-edge{{stroke-linecap:round;}}\n#{id} p{{margin:0;}}\n",
+        id = svg_id,
+        ff = ff,
+        text_color = text_color,
     );
 
     let mut parts = vec![
@@ -358,6 +384,7 @@ fn render_fallback(diag: &MindmapDiagram, ff: &str) -> String {
                 child.x + off_x,
                 child.y + off_y,
                 child.section,
+                col,
             ));
         }
     }
@@ -374,12 +401,9 @@ fn render_fallback(diag: &MindmapDiagram, ff: &str) -> String {
         } else {
             String::new()
         };
-        parts.push(format!(
-            "<g class=\"mindmap-node {}\" id=\"node_{}\">",
-            sc, node.id
-        ));
-        parts.push(render_node_shape(node, cx, cy));
-        parts.push(render_node_text(node, cx, cy, ff));
+        parts.push(node_group_open(&sc, node.id));
+        parts.push(render_node_shape(node, cx, cy, col));
+        parts.push(render_node_text(node, cx, cy, ff, col));
         parts.push("</g>".to_string());
     }
     parts.push("</g>".to_string());
@@ -392,16 +416,23 @@ fn render_fallback(diag: &MindmapDiagram, ff: &str) -> String {
 pub fn render(diag: &MindmapDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
+    let col = MindmapColors {
+        root_fill: vars.mindmap_root_fill,
+        root_text: vars.mindmap_root_text,
+        section_fills: vars.mindmap_section_fills,
+        section_text: vars.mindmap_section_text,
+        section_lines: vars.mindmap_section_lines,
+    };
     // We need the original diagram text to pass to Node.js.
     // Reconstruct it from the parsed diagram (simple enough for mindmaps).
     if let Some(root) = &diag.root {
         let reconstructed = reconstruct_diagram(root);
-        if let Some(svg) = render_via_nodejs(&reconstructed) {
+        if let Some(svg) = render_via_nodejs(&reconstructed, theme) {
             return svg;
         }
     }
     // Fall back to pure-Rust renderer
-    render_fallback(diag, ff)
+    render_fallback(diag, ff, vars.text_color, &col)
 }
 
 /// Reconstruct the Mermaid mindmap syntax from a parsed node tree.

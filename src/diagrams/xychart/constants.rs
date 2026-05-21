@@ -78,38 +78,11 @@ pub const MAX_OUTER_PADDING_PERCENT_FOR_WRT_LABEL: f64 = 0.2;
 pub const BAR_PADDING_PERCENT: f64 = 0.05;
 
 // ---------------------------------------------------------------------------
-// Theme colours (Mermaid default theme xyChart)
+// Theme colours — resolved at render time from Theme::resolve().xychart_*
 // ---------------------------------------------------------------------------
-
-/// Background fill colour for the chart canvas.
-pub const BG_COLOR: &str = "white";
-
-/// Fill colour for the chart title text.
-pub const TITLE_COLOR: &str = "#131300";
-
-/// Fill colour for x-axis tick labels.
-pub const X_AXIS_LABEL_COLOR: &str = "#131300";
-
-/// Fill colour for the x-axis title.
-pub const X_AXIS_TITLE_COLOR: &str = "#131300";
-
-/// Stroke colour for x-axis tick marks.
-pub const X_AXIS_TICK_COLOR: &str = "#131300";
-
-/// Stroke colour for the x-axis line.
-pub const X_AXIS_LINE_COLOR: &str = "#131300";
-
-/// Fill colour for y-axis tick labels.
-pub const Y_AXIS_LABEL_COLOR: &str = "#131300";
-
-/// Fill colour for the y-axis title.
-pub const Y_AXIS_TITLE_COLOR: &str = "#131300";
-
-/// Stroke colour for y-axis tick marks.
-pub const Y_AXIS_TICK_COLOR: &str = "#131300";
-
-/// Stroke colour for the y-axis line.
-pub const Y_AXIS_LINE_COLOR: &str = "#131300";
+// Background, plot palette, and axis colours are not hardcoded constants here.
+// They are provided per-theme via ThemeVars::xychart_bg, xychart_plot_colors,
+// and xychart_axis_color so that dark/forest/neutral themes render correctly.
 
 // ---------------------------------------------------------------------------
 // SVG identifiers

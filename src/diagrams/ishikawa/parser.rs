@@ -67,6 +67,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<IshikawaDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // title line
         if trimmed.len() >= 5
             && trimmed[..5].eq_ignore_ascii_case("title")

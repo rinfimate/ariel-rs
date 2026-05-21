@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{KanbanDiagram, KanbanSection, NodeShape};
-use super::templates::{self, assignee_label, build_css, esc, priority_line, ticket_link};
+use super::templates::{self, esc, priority_line};
 /// Faithful Rust port of Mermaid's kanbanRenderer.ts.
 ///
 /// Layout algorithm (column-based, NOT dagre):
@@ -66,6 +66,34 @@ fn text_height(label: &str) -> f64 {
     lines * LINE_HEIGHT
 }
 
+/// Wrap label text into lines that fit within AVAILABLE_WIDTH.
+fn wrap_label(label: &str) -> Vec<String> {
+    let words: Vec<&str> = label.split_whitespace().collect();
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in &words {
+        let candidate = if current.is_empty() {
+            word.to_string()
+        } else {
+            format!("{} {}", current, word)
+        };
+        let (w, _) = measure(&candidate, FONT_SIZE);
+        if w * TEXT_SCALE > AVAILABLE_WIDTH && !current.is_empty() {
+            lines.push(current.clone());
+            current = word.to_string();
+        } else {
+            current = candidate;
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(label.to_string());
+    }
+    lines
+}
+
 /// Column left-edge x position (0-based index).
 fn col_left_x(idx: usize) -> f64 {
     COL_LEFT_BASE + idx as f64 * (SECTION_WIDTH + SECTION_GAP)
@@ -121,6 +149,10 @@ fn render_section_and_items(
     col_idx: usize, // 0-based
     svg_id: &str,
     ticket_base_url: Option<&str>,
+    primary_border: &str,
+    primary_text: &str,
+    card_bg: &str,
+    theme: crate::theme::Theme,
 ) -> (String, String) {
     let cx = col_center_x(col_idx);
     let lx = col_left_x(col_idx);
@@ -131,13 +163,22 @@ fn render_section_and_items(
     // ── Section column rect ──────────────────────────────────────────────────
     let mut sec_svg = templates::section_group_open(sec_idx, svg_id, &esc(&section.id));
 
-    sec_svg.push_str(&templates::section_rect(lx, col_top, SECTION_WIDTH, col_h));
+    sec_svg.push_str(&templates::section_rect(
+        lx,
+        col_top,
+        SECTION_WIDTH,
+        col_h,
+        sec_idx,
+        theme,
+    ));
 
-    // Column header label — full-width foreignObject centered in the column.
+    // Column header label — per-section text colour for themes with varying header contrast.
+    let header_text = templates::section_header_text(sec_idx, theme);
     sec_svg.push_str(&templates::section_label_fo(
         lx + 20.0,
         col_top,
         &esc(&section.label),
+        header_text,
     ));
 
     sec_svg.push_str("</g>");
@@ -158,7 +199,7 @@ fn render_section_and_items(
         let (rx_val, _shape_extra) = match item.shape {
             NodeShape::Circle => {
                 let r = item_h_half.min(item_w_half);
-                items_svg.push_str(&templates::item_circle(r));
+                items_svg.push_str(&templates::item_circle(r, primary_border, card_bg));
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
                     -item_h_half + 4.0,
@@ -166,6 +207,7 @@ fn render_section_and_items(
                     ITEM_WIDTH - 10.0,
                     fo_height(&item.label),
                     &esc(&item.label),
+                    primary_text,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -188,7 +230,7 @@ fn render_section_and_items(
                     -item_w_half + dx,
                     item_h_half,
                 );
-                items_svg.push_str(&templates::item_hexagon(&pts));
+                items_svg.push_str(&templates::item_hexagon(&pts, primary_border, card_bg));
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
                     -item_h_half / 2.0,
@@ -196,6 +238,7 @@ fn render_section_and_items(
                     ITEM_WIDTH - 10.0,
                     fo_height(&item.label),
                     &esc(&item.label),
+                    primary_text,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -208,6 +251,8 @@ fn render_section_and_items(
                     -item_h_half,
                     ITEM_WIDTH,
                     dyn_h,
+                    primary_border,
+                    card_bg,
                 ));
                 items_svg.push_str(&templates::item_label_fo_fixed(
                     -item_w_half + 10.0,
@@ -216,6 +261,7 @@ fn render_section_and_items(
                     ITEM_WIDTH - 10.0,
                     fo_height(&item.label),
                     &esc(&item.label),
+                    primary_text,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -230,6 +276,8 @@ fn render_section_and_items(
             -item_h_half,
             ITEM_WIDTH,
             dyn_h,
+            primary_border,
+            card_bg,
         ));
 
         // Primary label — position depends on whether metadata row is present.
@@ -239,16 +287,29 @@ fn render_section_and_items(
             let fh = text_height(&item.label);
             (ty, fh)
         } else {
-            (-item_h_half + 10.0, fo_height(&item.label))
+            let fh = fo_height(&item.label);
+            (-fh / 2.0, fh)
         };
-        items_svg.push_str(&templates::item_label_fo(
-            -item_w_half + 10.0,
-            label_ty,
-            ITEM_WIDTH - 10.0,
-            ITEM_WIDTH - 10.0,
-            label_fo_h,
-            &esc(&item.label),
-        ));
+        if !has_meta {
+            let lines = wrap_label(&item.label);
+            items_svg.push_str(&templates::item_label_wrapped(
+                -item_w_half + 10.0,
+                0.0,
+                &lines,
+                LINE_HEIGHT,
+                primary_text,
+            ));
+        } else {
+            items_svg.push_str(&templates::item_label_fo(
+                -item_w_half + 10.0,
+                label_ty,
+                ITEM_WIDTH - 10.0,
+                ITEM_WIDTH - 10.0,
+                label_fo_h,
+                &esc(&item.label),
+                primary_text,
+            ));
+        }
 
         // Ticket + assignee metadata row — positioned immediately below the label.
         if has_meta {
@@ -266,23 +327,26 @@ fn render_section_and_items(
                         60.0,
                         24.0,
                         &esc(ticket),
+                        primary_text,
                     ));
                 } else {
-                    items_svg.push_str(&ticket_link(
+                    items_svg.push_str(&templates::ticket_link(
                         &ticket_url,
                         -item_w_half + 10.0,
                         meta_y,
                         &esc(ticket),
+                        primary_text,
                     ));
                 }
             }
             // Assignee (right side) — nowrap so names don't get cut off.
             if let Some(ref assigned) = item.assigned {
-                items_svg.push_str(&assignee_label(
+                items_svg.push_str(&templates::assignee_label(
                     -5.0,
                     meta_y,
                     item_w_half + 5.0,
                     &esc(assigned),
+                    primary_text,
                 ));
             }
         } else {
@@ -328,7 +392,6 @@ fn estimate_text_width(text: &str, font_size: f64) -> f64 {
 
 pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
     if diag.sections.is_empty() {
         return templates::empty_svg().to_string();
     }
@@ -348,8 +411,6 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
     let vb_w = 15.0 + n_cols as f64 * (SECTION_WIDTH + SECTION_GAP);
     let vb_h = max_col_h + MARGIN * 2.0;
 
-    let css = build_css(svg_id, ff);
-
     let mut out = String::new();
 
     out.push_str(&templates::svg_root(
@@ -360,10 +421,6 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
         vb_w as u64,
         vb_h as u64,
     ));
-
-    out.push_str("<style>");
-    out.push_str(&css);
-    out.push_str("</style>");
 
     // Empty g (matches Mermaid structure)
     out.push_str("<g></g>");
@@ -380,6 +437,10 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
             i,
             svg_id,
             diag.config.ticket_base_url.as_deref(),
+            vars.primary_border,
+            vars.primary_text,
+            vars.kanban_card_bg,
+            theme,
         );
         sections_svg.push_str(&sec_svg);
         items_svg_parts.push(items_svg);

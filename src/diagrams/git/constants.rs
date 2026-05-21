@@ -51,8 +51,8 @@ pub const TAG_TEXT_FONT_SCALE: f64 = 1.27;
 /// Whether to render commit ID labels below each commit.
 pub const SHOW_COMMIT_LABEL: bool = true;
 
-/// Whether to rotate commit labels 45°.
-pub const ROTATE_COMMIT_LABEL: bool = false;
+/// Whether to rotate commit labels 45°. Matches defaultConfig.gitGraph.rotateCommitLabel = true.
+pub const ROTATE_COMMIT_LABEL: bool = true;
 
 // ---------------------------------------------------------------------------
 // Arrow arcs
@@ -65,54 +65,9 @@ pub const LR_ARC_RADIUS: f64 = 20.0;
 pub const TB_ARC_RADIUS: f64 = 10.0;
 
 // ---------------------------------------------------------------------------
-// Branch colours
+// Branch colours are now served from ThemeVars:
+//   vars.git_branch_colors[i % 8]  — (fill, stroke) tuples
 // ---------------------------------------------------------------------------
 
-/// Git branch colour palette (fill, stroke) for indices 0–7.
-/// Matches Mermaid's default theme gitGraph colours (git0..git7).
-pub const GIT_COLORS: [(&str, &str); 8] = [
-    (
-        "hsl(240, 100%, 46.2745098039%)",
-        "hsl(240, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(60, 100%, 43.5294117647%)",
-        "hsl(60, 100%, 43.5294117647%)",
-    ),
-    (
-        "hsl(80, 100%, 46.2745098039%)",
-        "hsl(80, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(210, 100%, 46.2745098039%)",
-        "hsl(210, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(180, 100%, 46.2745098039%)",
-        "hsl(180, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(150, 100%, 46.2745098039%)",
-        "hsl(150, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(300, 100%, 46.2745098039%)",
-        "hsl(300, 100%, 46.2745098039%)",
-    ),
-    (
-        "hsl(0, 100%, 46.2745098039%)",
-        "hsl(0, 100%, 46.2745098039%)",
-    ),
-];
-
-/// Text colours for branch label text, one per branch index (0–7).
-pub const BRANCH_LABEL_TEXT_COLORS: [&str; 8] = [
-    "#ffffff", // branch 0 — dark background needs white text
-    "black",   // branch 1
-    "black",   // branch 2
-    "#ffffff", // branch 3
-    "black",   // branch 4
-    "black",   // branch 5
-    "black",   // branch 6
-    "black",   // branch 7
-];
+// Text colours for branch label text also from ThemeVars:
+//   vars.git_branch_label_text_colors[i % 8]

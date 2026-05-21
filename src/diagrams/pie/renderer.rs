@@ -1,7 +1,7 @@
 use super::constants::*;
 use super::parser::PieDiagram;
-use super::templates::{self, build_style, esc, fmt, fmt_value};
-use crate::text::measure;
+use super::templates::{self, esc, fmt, fmt_value};
+use crate::text_browser_metrics::measure_browser;
 use crate::theme::Theme;
 /// Faithful Rust port of Mermaid's pieRenderer.ts.
 ///
@@ -13,8 +13,8 @@ use crate::theme::Theme;
 /// - viewBox width = max(chartAndLegendWidth, titleRight) where title is centered at pieWidth/2
 ///
 /// Colors from Mermaid default theme (khroma adjust on #ECECFF primary):
-///   pie1  = #ECECFF       (primaryColor, HSL 240,100%,96.27%)
-///   pie2  = #ffffde       (secondaryColor, HSL 60,100%,93.53%)
+///   pie1  = primaryColor    (theme-dependent, e.g. #ECECFF default / #1f2020 dark)
+///   pie2  = secondaryColor  (theme-dependent, e.g. #ffffde default / #323232 dark)
 ///   pie3  = hsl(80 ,100%,56.27%)   tertiaryColor(h-160)+l-40
 ///   pie4  = hsl(240,100%,86.27%)   primary+l-10
 ///   pie5  = hsl(60 ,100%,63.53%)   secondary+l-30
@@ -105,13 +105,61 @@ fn arc_centroid(start_angle: f64, end_angle: f64, radius: f64) -> (f64, f64) {
 }
 
 /// Pick a color for a slice by index (wraps around after 12).
-fn slice_color(index: usize) -> &'static str {
-    PIE_COLORS[index % PIE_COLORS.len()]
+///
+/// Indices 0 and 1 map to theme-dependent primary/secondary colors and are
+/// returned as borrowed `&'static str` only for the static entries (indices 2+).
+/// Callers must supply `primary_color` and `secondary_color` from theme vars
+/// and handle the first two indices separately via `pie_slice_color`.
+const DARK_PIE_COLORS: &[&str] = &[
+    "#0b0000", "#4d1037", "#3f5258", "#4f2f1b", "#6e0a0a", "#3b0048", "#995a01", "#154706",
+    "#161722", "#00296f", "#01629c", "#1f2020",
+];
+// Forest pie3..12 — values confirmed from reference SVGs.
+const FOREST_PIE_COLORS_STATIC: &[&str] = &[
+    "hsl(78.1578947368, 58.4615384615%, 84.5098039216%)", // pie3: primary hue +10% light
+    "hsl(78.1578947368, 58.4615384615%, 44.5098039216%)", // pie4: primary hue -30% light
+    "hsl(98.961038961, 100%, 54.9019607843%)",            // pie5: secondary hue -30% light
+    "hsl(118.1578947368, 58.4615384615%, 44.5098039216%)", // pie6: +40° hue -30% light
+    "hsl(138.1578947368, 58.4615384615%, 64.5098039216%)", // pie7: +60° hue -10% light
+    "hsl(158.1578947368, 58.4615384615%, 44.5098039216%)", // pie8
+    "hsl(178.1578947368, 58.4615384615%, 64.5098039216%)", // pie9
+    "hsl(198.1578947368, 58.4615384615%, 44.5098039216%)", // pie10
+    "hsl(218.1578947368, 58.4615384615%, 64.5098039216%)", // pie11
+    "hsl(238.1578947368, 58.4615384615%, 54.5098039216%)", // pie12
+];
+const NEUTRAL_PIE_COLORS: &[&str] = &[
+    "#F4F4F4", "#555", "#BBB", "#777", "#999", "#DDD", "#FFF", "#DDD", "#BBB", "#999", "#777",
+    "#555",
+];
+
+fn pie_slice_color<'a>(
+    index: usize,
+    primary: &'a str,
+    secondary: &'a str,
+    theme: Theme,
+) -> &'a str {
+    match theme {
+        Theme::Dark => DARK_PIE_COLORS[index % DARK_PIE_COLORS.len()],
+        Theme::Forest => match index % 12 {
+            0 => primary,
+            1 => secondary,
+            i => FOREST_PIE_COLORS_STATIC[(i - 2) % FOREST_PIE_COLORS_STATIC.len()],
+        },
+        Theme::Neutral => NEUTRAL_PIE_COLORS[index % NEUTRAL_PIE_COLORS.len()],
+        _ => match index % 12 {
+            0 => primary,
+            1 => secondary,
+            i => PIE_COLORS_STATIC[(i - 2) % PIE_COLORS_STATIC.len()],
+        },
+    }
 }
 
+#[allow(clippy::vec_init_then_push)]
 pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
+    let primary_text = vars.primary_text;
+    let primary_color = vars.primary_color;
+    let secondary_color = vars.secondary_color;
     let radius = (PIE_WIDTH.min(HEIGHT) / 2.0) - MARGIN; // = 185.0
     let label_radius = radius * TEXT_POSITION; // = 138.75
 
@@ -138,10 +186,9 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
             } else {
                 (*label).clone()
             };
-            measure(&text, LEGEND_FONT_SIZE).0
+            measure_browser(&text, LEGEND_FONT_SIZE).0
         })
-        .fold(0.0_f64, f64::max)
-        * LEGEND_TEXT_SCALE;
+        .fold(0.0_f64, f64::max);
 
     // ── Compute viewBox ────────────────────────────────────────────────────────
     let chart_and_legend_width =
@@ -152,7 +199,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
     let title_width = if title_text_str.is_empty() {
         0.0
     } else {
-        measure(title_text_str, TITLE_FONT_SIZE).0
+        measure_browser(title_text_str, TITLE_FONT_SIZE).0
     };
     let title_left = PIE_WIDTH / 2.0 - title_width / 2.0;
     let title_right = PIE_WIDTH / 2.0 + title_width / 2.0;
@@ -163,7 +210,6 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
 
     // ── Generate SVG ──────────────────────────────────────────────────────────
     let id = "mermaid-pie";
-    let style = build_style(id, ff);
 
     // The main group is translated to the center of the pie area
     let group_tx = PIE_WIDTH / 2.0; // 225.0
@@ -179,7 +225,6 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
         &fmt(HEIGHT),
         &fmt(total_width),
     ));
-    svg_parts.push(format!("<style>{}</style>", style));
 
     // Empty first group (Mermaid always emits this)
     svg_parts.push("<g></g>".to_string());
@@ -187,30 +232,41 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
     // Main group translated to pie center
     svg_parts.push(templates::main_group(&fmt(group_tx), &fmt(group_ty)));
 
-    // Outer circle
-    svg_parts.push(templates::outer_circle(&fmt(
-        radius + OUTER_STROKE_WIDTH / 2.0
-    )));
+    // Outer circle — Mermaid always uses black stroke regardless of theme
+    svg_parts.push(templates::outer_circle(
+        &fmt(radius + OUTER_STROKE_WIDTH / 2.0),
+        "black",
+    ));
 
     // Pie slices (paths)
     for (i, arc) in filtered_arcs.iter().enumerate() {
         // Find original index in all_sections for color assignment
         let color_idx = diag.sections.get_index_of(&arc.label).unwrap_or(i);
-        let color = slice_color(color_idx);
+        let color = pie_slice_color(color_idx, primary_color, secondary_color, theme);
         let d = arc_path(arc.start_angle, arc.end_angle, radius);
-        svg_parts.push(templates::pie_slice(&d, color));
+        // Mermaid always uses black stroke for slice dividers regardless of theme
+        svg_parts.push(templates::pie_slice(&d, color, "black"));
     }
 
     // Percentage labels
     for arc in &filtered_arcs {
         let pct = (arc.value / total_sum * 100.0).round() as u64;
         let (cx, cy) = arc_centroid(arc.start_angle, arc.end_angle, label_radius);
-        svg_parts.push(templates::slice_label(&fmt(cx), &fmt(cy), pct));
+        svg_parts.push(templates::slice_label(
+            &fmt(cx),
+            &fmt(cy),
+            pct,
+            primary_text,
+        ));
     }
 
     // Title text
     let title_y = -((HEIGHT - 50.0) / 2.0); // -(200.0)
-    svg_parts.push(templates::title_text(&fmt(title_y), &esc(title_text_str)));
+    svg_parts.push(templates::title_text(
+        &fmt(title_y),
+        &esc(title_text_str),
+        primary_text,
+    ));
 
     // Legend items
     let legend_height = LEGEND_RECT_SIZE + LEGEND_SPACING;
@@ -218,7 +274,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
 
     for (i, (label, value)) in all_sections.iter().enumerate() {
         // Use insertion-order index for color
-        let color = slice_color(i);
+        let color = pie_slice_color(i, primary_color, secondary_color, theme);
         let vertical = (i as f64) * legend_height - legend_offset;
         let legend_text = if diag.show_data {
             format!("{} [{}]", label, fmt_value(**value))
@@ -232,6 +288,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
             &fmt(vertical),
             color,
             &esc(&legend_text),
+            primary_text,
         ));
     }
 
@@ -278,25 +335,32 @@ mod tests {
     }
 
     #[test]
-    fn pie_color_0_is_valid() {
-        // PIE_COLORS[0] is the primary color (#ECECFF)
+    fn pie_color_static_0_is_valid() {
+        // PIE_COLORS_STATIC[0] is pie3 (hsl-based)
         assert!(
-            PIE_COLORS[0].starts_with('#')
-                || PIE_COLORS[0].starts_with("hsl(")
-                || PIE_COLORS[0].starts_with("rgb("),
+            PIE_COLORS_STATIC[0].starts_with('#')
+                || PIE_COLORS_STATIC[0].starts_with("hsl(")
+                || PIE_COLORS_STATIC[0].starts_with("rgb("),
             "Expected a valid color string, got: {}",
-            PIE_COLORS[0]
+            PIE_COLORS_STATIC[0]
         );
     }
 
     #[test]
-    fn pie_color_1_is_valid() {
-        assert!(
-            PIE_COLORS[1].starts_with('#')
-                || PIE_COLORS[1].starts_with("hsl(")
-                || PIE_COLORS[1].starts_with("rgb("),
-            "Expected a valid color string, got: {}",
-            PIE_COLORS[1]
+    fn pie_slice_color_uses_theme_vars() {
+        // Index 0 → primary, index 1 → secondary
+        assert_eq!(
+            pie_slice_color(0, "#ECECFF", "#ffffde", Theme::Default),
+            "#ECECFF"
+        );
+        assert_eq!(
+            pie_slice_color(1, "#ECECFF", "#ffffde", Theme::Default),
+            "#ffffde"
+        );
+        // Index 2 → PIE_COLORS_STATIC[0]
+        assert_eq!(
+            pie_slice_color(2, "#ECECFF", "#ffffde", Theme::Default),
+            PIE_COLORS_STATIC[0]
         );
     }
 

@@ -11,16 +11,20 @@ pub struct NodeStyle {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeShape {
-    Rectangle,   // [text]
-    RoundedRect, // (text)
-    Diamond,     // {text}
-    Circle,      // ((text))
-    Asymmetric,  // >text]
-    Cylinder,    // [(text)]
-    Subroutine,  // [[text]]
-    Stadium,     // ([text])
-    Hexagon,     // {{text}}
-    Default,     // bare id
+    Rectangle,        // [text]
+    RoundedRect,      // (text)
+    Diamond,          // {text}
+    Circle,           // ((text))
+    Asymmetric,       // >text]
+    Cylinder,         // [(text)]
+    Subroutine,       // [[text]]
+    Stadium,          // ([text])
+    Hexagon,          // {{text}}
+    Trapezoid,        // [/text\]
+    TrapezoidAlt,     // [\text/]
+    Parallelogram,    // [/text/]
+    ParallelogramAlt, // [\text\]
+    Default,          // bare id
 }
 
 #[derive(Debug, Clone)]
@@ -31,13 +35,17 @@ pub struct FlowNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdgeStyle {
-    Arrow,      // -->
-    Line,       // ---
-    DotArrow,   // -.->
-    ThickArrow, // ==>
-    DotLine,    // -.-
-    OpenArrow,  // --o
-    CrossArrow, // --x
+    Arrow,        // -->
+    Line,         // ---
+    DotArrow,     // -.->
+    ThickArrow,   // ==>
+    DotLine,      // -.-
+    OpenArrow,    // --o
+    CrossArrow,   // --x
+    BiArrow,      // <-->
+    BiDotArrow,   // <-.->
+    BiThickArrow, // <==>
+    Invisible,    // ~~~
 }
 
 #[derive(Debug, Clone)]
@@ -407,7 +415,7 @@ fn parse_shape(chars: &[char], pos: &mut usize) -> (Option<NodeShape>, Option<St
 
     match chars[*pos] {
         '[' => {
-            // [[ = Subroutine, [( = Cylinder/database, [ = Rectangle
+            // [[ = Subroutine, [( = Cylinder/database, [/ or [\ = trapezoid/parallelogram, [ = Rectangle
             if *pos + 1 < chars.len() && chars[*pos + 1] == '[' {
                 *pos += 2;
                 let text = read_until(chars, pos, "]]");
@@ -417,6 +425,29 @@ fn parse_shape(chars: &[char], pos: &mut usize) -> (Option<NodeShape>, Option<St
                 *pos += 2;
                 let text = read_until(chars, pos, ")]");
                 (Some(NodeShape::Cylinder), Some(text))
+            } else if *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
+                // [/text\] = Trapezoid or [/text/] = Parallelogram
+                *pos += 2;
+                let raw = read_until_either(chars, pos, r"\]", "]/");
+                if raw.ends_with('\\') {
+                    let text = raw.trim_end_matches('\\').trim().to_string();
+                    (Some(NodeShape::Trapezoid), Some(text))
+                } else {
+                    (Some(NodeShape::Parallelogram), Some(raw.trim().to_string()))
+                }
+            } else if *pos + 1 < chars.len() && chars[*pos + 1] == '\\' {
+                // [\text/] = TrapezoidAlt or [\text\] = ParallelogramAlt
+                *pos += 2;
+                let raw = read_until_either(chars, pos, "/]", r"\]");
+                if raw.ends_with('/') {
+                    let text = raw.trim_end_matches('/').trim().to_string();
+                    (Some(NodeShape::TrapezoidAlt), Some(text))
+                } else {
+                    (
+                        Some(NodeShape::ParallelogramAlt),
+                        Some(raw.trim().to_string()),
+                    )
+                }
             } else {
                 *pos += 1;
                 let text = read_bracket_text(chars, pos, ']');
@@ -515,6 +546,31 @@ fn read_until(chars: &[char], pos: &mut usize, end: &str) -> String {
     text.trim().to_string()
 }
 
+/// Read until one of two possible end sequences; returns text including the terminating char.
+fn read_until_either(chars: &[char], pos: &mut usize, end1: &str, end2: &str) -> String {
+    let e1: Vec<char> = end1.chars().collect();
+    let e2: Vec<char> = end2.chars().collect();
+    let mut text = String::new();
+    while *pos < chars.len() {
+        let try_match = |e: &[char]| -> bool {
+            *pos + e.len() <= chars.len() && chars[*pos..*pos + e.len()] == *e
+        };
+        if try_match(&e1) {
+            text.push(e1[e1.len() - 1]); // include the last char of the terminator
+            *pos += e1.len();
+            break;
+        }
+        if try_match(&e2) {
+            text.push(e2[e2.len() - 1]);
+            *pos += e2.len();
+            break;
+        }
+        text.push(chars[*pos]);
+        *pos += 1;
+    }
+    text
+}
+
 // ─── Style parser ────────────────────────────────────────────────────────────
 
 fn parse_style_attrs(attrs: &str) -> NodeStyle {
@@ -559,6 +615,28 @@ fn try_parse_edge(chars: &[char], pos: usize) -> Option<(EdgeStyle, Option<Strin
 
     // Arrow types — try longest match first
     let rest: String = chars[p..].iter().collect();
+
+    // Invisible link ~~~
+    if rest.starts_with("~~~") {
+        return Some((EdgeStyle::Invisible, None, p + 3));
+    }
+
+    // Bidirectional arrows — must be checked before unidirectional
+    if rest.starts_with("<==>") {
+        let pp = p + 4;
+        let (label, end) = try_pipe_label(chars, pp);
+        return Some((EdgeStyle::BiThickArrow, label, end));
+    }
+    if rest.starts_with("<-.->") {
+        let pp = p + 5;
+        let (label, end) = try_pipe_label(chars, pp);
+        return Some((EdgeStyle::BiDotArrow, label, end));
+    }
+    if rest.starts_with("<-->") {
+        let pp = p + 4;
+        let (label, end) = try_pipe_label(chars, pp);
+        return Some((EdgeStyle::BiArrow, label, end));
+    }
 
     // Thick arrow ==>
     if rest.starts_with("==>") {

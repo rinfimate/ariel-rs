@@ -25,7 +25,8 @@ pub const DRAW_WIDTH: f64 = SVG_WIDTH - LEFT_PAD - RIGHT_PAD; // = 1834.0
 pub const TITLE_TOP: f64 = 25.0;
 
 /// Y where the first task band starts, after title + axis label area (px).
-pub const CHART_TOP: f64 = 48.0;
+/// Matches defaultConfig.gantt.topPadding = 50.
+pub const CHART_TOP: f64 = 50.0;
 
 /// Height of each task row (px).
 pub const ROW_HEIGHT: f64 = 24.0;
@@ -69,6 +70,9 @@ pub const GRID_AXIS_OFFSET: f64 = 2.0;
 
 /// Y position where weekend/exclusion shading starts (= TITLE_TOP + 10, px).
 pub const EXCL_TOP: f64 = TITLE_TOP + 10.0; // = 35.0
+
+// Section fills and exclude fill are now in ThemeVars:
+//   vars.gantt_section_fill0, vars.gantt_section_fill1, vars.gantt_exclude_fill
 
 // ---------------------------------------------------------------------------
 // Band width

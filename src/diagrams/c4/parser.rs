@@ -160,6 +160,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<C4Diagram> {
             }
         }
 
+        // accTitle / accDescr — skip
+        if line.starts_with("accTitle") || line.starts_with("accDescr") {
+            continue;
+        }
+
         // title
         if let Some(rest) = line
             .strip_prefix("title ")

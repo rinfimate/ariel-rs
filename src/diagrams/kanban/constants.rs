@@ -57,9 +57,11 @@ pub const SECTION_L_0: &str = "83.5294117647%";
 pub const SECTION_L: &str = "86.2745098039%";
 
 /// Darker lightness used for stroke/edge colours.
+#[allow(dead_code)]
 pub const SECTION_L_DARK: &str = "76.2745098039%";
 
 /// Darker lightness for section-0 stroke/edge colour.
+#[allow(dead_code)]
 pub const SECTION_L_0_DARK: &str = "73.5294117647%";
 
 // ---------------------------------------------------------------------------

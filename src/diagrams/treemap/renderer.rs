@@ -1,4 +1,4 @@
-// Faithful Rust port of mermaid/src/diagrams/treemap/renderer.ts
+﻿// Faithful Rust port of mermaid/src/diagrams/treemap/renderer.ts
 //
 // Layout: D3 treemap with squarify tiling (phi ratio), round=true.
 // Canvas: nodeWidth*SECTION_INNER_PADDING × nodeHeight*SECTION_INNER_PADDING
@@ -327,27 +327,32 @@ impl OrdinalScale {
 
 struct LabelScale {
     domain: Vec<String>,
+    theme: Theme,
 }
 
 impl LabelScale {
-    fn new() -> Self {
-        LabelScale { domain: Vec::new() }
+    fn new(theme: Theme) -> Self {
+        LabelScale {
+            domain: Vec::new(),
+            theme,
+        }
     }
 
     fn get(&mut self, name: &str) -> &'static str {
         if let Some(pos) = self.domain.iter().position(|n| n == name) {
-            c_scale_label(pos)
+            theme_c_scale_label(self.theme, pos)
         } else {
             let pos = self.domain.len();
             self.domain.push(name.to_string());
-            c_scale_label(pos)
+            theme_c_scale_label(self.theme, pos)
         }
     }
 }
 
 // ─── Main render function ─────────────────────────────────────────────────────
 
-pub fn render(diag: &TreemapDiagram, _theme: Theme) -> String {
+pub fn render(diag: &TreemapDiagram, theme: Theme) -> String {
+    let vars = theme.resolve();
     let title_h = if diag.title.is_some() {
         TITLE_HEIGHT
     } else {
@@ -385,20 +390,20 @@ pub fn render(diag: &TreemapDiagram, _theme: Theme) -> String {
     // Round all coordinates (round=true in D3 treemap)
     round_node(&mut root);
 
-    // Build color scales
+    // Build color scales (theme-aware)
     // colorScale range: ["transparent", cScale0, cScale1, ..., cScale11]
     let mut color_scale = {
         let mut range: Vec<&'static str> = vec!["transparent"];
-        range.extend_from_slice(C_SCALE);
+        range.extend_from_slice(theme_c_scale(theme));
         OrdinalScale::new(range)
     };
     // colorScalePeer range: ["transparent", cScalePeer0, ...]
     let mut color_scale_peer = {
         let mut range: Vec<&'static str> = vec!["transparent"];
-        range.extend_from_slice(C_SCALE_PEER);
+        range.extend_from_slice(theme_c_scale_peer(theme));
         OrdinalScale::new(range)
     };
-    let mut color_scale_label = LabelScale::new();
+    let mut color_scale_label = LabelScale::new(theme);
 
     // Prime the color scale for the virtual root (so "" → transparent)
     color_scale.get(&root.name);
@@ -456,14 +461,12 @@ pub fn render(diag: &TreemapDiagram, _theme: Theme) -> String {
         fmt_i(vb_h),
     ));
 
-    // Style block
-    out.push_str(templates::style_block());
-
     // Title
     if let Some(t) = &diag.title {
         out.push_str(&templates::title_text(
             &fmt_f(CANVAS_W / 2.0),
             &fmt_f(title_h / 2.0),
+            vars.primary_text,
             &esc(t),
         ));
     }
@@ -575,8 +578,16 @@ pub fn render(diag: &TreemapDiagram, _theme: Theme) -> String {
         let parent_name = find_parent_name(&root, &leaf.name, leaf.x0, leaf.y0);
         let leaf_fill = color_scale.get(parent_name.as_deref().unwrap_or(""));
 
-        // Label color for leaf's own name
-        let leaf_label_color = color_scale_label.get(&leaf.name);
+        // Leaf label color: use each leaf's own name so siblings get distinct
+        // scale indices (not the shared parent index).
+        // - Default/Neutral: cycle cScaleLabel per leaf name — produces the
+        //   correct mix of white/black (Default) or #F4F4F4/#333 (Neutral).
+        // - Forest/Dark: always use text_color; cScaleLabel[0/3] = white which
+        //   would be invisible on light green/transparent backgrounds.
+        let leaf_label_color = match theme {
+            Theme::Default | Theme::Neutral | Theme::Dark => color_scale_label.get(&leaf.name),
+            _ => vars.text_color,
+        };
 
         out.push_str(&templates::leaf_group_open(
             leaf_idx,

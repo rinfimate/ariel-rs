@@ -75,6 +75,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<MindmapDiagram> {
     let mut counter = 0usize;
     let mut nodes_flat: Vec<(usize, MindmapNode)> = Vec::new(); // (indent_level, node)
     let mut base_indent: Option<usize> = None;
+    let mut header_seen = false;
 
     for raw_line in input.lines() {
         let trimmed = raw_line.trim_end();
@@ -87,8 +88,16 @@ pub fn parse(input: &str) -> crate::error::ParseResult<MindmapDiagram> {
             continue;
         }
 
-        // Skip the "mindmap" keyword line itself
-        if trimmed.trim() == "mindmap" {
+        // Wait for the "mindmap" keyword — skips YAML frontmatter and any preamble
+        if !header_seen {
+            if trimmed.trim() == "mindmap" || trimmed.trim().starts_with("mindmap ") {
+                header_seen = true;
+            }
+            continue;
+        }
+
+        // accTitle / accDescr — skip
+        if trimmed.trim().starts_with("accTitle") || trimmed.trim().starts_with("accDescr") {
             continue;
         }
 

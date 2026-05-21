@@ -132,9 +132,17 @@ pub fn parse(input: &str) -> StateDiagram {
             continue;
         }
 
-        // direction
+        // direction — store globally, or on the innermost composite state if inside one
         if let Some(dir) = line.strip_prefix("direction ") {
-            direction = dir.trim().to_string();
+            let dir_str = dir.trim().to_string();
+            if let Some(parent_id) = composite_stack.last() {
+                // Store direction on the composite node
+                if let Some(node) = nodes.iter_mut().find(|n| &n.id == parent_id) {
+                    node.dir = dir_str;
+                }
+            } else {
+                direction = dir_str;
+            }
             continue;
         }
 

@@ -51,6 +51,12 @@ pub struct GanttDiagram {
     pub tick_interval: Option<String>,
     /// Pre-parsed tick interval in days (None = use auto-computed interval).
     pub tick_interval_days: Option<f64>,
+    /// Axis date format string (e.g. "%d/%m"). Not yet used by renderer.
+    pub axis_format: Option<String>,
+    /// Display mode: "compact" stacks concurrent tasks. Not yet used by renderer.
+    pub display_mode: Option<String>,
+    /// Starting weekday for exclusion calculations (e.g. "monday").
+    pub weekday: Option<String>,
     pub sections: Vec<String>,
     pub tasks: Vec<Task>,
 }
@@ -189,6 +195,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<GanttDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // Header directives
         if let Some(rest) = trimmed.strip_prefix("title") {
             let t = rest.trim();
@@ -217,6 +228,21 @@ pub fn parse(input: &str) -> crate::error::ParseResult<GanttDiagram> {
             let raw = rest.trim().to_string();
             diag.tick_interval_days = Some(parse_tick_interval(&raw));
             diag.tick_interval = Some(raw);
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("axisFormat") {
+            diag.axis_format = Some(rest.trim().to_string());
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("displayMode") {
+            diag.display_mode = Some(rest.trim().to_string());
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("weekday") {
+            diag.weekday = Some(rest.trim().to_lowercase());
             continue;
         }
 

@@ -227,6 +227,31 @@ fn strip_frontmatter(input: &str) -> &str {
     input
 }
 
+/// Parse a `theme:` key from YAML frontmatter (--- ... ---) and return the matching Theme.
+fn frontmatter_theme(input: &str) -> Option<theme::Theme> {
+    let trimmed = input.trim_start();
+    if !trimmed.starts_with("---") {
+        return None;
+    }
+    let after_open = &trimmed[3..];
+    let nl = after_open.find('\n')?;
+    let body = &after_open[nl + 1..];
+    let close = body.find("\n---")?;
+    let fm = &body[..close];
+    for line in fm.lines() {
+        if let Some(v) = line.trim().strip_prefix("theme:") {
+            return match v.trim() {
+                "dark" => Some(theme::Theme::Dark),
+                "forest" => Some(theme::Theme::Forest),
+                "neutral" => Some(theme::Theme::Neutral),
+                "default" | "base" => Some(theme::Theme::Default),
+                _ => None,
+            };
+        }
+    }
+    None
+}
+
 /// Extract a human-readable message from a `catch_unwind` error payload.
 fn unwind_message(e: Box<dyn Any + Send>) -> String {
     if let Some(s) = e.downcast_ref::<&str>() {
@@ -369,6 +394,7 @@ pub fn detect(input: &str) -> DiagramType {
 /// Returns an error SVG if the diagram type is unrecognized or if rendering
 /// panics for any reason.
 pub fn render(input: &str, theme: theme::Theme) -> String {
+    let theme = frontmatter_theme(input).unwrap_or(theme);
     macro_rules! safe_render {
         ($diagram_type:expr, $call:expr) => {{
             let result = panic::catch_unwind(AssertUnwindSafe(|| $call));
@@ -401,7 +427,7 @@ pub fn render(input: &str, theme: theme::Theme) -> String {
         }),
         DiagramType::State => safe_render!(label, {
             let d = diagrams::state::parser::parse(input);
-            diagrams::state::render(&d, theme, true)
+            diagrams::state::render(&d, theme)
         }),
         DiagramType::Class => {
             safe_render!(label, diagrams::class_diagram::render_html(input, theme))
@@ -500,7 +526,7 @@ pub fn try_render(input: &str, theme: theme::Theme) -> Result<String, RenderErro
         }),
         DiagramType::State => safe_try_render!(label, {
             let d = diagrams::state::parser::parse(input);
-            diagrams::state::render(&d, theme, true)
+            diagrams::state::render(&d, theme)
         }),
         DiagramType::Class => {
             safe_try_render!(label, diagrams::class_diagram::render_html(input, theme))

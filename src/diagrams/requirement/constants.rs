@@ -1,10 +1,11 @@
-//! Layout and styling constants for the requirement renderer.
+﻿//! Layout and styling constants for the requirement renderer.
 
 // ---------------------------------------------------------------------------
 // Typography
 // ---------------------------------------------------------------------------
 
-/// Font size used throughout the requirement diagram (px). Matches Mermaid CSS `font-size:16px`.
+/// Font size used throughout the requirement diagram (px).
+/// defaultConfig says 14 but Mermaid renders at the global CSS font-size (16px effective).
 pub const FONT_SIZE: f64 = 16.0;
 
 // ---------------------------------------------------------------------------
@@ -24,8 +25,12 @@ pub const ROW_H: f64 = 24.0;
 /// HEADER_H = PAD_Y + 2×ROW_H + ROW_H/2 = 8 + 48 + 12 = 68.
 pub const HEADER_H: f64 = 68.0;
 
-/// Minimum allowed box width (currently 0 — no artificial minimum).
+/// Minimum box width (px). Natural sizing — Mermaid's rect_min_width=200 is overridden by theme.
+#[allow(dead_code)]
 pub const MIN_WIDTH: f64 = 0.0;
+/// Minimum box height (px). Natural sizing — Mermaid's rect_min_height=200 is overridden by theme.
+#[allow(dead_code)]
+pub const MIN_HEIGHT: f64 = 0.0;
 
 // ---------------------------------------------------------------------------
 // Dagre layout parameters
@@ -44,34 +49,23 @@ pub const MARGIN_X: f64 = 8.0;
 pub const MARGIN_Y: f64 = 8.0;
 
 // ---------------------------------------------------------------------------
-// Colours
+// Colours — resolved at render time from ThemeVars
 // ---------------------------------------------------------------------------
-
-/// Fill colour for requirement boxes. Matches Mermaid neo/classic theme.
-pub const BOX_FILL: &str = "#ECECFF";
-
-/// Stroke colour for requirement box borders.
-pub const BOX_STROKE: &str = "#9370DB";
-
-/// Fill colour for element boxes.
-pub const ELEM_FILL: &str = "#ECECFF";
-
-/// Stroke colour for element box borders.
-pub const ELEM_STROKE: &str = "#9370DB";
-
-/// Text fill colour for all labels.
-pub const FONT_COLOR: &str = "#333";
-
-/// Stroke colour for relationship edges and markers.
-pub const REL_COLOR: &str = "#333333";
+// box_fill      = vars.primary_color   (#ECECFF default / #1f2020 dark)
+// box_stroke    = vars.primary_border  (#9370DB default / #81B1DB dark)
+// font_color    = vars.primary_text    (#333333 default / #cde498 dark)
+// line_color    = vars.line_color      (#333333 default / #81B1DB dark)
 
 // ---------------------------------------------------------------------------
 // Text measurement
 // ---------------------------------------------------------------------------
 
 /// Effective space advance width at 16 px Arial in browser string measurements (px).
-/// Actual isolate space = 4.453125 px; empirically calibrated to 4.0 to match reference.
-pub const SPACE_W_16: f64 = 4.0;
+/// measure_browser() stores 0 for space, so tmw() adds this per space character.
+/// Calibrated to 4.0555: matches browser measurement for multi-space requirement texts.
+pub const SPACE_W_16: f64 = 4.0555;
 
 /// Safety margin added to text width measurements to prevent last-letter clipping (px).
-pub const TEXT_SAFETY_MARGIN: f64 = 6.0;
+/// Set to 0: browser-measured character widths already account for glyph advance, so no
+/// extra margin is needed (adding 6px caused boxes to be ~6px wider than the reference).
+pub const TEXT_SAFETY_MARGIN: f64 = 0.0;

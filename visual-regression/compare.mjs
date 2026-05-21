@@ -4,8 +4,10 @@ import { fileURLToPath } from 'url';
 import { PNG } from 'pngjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REF_DIR  = join(__dirname, 'ref');
-const RUST_DIR = join(__dirname, 'rust');
+// Usage: node compare.mjs [ref_dir] [rust_dir]
+// Defaults to ref/ and rust/
+const REF_DIR  = join(__dirname, process.argv[2] || 'ref');
+const RUST_DIR = join(__dirname, process.argv[3] || 'rust');
 
 // Thresholds (same as smiles-rust)
 const PASS_MAD   = 0.02;   // <2%  mean absolute pixel difference

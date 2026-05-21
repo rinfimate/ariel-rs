@@ -98,6 +98,14 @@ pub fn parse(input: &str) -> crate::error::ParseResult<ErDiagram> {
             continue;
         }
 
+        // title / accTitle / accDescr — skip
+        if trimmed.starts_with("title")
+            || trimmed.starts_with("accTitle")
+            || trimmed.starts_with("accDescr")
+        {
+            continue;
+        }
+
         // Entity block: "EntityName {" or "EntityName alias {"
         if trimmed.ends_with('{') {
             let before = trimmed.trim_end_matches('{').trim();

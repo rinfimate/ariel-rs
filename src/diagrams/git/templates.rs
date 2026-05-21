@@ -11,33 +11,6 @@
 pub use crate::diagrams::util::esc;
 
 // ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-pub fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .commit-id,#{id} .commit-msg,#{id} .branch-label{{fill:lightgrey;color:lightgrey;font-family:{ff};}}",
-            "#{id} .branch{{stroke-width:1;stroke:#333333;stroke-dasharray:2;}}",
-            "#{id} .commit-label{{font-size:10px;fill:#000021;}}",
-            "#{id} .commit-label-bkg{{font-size:10px;fill:#ffffde;opacity:0.5;}}",
-            "#{id} .tag-label{{font-size:10px;fill:#131300;}}",
-            "#{id} .tag-label-bkg{{fill:#ECECFF;stroke:hsl(240, 60%, 86.2745098039%);}}",
-            "#{id} .tag-hole{{fill:#333;}}",
-            "#{id} .commit-merge{{stroke:#ECECFF;fill:#ECECFF;}}",
-            "#{id} .commit-reverse{{stroke:#ECECFF;fill:#ECECFF;stroke-width:3;}}",
-            "#{id} .commit-highlight-inner{{stroke:#ECECFF;fill:#ECECFF;}}",
-            "#{id} .arrow{{stroke-width:8;stroke-linecap:round;fill:none;}}",
-            "#{id} .gitTitleText{{text-anchor:middle;font-size:18px;fill:#333;}}",
-            "#{id} :root{{--mermaid-font-family:{ff};}}"
-        ),
-        id = id, ff = ff
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
@@ -45,10 +18,10 @@ pub fn build_style(id: &str, ff: &str) -> String {
 pub fn svg_root(id: &str, w: f64, h: f64) -> String {
     format!(
         concat!(
-            r#"<svg id="{id}" xmlns="http://www.w3.org/2000/svg""#,
-            r#" width="100%" height="{h:.1}" viewBox="0 0 {w:.1} {h:.1}""#,
-            r#" style="max-width: {w:.1}px;""#,
-            r#" role="graphics-document document" aria-roledescription="git-graph">"#
+            r##"<svg id="{id}" xmlns="http://www.w3.org/2000/svg""##,
+            r##" width="100%" height="{h:.1}" viewBox="0 0 {w:.1} {h:.1}""##,
+            r##" style="max-width: {w:.1}px;""##,
+            r##" role="graphics-document document" aria-roledescription="git-graph">"##
         ),
         id = id,
         w = w,
@@ -57,14 +30,28 @@ pub fn svg_root(id: &str, w: f64, h: f64) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Main layout groups
+// ---------------------------------------------------------------------------
+
+/// Render the outer translate `<g>` that positions all git content.
+pub fn main_translate_group(x: f64, y: f64) -> String {
+    format!(
+        r##"<g transform="translate({x:.1},{y:.1})">"##,
+        x = x,
+        y = y,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Arrow marker
 // ---------------------------------------------------------------------------
 
 /// Render the `<defs>` block with arrowhead marker for git graph edges.
-pub fn arrowhead_defs(id: &str) -> String {
+pub fn arrowhead_defs(id: &str, line_color: &str) -> String {
     format!(
-        "<defs><marker id=\"{id}-arrowhead\" markerWidth=\"10\" markerHeight=\"7\" refX=\"10\" refY=\"3.5\" orient=\"auto\"><polygon points=\"0 0, 10 3.5, 0 7\" fill=\"#333\"/></marker></defs>",
+        "<defs><marker id=\"{id}-arrowhead\" markerWidth=\"10\" markerHeight=\"7\" refX=\"10\" refY=\"3.5\" orient=\"auto\"><polygon points=\"0 0, 10 3.5, 0 7\" fill=\"{line_color}\"/></marker></defs>",
         id = id,
+        line_color = line_color,
     )
 }
 
@@ -73,10 +60,12 @@ pub fn arrowhead_defs(id: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render a branch spine line for LR (horizontal) mode.
-pub fn branch_spine_lr(y: f64, max_pos: f64) -> String {
+pub fn branch_spine_lr(y: f64, max_pos: f64, line_color: &str) -> String {
     format!(
-        "<line x1=\"0\" y1=\"{y:.1}\" x2=\"{mx:.1}\" y2=\"{y:.1}\" stroke=\"#333333\" stroke-width=\"1\" stroke-dasharray=\"2\"/>",
-        y = y, mx = max_pos,
+        "<line x1=\"0\" y1=\"{y:.1}\" x2=\"{mx:.1}\" y2=\"{y:.1}\" stroke=\"{line_color}\" stroke-width=\"1\" stroke-dasharray=\"2\"/>",
+        y = y,
+        mx = max_pos,
+        line_color = line_color,
     )
 }
 
@@ -84,8 +73,8 @@ pub fn branch_spine_lr(y: f64, max_pos: f64) -> String {
 pub fn branch_label_rect_lr(bx: f64, by: f64, bw: f64, fill: &str) -> String {
     format!(
         concat!(
-            r#"<rect x="{bx:.1}" y="{by:.1}" width="{bw:.1}" height="20""#,
-            r#" rx="4" ry="4" fill="{f}"/>"#
+            r##"<rect x="{bx:.1}" y="{by:.1}" width="{bw:.1}" height="20""##,
+            r##" rx="4" ry="4" fill="{f}"/>"##
         ),
         bx = bx,
         by = by,
@@ -110,8 +99,8 @@ pub fn branch_label_text_lr(tx: f64, ty: f64, tc: &str, ff: &str, name: &str) ->
 pub fn branch_spine_tb(x: f64, default_pos: f64, max_pos: f64, stroke: &str) -> String {
     format!(
         concat!(
-            r#"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""#,
-            r#" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"#
+            r##"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""##,
+            r##" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"##
         ),
         x = x,
         dp = default_pos,
@@ -124,8 +113,8 @@ pub fn branch_spine_tb(x: f64, default_pos: f64, max_pos: f64, stroke: &str) -> 
 pub fn branch_label_rect_tb(bx: f64, bw: f64, fill: &str, stroke: &str) -> String {
     format!(
         concat!(
-            r#"<rect x="{bx:.1}" y="0" width="{bw:.1}" height="20""#,
-            r#" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"#
+            r##"<rect x="{bx:.1}" y="0" width="{bw:.1}" height="20""##,
+            r##" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"##
         ),
         bx = bx,
         bw = bw,
@@ -135,10 +124,13 @@ pub fn branch_label_rect_tb(bx: f64, bw: f64, fill: &str, stroke: &str) -> Strin
 }
 
 /// Render a branch label text for TB mode.
-pub fn branch_label_text_tb(tx: f64, ff: &str, name: &str) -> String {
+pub fn branch_label_text_tb(tx: f64, ff: &str, name: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{tx:.1}\" y=\"14\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
-        tx = tx, ff = ff, name = name,
+        "<text x=\"{tx:.1}\" y=\"14\" font-size=\"14\" fill=\"{text_color}\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
+        tx = tx,
+        ff = ff,
+        name = name,
+        text_color = text_color,
     )
 }
 
@@ -150,8 +142,8 @@ pub fn branch_label_text_tb(tx: f64, ff: &str, name: &str) -> String {
 pub fn branch_spine_bt(x: f64, default_pos: f64, max_pos: f64, stroke: &str) -> String {
     format!(
         concat!(
-            r#"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""#,
-            r#" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"#
+            r##"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""##,
+            r##" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"##
         ),
         x = x,
         dp = default_pos,
@@ -164,8 +156,8 @@ pub fn branch_spine_bt(x: f64, default_pos: f64, max_pos: f64, stroke: &str) -> 
 pub fn branch_label_rect_bt(bx: f64, my: f64, bw: f64, fill: &str, stroke: &str) -> String {
     format!(
         concat!(
-            r#"<rect x="{bx:.1}" y="{my:.1}" width="{bw:.1}" height="20""#,
-            r#" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"#
+            r##"<rect x="{bx:.1}" y="{my:.1}" width="{bw:.1}" height="20""##,
+            r##" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"##
         ),
         bx = bx,
         my = my,
@@ -176,10 +168,14 @@ pub fn branch_label_rect_bt(bx: f64, my: f64, bw: f64, fill: &str, stroke: &str)
 }
 
 /// Render a branch label text for BT mode.
-pub fn branch_label_text_bt(tx: f64, ty: f64, ff: &str, name: &str) -> String {
+pub fn branch_label_text_bt(tx: f64, ty: f64, ff: &str, name: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{tx:.1}\" y=\"{ty:.1}\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
-        tx = tx, ty = ty, ff = ff, name = name,
+        "<text x=\"{tx:.1}\" y=\"{ty:.1}\" font-size=\"14\" fill=\"{text_color}\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
+        tx = tx,
+        ty = ty,
+        ff = ff,
+        name = name,
+        text_color = text_color,
     )
 }
 
@@ -202,7 +198,7 @@ pub fn commit_arrow(d: &str, ci: usize, stroke: &str, branch_idx: usize) -> Stri
 /// Render a highlight commit outer rectangle.
 pub fn commit_highlight_outer(x: f64, y: f64, fill: &str, stroke: &str) -> String {
     format!(
-        r#"<rect x="{:.1}" y="{:.1}" width="20" height="20" rx="2" fill="{}" stroke="{}" stroke-width="2"/>"#,
+        r##"<rect x="{:.1}" y="{:.1}" width="20" height="20" rx="2" fill="{}" stroke="{}" stroke-width="2"/>"##,
         x, y, fill, stroke,
     )
 }
@@ -210,7 +206,7 @@ pub fn commit_highlight_outer(x: f64, y: f64, fill: &str, stroke: &str) -> Strin
 /// Render a highlight commit inner rectangle.
 pub fn commit_highlight_inner(x: f64, y: f64, fill: &str, stroke: &str) -> String {
     format!(
-        r#"<rect x="{:.1}" y="{:.1}" width="12" height="12" rx="1" fill="{}" stroke="{}" stroke-width="1"/>"#,
+        r##"<rect x="{:.1}" y="{:.1}" width="12" height="12" rx="1" fill="{}" stroke="{}" stroke-width="1"/>"##,
         x, y, fill, stroke,
     )
 }
@@ -218,16 +214,16 @@ pub fn commit_highlight_inner(x: f64, y: f64, fill: &str, stroke: &str) -> Strin
 /// Render a normal/merge/reverse commit circle.
 pub fn commit_circle(cx: f64, cy: f64, r: f64, fill: &str, stroke: &str, id: &str) -> String {
     format!(
-        r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2" class="commit commit-{}"/>"#,
+        r##"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2" class="commit commit-{}"/>"##,
         cx, cy, r, fill, stroke, id,
     )
 }
 
-/// Render the merge inner circle (white overlay).
-pub fn commit_merge_inner(cx: f64, cy: f64, id: &str) -> String {
+/// Render the merge inner circle overlay using the diagram background (primary_color).
+pub fn commit_merge_inner(cx: f64, cy: f64, id: &str, primary_color: &str) -> String {
     format!(
-        "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"6\" class=\"commit-merge commit{}\" stroke=\"#ECECFF\" fill=\"#ECECFF\"/>",
-        cx, cy, id,
+        "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"6\" class=\"commit-merge commit{}\" stroke=\"{primary_color}\" fill=\"{primary_color}\"/>",
+        cx, cy, id, primary_color = primary_color,
     )
 }
 
@@ -243,7 +239,7 @@ pub fn commit_reverse_cross(cx: f64, cy: f64, c: f64) -> String {
 /// Render a cherry-pick commit base circle.
 pub fn commit_cherry_circle(cx: f64, cy: f64, r: f64, fill: &str, stroke: &str) -> String {
     format!(
-        r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2"/>"#,
+        r##"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2"/>"##,
         cx, cy, r, fill, stroke,
     )
 }
@@ -280,34 +276,34 @@ pub fn commit_label_group_lr(tx: f64, ty: f64, rx: f64, ry: f64) -> String {
 }
 
 /// Render a commit label background rectangle.
-pub fn commit_label_bkg(rect_x: f64, rect_y: f64, rect_w: f64) -> String {
+pub fn commit_label_bkg(rect_x: f64, rect_y: f64, rect_w: f64, secondary_color: &str) -> String {
     format!(
-        "<rect class=\"commit-label-bkg\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"15\"/>",
-        rect_x, rect_y, rect_w,
+        "<rect class=\"commit-label-bkg\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"15\" fill=\"{secondary_color}\" opacity=\"0.5\"/>",
+        rect_x, rect_y, rect_w, secondary_color = secondary_color,
     )
 }
 
 /// Render the commit label text.
-pub fn commit_label_text(text_x: f64, text_y: f64, label: &str) -> String {
+pub fn commit_label_text(text_x: f64, text_y: f64, label: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{:.3}\" y=\"{:.3}\" class=\"commit-label\">{}</text>",
-        text_x, text_y, label,
+        "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"10\" fill=\"{text_color}\" class=\"commit-label\">{}</text>",
+        text_x, text_y, label, text_color = text_color,
     )
 }
 
 /// Render a commit label background rectangle (TB/BT mode).
-pub fn commit_label_bkg_tb(lx: f64, ly: f64, lw: f64, lh: f64) -> String {
+pub fn commit_label_bkg_tb(lx: f64, ly: f64, lw: f64, lh: f64, secondary_color: &str) -> String {
     format!(
-        "<rect class=\"commit-label-bkg\" x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\"/>",
-        lx, ly, lw, lh,
+        "<rect class=\"commit-label-bkg\" x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{secondary_color}\" opacity=\"0.5\"/>",
+        lx, ly, lw, lh, secondary_color = secondary_color,
     )
 }
 
 /// Render a commit label text (TB/BT mode).
-pub fn commit_label_text_tb(lx: f64, ly: f64, ff: &str, label: &str) -> String {
+pub fn commit_label_text_tb(lx: f64, ly: f64, ff: &str, label: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#000021\" font-family=\"{ff}\" class=\"commit-label\">{}</text>",
-        lx, ly, label, ff = ff,
+        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"{text_color}\" font-family=\"{ff}\" class=\"commit-label\">{}</text>",
+        lx, ly, label, ff = ff, text_color = text_color,
     )
 }
 
@@ -317,26 +313,39 @@ pub fn commit_label_text_tb(lx: f64, ly: f64, ff: &str, label: &str) -> String {
 
 /// Render a tag badge polygon (price-tag shape) for LR mode.
 #[allow(clippy::too_many_arguments)]
-pub fn tag_badge_polygon(x0: f64, yb: f64, yt: f64, bl: f64, br: f64, bt: f64, bb: f64) -> String {
+pub fn tag_badge_polygon(
+    x0: f64,
+    yb: f64,
+    yt: f64,
+    bl: f64,
+    br: f64,
+    bt: f64,
+    bb: f64,
+    primary_color: &str,
+    primary_border: &str,
+) -> String {
     format!(
-        "<polygon class=\"tag-label-bkg\" points=\"{x0:.3},{yb:.3} {x0:.3},{yt:.3} {bl:.3},{bt:.3} {br:.3},{bt:.3} {br:.3},{bb:.3} {bl:.3},{bb:.3}\" fill=\"#ECECFF\" stroke=\"hsl(240, 60%, 86.2745098039%)\" stroke-width=\"1\"/>",
-        x0=x0, yb=yb, yt=yt, bl=bl, br=br, bt=bt, bb=bb,
+        "<polygon class=\"tag-label-bkg\" points=\"{x0:.3},{yb:.3} {x0:.3},{yt:.3} {bl:.3},{bt:.3} {br:.3},{bt:.3} {br:.3},{bb:.3} {bl:.3},{bb:.3}\" fill=\"{primary_color}\" stroke=\"{primary_border}\" stroke-width=\"1\"/>",
+        x0 = x0, yb = yb, yt = yt, bl = bl, br = br, bt = bt, bb = bb,
+        primary_color = primary_color, primary_border = primary_border,
     )
 }
 
 /// Render the hole circle on a tag badge.
-pub fn tag_hole_circle(cy: f64, cx: f64) -> String {
+pub fn tag_hole_circle(cy: f64, cx: f64, line_color: &str) -> String {
     format!(
-        "<circle cy=\"{:.3}\" cx=\"{:.3}\" r=\"1.5\" class=\"tag-hole\" fill=\"#333\"/>",
-        cy, cx,
+        "<circle cy=\"{:.3}\" cx=\"{:.3}\" r=\"1.5\" class=\"tag-hole\" fill=\"{line_color}\"/>",
+        cy,
+        cx,
+        line_color = line_color,
     )
 }
 
 /// Render the tag text label.
-pub fn tag_text_lr(y: f64, x: f64, ff: &str, text: &str) -> String {
+pub fn tag_text_lr(y: f64, x: f64, ff: &str, text: &str, text_color: &str) -> String {
     format!(
-        "<text y=\"{:.3}\" class=\"tag-label\" x=\"{:.3}\" font-size=\"10\" fill=\"#131300\" font-family=\"{ff}\">{}</text>",
-        y, x, text, ff = ff,
+        "<text y=\"{:.3}\" class=\"tag-label\" x=\"{:.3}\" font-size=\"10\" fill=\"{text_color}\" font-family=\"{ff}\">{}</text>",
+        y, x, text, ff = ff, text_color = text_color,
     )
 }
 
@@ -353,9 +362,9 @@ pub fn tag_badge_rect_tb(tx: f64, ty: f64, tw: f64) -> String {
 }
 
 /// Render a tag text label for TB/BT mode.
-pub fn tag_text_tb(tx: f64, ty: f64, ff: &str, text: &str) -> String {
+pub fn tag_text_tb(tx: f64, ty: f64, ff: &str, text: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#333\" font-family=\"{ff}\">{}</text>",
-        tx, ty, text, ff = ff,
+        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"{text_color}\" font-family=\"{ff}\">{}</text>",
+        tx, ty, text, ff = ff, text_color = text_color,
     )
 }

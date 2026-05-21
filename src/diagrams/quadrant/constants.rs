@@ -53,51 +53,8 @@ pub const QUADRANT_INTERNAL_BORDER_STROKE_WIDTH: f64 = 1.0;
 pub const QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH: f64 = 2.0;
 
 // ---------------------------------------------------------------------------
-// Colours (Mermaid default theme variables)
+// Colours
 // ---------------------------------------------------------------------------
-
-/// Fill colour for quadrant-1 (top-right). Matches cScale0 primary colour.
-pub const QUADRANT1_FILL: &str = "#ECECFF";
-
-/// Fill colour for quadrant-2 (top-left). Matches cScale1 colour.
-pub const QUADRANT2_FILL: &str = "#f1f1ff";
-
-/// Fill colour for quadrant-3 (bottom-left). Matches cScale2 colour.
-pub const QUADRANT3_FILL: &str = "#f6f6ff";
-
-/// Fill colour for quadrant-4 (bottom-right). Matches cScale3 colour.
-pub const QUADRANT4_FILL: &str = "#fbfbff";
-
-/// Text fill colour for quadrant-1 labels.
-pub const QUADRANT1_TEXT_FILL: &str = "#131300";
-
-/// Text fill colour for quadrant-2 labels.
-pub const QUADRANT2_TEXT_FILL: &str = "#0e0e00";
-
-/// Text fill colour for quadrant-3 labels.
-pub const QUADRANT3_TEXT_FILL: &str = "#090900";
-
-/// Text fill colour for quadrant-4 labels.
-pub const QUADRANT4_TEXT_FILL: &str = "#040400";
-
-/// Fill colour for data point circles.
-/// Mermaid emits `hsl(240, 100%, NaN%)` when the theme variable is unresolved.
-pub const QUADRANT_POINT_FILL: &str = "hsl(240, 100%, NaN%)";
-
-/// Text fill for data point labels.
-pub const QUADRANT_POINT_TEXT_FILL: &str = "#131300";
-
-/// Text fill for x-axis labels.
-pub const QUADRANT_X_AXIS_TEXT_FILL: &str = "#131300";
-
-/// Text fill for y-axis labels.
-pub const QUADRANT_Y_AXIS_TEXT_FILL: &str = "#131300";
-
-/// Text fill for the diagram title.
-pub const QUADRANT_TITLE_FILL: &str = "#131300";
-
-/// Stroke colour for the internal (dividing) border lines.
-pub const QUADRANT_INTERNAL_BORDER_STROKE_FILL: &str = "rgb(199, 199, 241)";
-
-/// Stroke colour for the external (outer) border lines.
-pub const QUADRANT_EXTERNAL_BORDER_STROKE_FILL: &str = "rgb(199, 199, 241)";
+// All quadrant fill colours, text colours, and border colours are resolved
+// from the active Theme at render time (via Theme::resolve() → ThemeVars).
+// No hardcoded palette constants are needed here.

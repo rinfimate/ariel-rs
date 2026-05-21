@@ -14,16 +14,16 @@
 //              h     = (n_attrs + 1) * row_h
 //              w     = max(label_w + ATTR_PADDING*2, sum_col_widths_with_padding)
 //
-// Dagre graph: marginx=8, marginy=8, nodesep=100, ranksep=100
+// Dagre graph: marginx=8, marginy=8, nodesep=140, edgesep=20, ranksep=101
+// Self-loop: cyclic-special virtual nodes (0.1×0.1) + label width on mid edge
 // ViewBox: svgBounds expanded by padding=8 on all sides
 
 use super::constants::*;
 use super::parser::{Attribute, AttributeKeyType, ErDiagram, Identification};
 use super::templates::{
-    attr_row_rect, build_css, entity_box_rect, entity_group_open, entity_h_divider,
-    entity_v_divider, esc, fo_label, marker_end, marker_start, midpoint, render_markers,
-    render_relationship, self_loop_edge_label, self_loop_path_end, self_loop_path_mid,
-    self_loop_path_start,
+    attr_row_rect, entity_box_rect, entity_group_open, entity_h_divider, entity_v_divider, esc,
+    fo_label, marker_end, marker_start, midpoint, render_markers, render_relationship,
+    self_loop_edge_label, self_loop_path_end, self_loop_path_mid, self_loop_path_start, svg_root,
 };
 use crate::text::measure;
 use crate::theme::Theme;
@@ -225,6 +225,7 @@ fn render_entity_svg(
             FO_H,
             label_text,
             "",
+            vars.primary_text,
         ));
     } else {
         // With-attr: entity name label centered in the name row (y=0 to y=ROW_H)
@@ -235,6 +236,7 @@ fn render_entity_svg(
             FO_H,
             label_text,
             "",
+            vars.primary_text,
         ));
 
         // Horizontal divider after name row
@@ -244,7 +246,11 @@ fn render_entity_svg(
         for (idx, attr) in attrs.iter().enumerate() {
             let content_row_index = idx + 1;
             let is_even = content_row_index % 2 == 0;
-            let row_fill = if is_even { vars.primary_color } else { "white" };
+            let row_fill = if is_even {
+                vars.er_row_fill_even
+            } else {
+                vars.er_row_fill_odd
+            };
             let row_y = ROW_H + idx as f64 * ROW_H;
 
             s.push_str(&attr_row_rect(
@@ -273,6 +279,7 @@ fn render_entity_svg(
                 FO_H,
                 &attr.attribute_type,
                 "",
+                vars.primary_text,
             ));
             s.push_str(&fo_label(
                 geom.name_col_x + ATTR_PADDING / 2.0,
@@ -281,6 +288,7 @@ fn render_entity_svg(
                 FO_H,
                 &attr.attribute_name,
                 "",
+                vars.primary_text,
             ));
 
             if geom.has_key {
@@ -293,6 +301,7 @@ fn render_entity_svg(
                     FO_H,
                     &key_str,
                     "",
+                    vars.primary_text,
                 ));
             }
             if geom.has_comment {
@@ -304,6 +313,7 @@ fn render_entity_svg(
                     FO_H,
                     &attr.attribute_comment,
                     "font-style:italic;",
+                    vars.primary_text,
                 ));
             }
         }
@@ -330,7 +340,6 @@ fn get_edge_name(rel: &super::parser::ErRelationship) -> String {
 
 pub fn render(diag: &ErDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
     let svg_id = "mermaid-svg";
 
     // Compute entity geometries
@@ -381,16 +390,16 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
             g.set_node(
                 &sp1,
                 NodeLabel {
-                    width: 10.0,
-                    height: 10.0,
+                    width: 0.1,
+                    height: 0.1,
                     ..Default::default()
                 },
             );
             g.set_node(
                 &sp2,
                 NodeLabel {
-                    width: 10.0,
-                    height: 10.0,
+                    width: 0.1,
+                    height: 0.1,
                     ..Default::default()
                 },
             );
@@ -400,10 +409,21 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
                 EdgeLabel::default(),
                 Some(&format!("{edge_name}-cyc0")),
             );
+            // Mid edge carries label width so dagre's proxy node shifts sp1 correctly
+            let label_w = if !rel.role_a.is_empty() {
+                tw(&rel.role_a, REL_FONT_SIZE) + 10.0
+            } else {
+                0.0
+            };
             g.set_edge(
                 &sp1,
                 &sp2,
-                EdgeLabel::default(),
+                EdgeLabel {
+                    width: Some(label_w),
+                    height: Some(0.0),
+                    labelpos: Some("c".to_string()),
+                    ..Default::default()
+                },
                 Some(&format!("{edge_name}-cyc1")),
             );
             g.set_edge(
@@ -425,7 +445,6 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
 
     layout(&mut g);
 
-    let css = build_css(svg_id, ff, &vars);
     let markers = render_markers(svg_id, &vars);
 
     // adjustEntities: translate to (node.x - w/2, node.y - h/2)
@@ -470,13 +489,11 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
             } else {
                 ""
             };
-            // Self-loop: 3 separate paths matching JS "cyclic-special" structure
-            // edge1: entity→sp1  (start marker only)
-            // edgeMid: sp1→sp2  (no markers, carries the label)
-            // edge2: sp2→entity  (end marker only)
-            let mut pts0 = edge_points(&g, &rel.entity_a, sp1, &format!("{edge_name}-cyc0"));
+            // Self-loop: use dagre edge routing directly (sp1/sp2 now correctly placed).
+            let pts0 = edge_points(&g, &rel.entity_a, sp1, &format!("{edge_name}-cyc0"));
             let pts1 = edge_points(&g, sp1, sp2, &format!("{edge_name}-cyc1"));
-            let mut pts2 = edge_points(&g, sp2, &rel.entity_b, &format!("{edge_name}-cyc2"));
+            let pts2 = edge_points(&g, sp2, &rel.entity_b, &format!("{edge_name}-cyc2"));
+            let (pts0, pts1, pts2) = (pts0, pts1, pts2);
 
             for pts in [&pts0, &pts1, &pts2] {
                 for &(px, py) in pts.iter() {
@@ -486,46 +503,6 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
                     content_max_y = content_max_y.max(py);
                 }
             }
-
-            // Fix attachment points: force edge to exit/enter entity on its BOTTOM edge
-            // Dagre may route through the LEFT edge when sp1 is very far left; we
-            // recompute the boundary intersection using the bottom edge instead.
-            if let Some(node) = g.node_opt(&rel.entity_a) {
-                if let (Some(cx), Some(cy)) = (node.x, node.y) {
-                    let entity_idx = diag.entities.iter().position(|e| e.id == rel.entity_a);
-                    let h = entity_idx.map(|i| geoms[i].height).unwrap_or(84.0);
-                    let bottom = cy + h / 2.0;
-                    // Fix pts0 first point: use PERSON-center → sp1-center direction
-                    // to find the BOTTOM-edge exit. Using pts0[1] as direction gives
-                    // a left-edge exit when sp1 is very far left (different from ref).
-                    if !pts0.is_empty() {
-                        if let Some(sp1_node) = g.node_opt(sp1) {
-                            if let (Some(sp1_x), Some(sp1_y)) = (sp1_node.x, sp1_node.y) {
-                                let dy = sp1_y - cy;
-                                if dy.abs() > 0.001 {
-                                    let t = (bottom - cy) / dy;
-                                    let ax = cx + t * (sp1_x - cx);
-                                    let ew = entity_idx.map(|i| geoms[i].width).unwrap_or(0.0);
-                                    let attach_x = ax.clamp(cx - ew / 2.0, cx + ew / 2.0);
-                                    pts0[0] = (attach_x, bottom);
-                                }
-                            }
-                        }
-                    }
-                    // Fix pts2 last point: intersection of pts2[n-2]→(cx,cy) with bottom edge
-                    let n = pts2.len();
-                    if n >= 2 {
-                        let (wx, wy) = pts2[n - 2];
-                        let dy = cy - wy;
-                        if dy.abs() > 0.001 {
-                            let t = (bottom - wy) / dy;
-                            let attach_x = wx + t * (cx - wx);
-                            pts2[n - 1] = (attach_x, bottom);
-                        }
-                    }
-                }
-            }
-
             // edge1: start marker (cardB), no end marker
             if !pts0.is_empty() {
                 let d = crate::svg::curve_basis_path(&pts0);
@@ -538,11 +515,14 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
                 rels_svg.push_str(&self_loop_path_mid(&d, lc, dasharray));
                 // Label at midpoint of middle segment
                 if !rel.role_a.is_empty() {
-                    let (raw_lx, ly) = midpoint(&pts1);
+                    let (lx, ly) = midpoint(&pts1);
                     let lbl_w = tw(&rel.role_a, REL_FONT_SIZE);
                     let fo_h = REL_FONT_SIZE * 1.5;
-                    // Clamp label x so FO left edge >= content_min_x (no viewBox expansion needed)
-                    let lx = raw_lx.max(content_min_x + lbl_w / 2.0);
+                    // Expand viewBox to include label
+                    content_min_x = content_min_x.min(lx - lbl_w / 2.0);
+                    content_min_y = content_min_y.min(ly - fo_h / 2.0);
+                    content_max_x = content_max_x.max(lx + lbl_w / 2.0);
+                    content_max_y = content_max_y.max(ly + fo_h / 2.0);
                     rels_svg.push_str(&self_loop_edge_label(
                         lx,
                         ly,
@@ -552,6 +532,7 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
                         fo_h,
                         REL_FONT_SIZE,
                         &esc(&rel.role_a),
+                        vars.primary_text,
                     ));
                 }
             }
@@ -587,15 +568,15 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
     let vb_w = (content_max_x - content_min_x) + VB_PAD * 2.0;
     let vb_h = (content_max_y - content_min_y) + VB_PAD * 2.0;
 
-    format!(
-        "<svg id=\"{svg_id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" \
-         class=\"erDiagram\" style=\"max-width:{vb_w:.3}px;\" \
-         viewBox=\"{vb_x:.3} {vb_y:.3} {vb_w:.3} {vb_h:.3}\">\
-         <style>{css}</style>\
-         {markers}\
-         {rels_svg}\
-         {entities_svg}\
-         </svg>"
+    svg_root(
+        svg_id,
+        vb_x,
+        vb_y,
+        vb_w,
+        vb_h,
+        &markers,
+        &rels_svg,
+        &entities_svg,
     )
 }
 

@@ -8,16 +8,16 @@
 // ---------------------------------------------------------------------------
 
 /// Render the outer `<svg>` element for a requirement diagram.
-pub fn svg_root(sid: &str, gw: f64, gh: f64, css: &str) -> String {
+pub fn svg_root(sid: &str, gw: f64, gh: f64) -> String {
     format!(
-        "<svg id=\"{sid}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" class=\"requirementDiagram\" style=\"max-width:{gw:.1}px;\" viewBox=\"0 0 {gw:.1} {gh:.1}\"><style>{css}</style>",
+        "<svg id=\"{sid}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" class=\"requirementDiagram\" style=\"max-width:{gw:.3}px;\" viewBox=\"0 0 {gw:.3} {gh:.3}\">",
     )
 }
 
 /// Render an empty requirement SVG placeholder.
 pub fn empty_svg(sid: &str) -> String {
     format!(
-        r#"<svg id="{sid}" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 100 50"></svg>"#,
+        r##"<svg id="{sid}" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 100 50"></svg>"##,
     )
 }
 
@@ -64,24 +64,24 @@ pub fn node_divider(l: f64, r: f64, y: f64, stroke: &str) -> String {
     )
 }
 
-/// Render a label using `<foreignObject>` (centered text line).
-pub fn label_fo(lx: f64, ly: f64, w: f64, text: &str) -> String {
+/// Render a centered label as a plain SVG `<text>` element.
+pub fn label_text(cx: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
     format!(
-        "<g class=\"label\" transform=\"translate({lx:.3},{ly:.3})\"><foreignObject width=\"{w:.3}\" height=\"24\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display:table-cell;white-space:nowrap;line-height:1.5;text-align:center;\"><span class=\"nodeLabel\"><p>{text}</p></span></div></foreignObject></g>",
+        "<text x=\"{cx:.3}\" y=\"{cy:.3}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text>",
     )
 }
 
-/// Render a bold label using `<foreignObject>` (for node names).
-pub fn label_fo_bold(lx: f64, ly: f64, w: f64, text: &str) -> String {
+/// Render a bold centered label as a plain SVG `<text>` element (for node names).
+pub fn label_text_bold(cx: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
     format!(
-        "<g class=\"label\" style=\"font-weight:bold\" transform=\"translate({lx:.3},{ly:.3})\"><foreignObject width=\"{w:.3}\" height=\"24\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"font-weight:bold;display:table-cell;white-space:nowrap;line-height:1.5;text-align:center;\"><span class=\"nodeLabel\"><p>{text}</p></span></div></foreignObject></g>",
+        "<text x=\"{cx:.3}\" y=\"{cy:.3}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" font-weight=\"bold\" fill=\"{fill}\">{text}</text>",
     )
 }
 
-/// Render a left-aligned body item label using `<foreignObject>`.
-pub fn label_fo_body(ix: f64, ry: f64, iw: f64, text: &str) -> String {
+/// Render a left-aligned body item label as a plain SVG `<text>` element.
+pub fn label_text_body(x: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
     format!(
-        "<g class=\"label\" transform=\"translate({ix:.3},{ry:.3})\"><foreignObject width=\"{iw:.3}\" height=\"24\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display:table-cell;white-space:nowrap;line-height:1.5;text-align:center;\"><span class=\"nodeLabel\"><p>{text}</p></span></div></foreignObject></g>",
+        "<text x=\"{x:.3}\" y=\"{cy:.3}\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text>",
     )
 }
 
@@ -102,10 +102,19 @@ pub fn relation_path(
     )
 }
 
-/// Render an edge label using `<foreignObject>`.
-pub fn edge_label_fo(mx: f64, my: f64, lbl_inner_x: f64, lw: f64, lhtml: &str) -> String {
+/// Render an edge label as a plain SVG `<text>` element.
+pub fn edge_label_text(
+    mx: f64,
+    my: f64,
+    lw: f64,
+    fs: f64,
+    fill: &str,
+    bg: &str,
+    text: &str,
+) -> String {
+    let ox = -(lw / 2.0);
     format!(
-        "<g class=\"edgeLabel\" transform=\"translate({mx:.3},{my:.3})\"><g class=\"label\" transform=\"translate({lbl_inner_x:.3},-12)\"><foreignObject width=\"{lw:.3}\" height=\"24\"><div xmlns=\"http://www.w3.org/1999/xhtml\" class=\"labelBkg\" style=\"display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center;\"><span class=\"edgeLabel\"><p>{lhtml}</p></span></div></foreignObject></g></g>",
+        "<g class=\"edgeLabel\" transform=\"translate({mx:.3},{my:.3})\"><rect x=\"{ox:.3}\" y=\"-12\" width=\"{lw:.3}\" height=\"24\" fill=\"{bg}\" stroke=\"none\"/><text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text></g>",
     )
 }
 

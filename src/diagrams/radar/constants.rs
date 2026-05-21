@@ -62,7 +62,8 @@ pub const CURVE_STROKE_WIDTH: f64 = 2.0;
 // Graticule styling
 // ---------------------------------------------------------------------------
 
-/// Fill/stroke colour for graticule rings.
+/// Fill/stroke colour for graticule rings (default fallback — renderer uses theme vars).
+#[allow(dead_code)]
 pub const GRATICULE_COLOR: &str = "#DEDEDE";
 
 /// Graticule fill opacity.

@@ -34,9 +34,5 @@ pub const INNER_MARGINY: f64 = 45.5;
 pub const CLUSTER_PADDING: f64 = 8.0; // state.padding applied around cluster rects
 pub const CLUSTER_TITLE_H: f64 = 24.0;
 
-// ── Colours (note box — fixed, not theme-derived) ─────────────────────────────
-pub const NOTE_FILL: &str = "#fff5ad";
-pub const NOTE_STROKE: &str = "#aaaa33";
-
 // ── SVG id ────────────────────────────────────────────────────────────────────
 pub const SVG_ID: &str = "mermaid-svg";

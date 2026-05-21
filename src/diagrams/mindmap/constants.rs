@@ -23,55 +23,10 @@ pub const MARGIN: f64 = 20.0;
 /// Fixed height of rectangular node shapes (px).
 pub const NODE_SHAPE_H: f64 = 24.0;
 
-// ---------------------------------------------------------------------------
-// Root node colours
-// ---------------------------------------------------------------------------
-
-/// Fill colour for the root node.
-pub const ROOT_FILL: &str = "hsl(240, 100%, 46.2745098039%)";
-
-/// Text colour for the root node label.
-pub const ROOT_TEXT_COLOR: &str = "#ffffff";
-
-// ---------------------------------------------------------------------------
-// Section colour palettes (11 colours, indexed mod 11)
-// ---------------------------------------------------------------------------
-
-/// Fill colours for non-root section nodes (section 0..10).
-pub const SECTION_FILLS: [&str; 11] = [
-    "hsl(60, 100%, 73.5294117647%)",
-    "hsl(80, 100%, 76.2745098039%)",
-    "hsl(270, 100%, 76.2745098039%)",
-    "hsl(300, 100%, 76.2745098039%)",
-    "hsl(330, 100%, 76.2745098039%)",
-    "hsl(0, 100%, 76.2745098039%)",
-    "hsl(30, 100%, 76.2745098039%)",
-    "hsl(90, 100%, 76.2745098039%)",
-    "hsl(150, 100%, 76.2745098039%)",
-    "hsl(180, 100%, 76.2745098039%)",
-    "hsl(210, 100%, 76.2745098039%)",
-];
-
-/// Text fill colours for non-root section nodes (section 0..10).
-pub const SECTION_TEXT_COLORS: [&str; 11] = [
-    "black", "black", "#ffffff", "black", "black", "black", "black", "black", "black", "black",
-    "black",
-];
-
-/// Edge/line colours for each section (section 0..10).
-pub const SECTION_LINE_COLORS: [&str; 11] = [
-    "hsl(240, 100%, 83.5294117647%)",
-    "hsl(260, 100%, 86.2745098039%)",
-    "hsl(90, 100%, 86.2745098039%)",
-    "hsl(120, 100%, 86.2745098039%)",
-    "hsl(150, 100%, 86.2745098039%)",
-    "hsl(180, 100%, 86.2745098039%)",
-    "hsl(210, 100%, 86.2745098039%)",
-    "hsl(270, 100%, 86.2745098039%)",
-    "hsl(330, 100%, 86.2745098039%)",
-    "hsl(0, 100%, 86.2745098039%)",
-    "hsl(30, 100%, 86.2745098039%)",
-];
+// Root and section colours are now in ThemeVars:
+//   vars.mindmap_root_fill, vars.mindmap_root_text,
+//   vars.mindmap_section_fills[i%11], vars.mindmap_section_text[i%11],
+//   vars.mindmap_section_lines[i%11]
 
 /// Rounded corner radius for rectangular mindmap node shapes (px).
 pub const NODE_RECT_RX: f64 = 5.0;

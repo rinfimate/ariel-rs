@@ -1,126 +1,157 @@
-// Faithful Rust port of mermaid/src/diagrams/eventmodeling/parser.ts + db.ts
+// Faithful Rust port of the Mermaid EventModeling Langium grammar.
 //
-// Event Modeling diagram:
-//   eventmodeling
-//   [title <text>]
+// Grammar (distilled from the EventModelingGrammar JSON embedded in the bundle):
 //
-//   Swimlane definitions establish rows (UI Automation, Command/ReadModel, Events, ...)
-//   Boxes are placed within swimlanes with visual types.
-//   Relations connect boxes with arrows.
+//   EventModel:
+//     "eventmodeling"
+//     ( accDescr | accTitle | title | frame | dataEntity | ... )*
 //
-// The original uses an @mermaid-js/parser AST (EmFrame / EventModel).
-// We implement a line-based parser that captures the essential structure:
+//   EmTimeFrame ("tf" | "timeframe"):
+//     ("tf" | "timeframe") name=EM_FID modelEntityType entityIdentifier
+//     ("->" sourceFrames+=EM_FID)*
+//     ("[[" dataRef "]]")?
+//     inlineData?
 //
-//   swimlane <label>
-//   box <type> "<text>" [in <swimlane>]
-//   relation <source_box> --> <target_box>
+//   EmResetFrame ("rf" | "resetframe"):
+//     ("rf" | "resetframe") name=EM_FID modelEntityType entityIdentifier
+//     ("->>" sourceFrames+=EM_FID)*
+//     ("[[" dataRef "]]")?
+//     inlineData?
 //
-// Visual types from EventModeling spec:
-//   command  → blue
-//   event    → orange
-//   readmodel / view → green
-//   ui / screen → grey
+//   EmModelEntityType: "rmo"|"readmodel"|"ui"|"cmd"|"command"|"evt"|"event"|"pcr"|"processor"
+//   EM_FID: /\d{1,3}/         — 1-3 digit frame identifier
+//   QualifiedName: EM_ID ("." EM_ID)*
+//   EM_ID: /[_a-zA-Z][\w_]*/
+//
+//   EmDataEntity: "data" name=EM_ID dataBlock
+//   inlineData: ("`" dataType "`")? EM_DATA_INLINE
+//   EM_DATA_INLINE: /\{(.*)\}|"(.*)"|'(.*)'/
+//
+// Source frame relation operator: "->" or "->>" (both accepted; grammar uses "->>").
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum BoxType {
-    Command,
-    Event,
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/// Entity type of an event modeling frame (`modelEntityType`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntityType {
+    /// "ui" — UI screen / automation step.
+    Ui,
+    /// "pcr" | "processor" — processor / policy.
+    Processor,
+    /// "rmo" | "readmodel" — read model / view.
     ReadModel,
-    UiAutomation,
-    Unknown,
+    /// "cmd" | "command" — command.
+    Command,
+    /// "evt" | "event" — domain event.
+    Event,
 }
 
-impl BoxType {
-    pub fn fill(&self) -> &'static str {
-        match self {
-            BoxType::Command => "#1E90FF",
-            BoxType::Event => "#FFA500",
-            BoxType::ReadModel => "#32CD32",
-            BoxType::UiAutomation => "#808080",
-            BoxType::Unknown => "#AAAAAA",
-        }
-    }
-
-    pub fn stroke(&self) -> &'static str {
-        match self {
-            BoxType::Command => "#0060CC",
-            BoxType::Event => "#CC7700",
-            BoxType::ReadModel => "#009900",
-            BoxType::UiAutomation => "#555555",
-            BoxType::Unknown => "#777777",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "command" => BoxType::Command,
-            "event" => BoxType::Event,
-            "readmodel" | "read-model" | "view" | "read_model" => BoxType::ReadModel,
-            "ui" | "screen" | "uiautomation" | "ui-automation" => BoxType::UiAutomation,
-            _ => BoxType::Unknown,
+impl EntityType {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "ui" => Some(EntityType::Ui),
+            "pcr" | "processor" => Some(EntityType::Processor),
+            "rmo" | "readmodel" => Some(EntityType::ReadModel),
+            "cmd" | "command" => Some(EntityType::Command),
+            "evt" | "event" => Some(EntityType::Event),
+            _ => None,
         }
     }
 }
 
+/// A single event modeling frame (`EmTimeFrame` or `EmResetFrame`).
 #[derive(Debug, Clone)]
-pub struct EmBox {
-    pub id: String,
-    pub box_type: BoxType,
-    pub text: String,
-    pub swimlane: String,
+pub struct EmFrame {
+    /// EM_FID — 1-3 digit string used as the cross-reference key.
+    pub name: String,
+    /// Type of this frame.
+    pub entity_type: EntityType,
+    /// Qualified identifier: `Name` or `Namespace.Name`.
+    pub entity_id: String,
+    /// Source frame names this frame receives from (`->> frameName`).
+    pub source_refs: Vec<String>,
+    /// True if this is a reset frame (`rf` / `resetframe`).
+    pub is_reset: bool,
+    /// Optional inline data value `{ ... }`.
+    #[allow(dead_code)]
+    pub inline_data: Option<String>,
+    /// Optional reference to an `EmDataEntity` name.
+    #[allow(dead_code)]
+    pub data_ref: Option<String>,
 }
 
+/// A named data block.
 #[derive(Debug, Clone)]
-pub struct EmSwimlane {
-    pub label: String,
+pub struct EmDataEntity {
+    #[allow(dead_code)]
+    pub name: String,
+    #[allow(dead_code)]
+    pub data: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct EmRelation {
-    pub source: String,
-    pub target: String,
-}
-
+/// Parsed event modeling diagram.
 #[derive(Debug)]
 pub struct EventModelDiagram {
     pub title: Option<String>,
-    pub swimlanes: Vec<EmSwimlane>,
-    pub boxes: Vec<EmBox>,
-    pub relations: Vec<EmRelation>,
+    pub frames: Vec<EmFrame>,
+    #[allow(dead_code)]
+    pub data_entities: Vec<EmDataEntity>,
 }
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 pub fn parse(input: &str) -> crate::error::ParseResult<EventModelDiagram> {
     let mut title: Option<String> = None;
-    let mut swimlanes: Vec<EmSwimlane> = Vec::new();
-    let mut boxes: Vec<EmBox> = Vec::new();
-    let mut relations: Vec<EmRelation> = Vec::new();
-    let mut box_counter = 0usize;
+    let mut frames: Vec<EmFrame> = Vec::new();
+    let mut data_entities: Vec<EmDataEntity> = Vec::new();
+
+    // Multi-line data block accumulation.
+    let mut data_block_name: Option<String> = None;
+    let mut data_block_lines: Vec<String> = Vec::new();
+    let mut in_data_block = false;
 
     let mut in_header = true;
-    let mut current_swimlane: Option<String> = None;
 
     for raw in input.lines() {
+        // Strip single-line comments (%%)
         let line = if let Some(p) = raw.find("%%") {
             &raw[..p]
         } else {
             raw
         };
         let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
 
+        // ── Header ────────────────────────────────────────────────────────────
         if in_header {
-            if trimmed.starts_with("eventmodeling") || trimmed.starts_with("event-modeling") {
+            if trimmed.starts_with("eventmodeling") {
                 in_header = false;
             }
             continue;
         }
 
-        // title
+        // ── Data block accumulation ───────────────────────────────────────────
+        if in_data_block {
+            if trimmed == "}" {
+                if let Some(name) = data_block_name.take() {
+                    data_entities.push(EmDataEntity {
+                        name,
+                        data: data_block_lines.join("\n"),
+                    });
+                }
+                data_block_lines.clear();
+                in_data_block = false;
+            } else {
+                data_block_lines.push(trimmed.to_string());
+            }
+            continue;
+        }
+
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // ── title ─────────────────────────────────────────────────────────────
+        // EM_TITLE terminal: /[\t ]*title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|)/
         if let Some(rest) = trimmed
             .strip_prefix("title ")
             .or_else(|| trimmed.strip_prefix("title\t"))
@@ -128,164 +159,244 @@ pub fn parse(input: &str) -> crate::error::ParseResult<EventModelDiagram> {
             title = Some(rest.trim().to_string());
             continue;
         }
+        if trimmed == "title" {
+            title = Some(String::new());
+            continue;
+        }
 
-        // accTitle / accDescr – skip
+        // ── accTitle / accDescr — skip ─────────────────────────────────────────
         if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
             continue;
         }
 
-        // swimlane <label>
+        // ── data <name> { ... } ───────────────────────────────────────────────
         if let Some(rest) = trimmed
-            .strip_prefix("swimlane ")
-            .or_else(|| trimmed.strip_prefix("swimlane\t"))
+            .strip_prefix("data ")
+            .or_else(|| trimmed.strip_prefix("data\t"))
         {
-            let label = strip_quotes(rest.trim()).to_string();
-            current_swimlane = Some(label.clone());
-            if !swimlanes.iter().any(|s| s.label == label) {
-                swimlanes.push(EmSwimlane { label });
-            }
-            continue;
-        }
-
-        // box <type> "<text>" [in <swimlane>]
-        // Also: <type> "<text>" [in <swimlane>]
-        if let Some((bx, new_swimlane)) =
-            parse_box_line(trimmed, &mut box_counter, &current_swimlane)
-        {
-            if let Some(sl) = &new_swimlane {
-                if !swimlanes.iter().any(|s| &s.label == sl) {
-                    swimlanes.push(EmSwimlane { label: sl.clone() });
-                }
-            }
-            boxes.push(bx);
-            continue;
-        }
-
-        // relation: <source> --> <target>  or  <source> -> <target>
-        if trimmed.contains("-->") || (trimmed.contains("->") && !trimmed.contains("-->")) {
-            let sep = if trimmed.contains("-->") { "-->" } else { "->" };
-            if let Some(pos) = trimmed.find(sep) {
-                let src = trimmed[..pos].trim().to_string();
-                let tgt = trimmed[pos + sep.len()..].trim().to_string();
-                if !src.is_empty() && !tgt.is_empty() {
-                    relations.push(EmRelation {
-                        source: src,
-                        target: tgt,
+            let name_tok = rest
+                .trim()
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            // Inline single-line block: data Foo { ... }
+            if let Some(brace_pos) = rest.find('{') {
+                let after = rest[brace_pos + 1..].trim();
+                let content = if let Some(end) = after.rfind('}') {
+                    after[..end].trim().to_string()
+                } else {
+                    after.to_string()
+                };
+                if !name_tok.is_empty() {
+                    data_entities.push(EmDataEntity {
+                        name: name_tok,
+                        data: content,
                     });
                 }
+            } else if !name_tok.is_empty() {
+                // Multi-line block — next lines until "}" are the content
+                data_block_name = Some(name_tok);
+                data_block_lines.clear();
+                in_data_block = true;
             }
             continue;
         }
-    }
 
-    // Ensure default swimlanes exist if none were declared
-    if swimlanes.is_empty() && !boxes.is_empty() {
-        let sl = EmSwimlane {
-            label: "Default".to_string(),
+        // ── tf / timeframe / rf / resetframe ──────────────────────────────────
+        let (is_reset, rest_after_kw) = if let Some(r) = trimmed
+            .strip_prefix("rf ")
+            .or_else(|| trimmed.strip_prefix("rf\t"))
+            .or_else(|| trimmed.strip_prefix("resetframe "))
+            .or_else(|| trimmed.strip_prefix("resetframe\t"))
+        {
+            (true, r.trim())
+        } else if let Some(r) = trimmed
+            .strip_prefix("tf ")
+            .or_else(|| trimmed.strip_prefix("tf\t"))
+            .or_else(|| trimmed.strip_prefix("timeframe "))
+            .or_else(|| trimmed.strip_prefix("timeframe\t"))
+        {
+            (false, r.trim())
+        } else {
+            continue;
         };
-        swimlanes.push(sl);
-        for bx in &mut boxes {
-            if bx.swimlane.is_empty() {
-                bx.swimlane = "Default".to_string();
-            }
+
+        if let Some(frame) = parse_frame_line(rest_after_kw, is_reset) {
+            frames.push(frame);
         }
     }
 
     crate::error::ParseResult::ok(EventModelDiagram {
         title,
-        swimlanes,
-        boxes,
-        relations,
+        frames,
+        data_entities,
     })
 }
 
-// ─── Line parsers ─────────────────────────────────────────────────────────────
+// ─── Frame line parser ────────────────────────────────────────────────────────
 
-fn parse_box_line(
-    s: &str,
-    counter: &mut usize,
-    current_swimlane: &Option<String>,
-) -> Option<(EmBox, Option<String>)> {
-    // Try "box <type> <text> [in <swimlane>]"
-    let rest = if let Some(r) = s.strip_prefix("box ").or_else(|| s.strip_prefix("box\t")) {
-        r.trim()
-    } else {
-        // Also accept lines that start with a known type keyword
-        s
-    };
+/// Parse the part of a frame line after `tf`/`rf`:
+///   `name modelEntityType entityIdentifier (->> sourceRef)* ([[dataRef]])? inlineData?`
+fn parse_frame_line(s: &str, is_reset: bool) -> Option<EmFrame> {
+    let tokens = tokenize_frame(s);
+    let mut pos = 0;
 
-    // Determine type from first token
-    let first_space = rest.find(|c: char| c.is_whitespace());
-    let (type_token, after_type) = if let Some(p) = first_space {
-        (&rest[..p], rest[p..].trim())
-    } else {
-        (rest, "")
-    };
-
-    let box_type = BoxType::from_str(type_token);
-    if box_type == BoxType::Unknown && !s.starts_with("box") {
+    // name = EM_FID (/\d{1,3}/)
+    let name = tokens.get(pos)?.clone();
+    if !name.chars().all(|c| c.is_ascii_digit()) || name.is_empty() || name.len() > 3 {
         return None;
     }
+    pos += 1;
 
-    // Parse text (quoted or unquoted up to "in")
-    let (text, after_text) = parse_text_token(after_type);
-    if text.is_empty() {
+    // modelEntityType
+    let type_tok = tokens.get(pos)?;
+    let entity_type = EntityType::from_str(type_tok)?;
+    pos += 1;
+
+    // entityIdentifier = QualifiedName (EM_ID ("." EM_ID)*)
+    let entity_id = tokens.get(pos)?.clone();
+    if entity_id.is_empty() {
         return None;
     }
+    pos += 1;
 
-    // Parse optional "in <swimlane>"
-    let (swimlane, new_swimlane) = if let Some(in_rest) = after_text
-        .trim()
-        .strip_prefix("in ")
-        .or_else(|| after_text.trim().strip_prefix("in\t"))
-    {
-        let sl = strip_quotes(in_rest.trim()).to_string();
-        let new_sl = if current_swimlane.as_deref() != Some(&sl) {
-            Some(sl.clone())
+    // source refs: (->> | ->) frameId ...
+    let mut source_refs: Vec<String> = Vec::new();
+    while pos < tokens.len() {
+        let tok = &tokens[pos];
+        if tok == "->>" || tok == "->" {
+            pos += 1;
+            if let Some(ref_id) = tokens.get(pos) {
+                if ref_id.chars().all(|c| c.is_ascii_digit()) && !ref_id.is_empty() {
+                    source_refs.push(ref_id.clone());
+                    pos += 1;
+                }
+            }
         } else {
-            None
-        };
-        (sl, new_sl)
+            break;
+        }
+    }
+
+    // optional [[dataRef]]
+    let mut data_ref: Option<String> = None;
+    if pos < tokens.len() && tokens[pos] == "[[" {
+        pos += 1;
+        if let Some(dr) = tokens.get(pos) {
+            data_ref = Some(dr.clone());
+            pos += 1;
+        }
+        // consume "]]"
+        if tokens.get(pos).map(|t| t == "]]").unwrap_or(false) {
+            pos += 1;
+        }
+    }
+
+    // optional inline data: { ... } or "`type`" { ... }
+    let inline_data = if pos < tokens.len() {
+        // Reconstruct remaining as inline data string
+        let rest: String = tokens[pos..].join(" ");
+        extract_inline_data(&rest)
     } else {
-        (current_swimlane.clone().unwrap_or_default(), None)
+        None
     };
 
-    let id = format!("box{}", *counter);
-    *counter += 1;
+    // Suppress unused warning for tokens variable (fully consumed above)
+    let _ = tokens.len();
 
-    Some((
-        EmBox {
-            id,
-            box_type,
-            text,
-            swimlane,
-        },
-        new_swimlane,
-    ))
+    Some(EmFrame {
+        name,
+        entity_type,
+        entity_id,
+        source_refs,
+        is_reset,
+        inline_data,
+        data_ref,
+    })
 }
 
-fn parse_text_token(s: &str) -> (String, &str) {
-    let s = s.trim();
-    if let Some(rest) = s.strip_prefix('"') {
-        // Quoted string
-        if let Some(end) = rest.find('"') {
-            return (rest[..end].to_string(), &rest[end + 1..]);
+/// Simple tokenizer that splits on whitespace but keeps `->>`  / `->` / `[[` / `]]` as single tokens.
+fn tokenize_frame(s: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut chars = s.chars().peekable();
+    loop {
+        // skip whitespace
+        while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
+            chars.next();
         }
-        return (rest.to_string(), "");
+        let Some(&ch) = chars.peek() else { break };
+
+        if ch == '-' {
+            chars.next();
+            if chars.peek() == Some(&'>') {
+                chars.next();
+                if chars.peek() == Some(&'>') {
+                    chars.next();
+                    tokens.push("->>".to_string());
+                } else {
+                    tokens.push("->".to_string());
+                }
+            } else {
+                tokens.push("-".to_string());
+            }
+        } else if ch == '[' {
+            chars.next();
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                tokens.push("[[".to_string());
+            } else {
+                tokens.push("[".to_string());
+            }
+        } else if ch == ']' {
+            chars.next();
+            if chars.peek() == Some(&']') {
+                chars.next();
+                tokens.push("]]".to_string());
+            } else {
+                tokens.push("]".to_string());
+            }
+        } else if ch == '{' || ch == '`' {
+            // Start of inline data — collect the rest of the string as one token
+            let rest: String = chars.collect();
+            tokens.push(rest);
+            break;
+        } else {
+            // Regular token: read until whitespace
+            let mut tok = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_whitespace() || c == '[' || c == ']' || c == '-' {
+                    break;
+                }
+                tok.push(c);
+                chars.next();
+            }
+            if !tok.is_empty() {
+                tokens.push(tok);
+            }
+        }
     }
-    // Unquoted: up to " in " or end
-    if let Some(pos) = s.find(" in ") {
-        (s[..pos].trim().to_string(), &s[pos..])
-    } else {
-        (s.trim().to_string(), "")
-    }
+    tokens
 }
 
-fn strip_quotes(s: &str) -> &str {
+/// Extract the content from `{ ... }` or `"..."` or `'...'` inline data literals.
+/// Mirrors the `EM_DATA_INLINE` terminal: `/\{(.*)\}|"(.*)"|'(.*)'/`
+fn extract_inline_data(s: &str) -> Option<String> {
     let s = s.trim();
-    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
-        &s[1..s.len() - 1]
-    } else {
-        s
+    if s.starts_with('{') {
+        if let Some(end) = s.rfind('}') {
+            return Some(s[1..end].trim().to_string());
+        }
+        return Some(s[1..].trim().to_string());
     }
+    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+        return Some(s[1..s.len() - 1].to_string());
+    }
+    // backtick-type prefix: "`json`{ ... }"
+    if s.starts_with('`') {
+        if let Some(end_bt) = s[1..].find('`') {
+            let after = s[end_bt + 2..].trim();
+            return extract_inline_data(after);
+        }
+    }
+    None
 }

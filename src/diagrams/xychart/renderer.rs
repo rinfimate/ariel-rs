@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{AxisData, Orientation, PlotData, XyChart};
-use super::templates::{self, build_style, escape_attr, escape_text, fmt};
+use super::templates::{self, escape_attr, escape_text, fmt};
 /// Faithful Rust port of Mermaid's xychart renderer.
 ///
 /// Architecture mirrors the TypeScript source exactly:
@@ -927,23 +927,52 @@ fn bar_plot_elements(
 
 // ── Orchestrator (mirrors orchestrator.ts) ────────────────────────────────────
 
-fn orchestrate(chart: &XyChart) -> Vec<DrawableElem> {
-    let mut title_comp = ChartTitle::new(&chart.title, TITLE_COLOR);
+fn orchestrate(
+    chart: &XyChart,
+    plot_colors: &[&str],
+    axis_color: &str,
+    title_color: &str,
+) -> Vec<DrawableElem> {
+    // Remap parser-assigned PLOT_COLORS palette to the theme-specific palette.
+    // The parser uses PLOT_COLORS (default theme palette) as placeholders.
+    // We replace each plot's color with the corresponding theme palette entry.
+    use super::parser::PLOT_COLORS as DEFAULT_PLOT_COLORS;
+    let mut owned = chart.clone();
+    for (i, plot) in owned.plots.iter_mut().enumerate() {
+        let default_color = DEFAULT_PLOT_COLORS[i % DEFAULT_PLOT_COLORS.len()];
+        let theme_color = if i < plot_colors.len() {
+            plot_colors[i]
+        } else {
+            plot_colors[i % plot_colors.len()]
+        };
+        match plot {
+            PlotData::Bar { fill, .. } if fill == default_color => {
+                *fill = theme_color.to_string();
+            }
+            PlotData::Line { stroke_fill, .. } if stroke_fill == default_color => {
+                *stroke_fill = theme_color.to_string();
+            }
+            _ => {}
+        }
+    }
+    let chart = &owned;
+
+    let mut title_comp = ChartTitle::new(&chart.title, title_color);
     let mut plot_area = PlotArea::new();
 
     let mut x_axis = Axis::new(
         chart.x_axis.clone(),
-        X_AXIS_LABEL_COLOR,
-        X_AXIS_TITLE_COLOR,
-        X_AXIS_TICK_COLOR,
-        X_AXIS_LINE_COLOR,
+        axis_color,
+        axis_color,
+        axis_color,
+        axis_color,
     );
     let mut y_axis = Axis::new(
         chart.y_axis.clone(),
-        Y_AXIS_LABEL_COLOR,
-        Y_AXIS_TITLE_COLOR,
-        Y_AXIS_TICK_COLOR,
-        Y_AXIS_LINE_COLOR,
+        axis_color,
+        axis_color,
+        axis_color,
+        axis_color,
     );
 
     let has_bar = chart
@@ -1117,23 +1146,24 @@ fn calculate_horizontal_space(
 
 pub fn render(chart: &XyChart, theme: Theme, _use_foreign_object: bool) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
-    let shapes = orchestrate(chart);
+    let shapes = orchestrate(
+        chart,
+        vars.xychart_plot_colors,
+        vars.xychart_axis_color,
+        vars.xychart_axis_color,
+    );
 
     let id = SVG_ID;
     let mut out = String::new();
 
     // SVG root
     out.push_str(&templates::svg_root(id, WIDTH as i64, HEIGHT as i64));
-    out.push_str("<style>");
-    out.push_str(&build_style(id, ff));
-    out.push_str("</style>");
 
     // Background rect (mirrors xychartRenderer.ts background rect)
     out.push_str(&templates::main_group_with_bg(
         WIDTH as i64,
         HEIGHT as i64,
-        BG_COLOR,
+        vars.xychart_bg,
     ));
 
     // Collect groups → hierarchical group structure like getGroup() in renderer.ts

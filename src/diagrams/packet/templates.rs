@@ -1,96 +1,89 @@
 //! SVG template functions for the packet renderer.
 //!
-//! Each function takes typed parameters and returns a `String`.
-//! No rendering logic lives here — only string formatting.
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
+//! All colours are passed as parameters — no CSS injection, no hardcoded theme values.
+//! CSS class names are kept to match Mermaid JS's DOM structure.
+#![allow(dead_code)]
 
 pub use crate::diagrams::util::{esc, fmt};
 
 // ---------------------------------------------------------------------------
-// CSS
+// SVG root — matches Mermaid's configureSvgSize(useMaxWidth=true) output
 // ---------------------------------------------------------------------------
 
-pub fn build_style(id: &str, ff: &str) -> String {
-    // Matches mermaid's packet styles (defaultPacketStyleOptions)
+pub fn svg_root(svg_id: &str, w: &str, h: &str, max_w: &str, font_family: &str) -> String {
     format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}\
-        #{id} .packetByte{{font-size:10px;}}\
-        #{id} .packetByte.start{{fill:black;}}\
-        #{id} .packetByte.end{{fill:black;}}\
-        #{id} .packetLabel{{fill:black;font-size:12px;}}\
-        #{id} .packetTitle{{fill:black;font-size:14px;}}\
-        #{id} .packetBlock{{stroke:black;stroke-width:1;fill:#efefef;}}\
-        #{id} :root{{--mermaid-font-family:{ff};}}",
-        id = id,
-        ff = ff,
+        "<svg id=\"{svg_id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 {w} {h}\" style=\"max-width: {max_w}px;\" font-family=\"{ff}\" role=\"graphics-document document\" aria-roledescription=\"packet\" aria-labelledby=\"chart-title-{svg_id}\"><title id=\"chart-title-{svg_id}\">Packet</title>",
+        ff = font_family,
+    )
+}
+
+pub fn empty_svg(svg_id: &str) -> String {
+    format!(
+        "<svg id=\"{svg_id}\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 50\"></svg>",
     )
 }
 
 // ---------------------------------------------------------------------------
-// Top-level SVG structure
+// Block rect — `.packetBlock`
 // ---------------------------------------------------------------------------
 
-/// Render the outer `<svg>` element for a packet diagram.
-pub fn svg_root(svg_id: &str, w: &str, h: &str, max_w: &str) -> String {
+/// Field background rectangle.
+/// Mermaid: `group.append("rect")…attr("class","packetBlock")`
+pub fn block_rect(x: f64, y: f64, w: f64, h: f64, fill: &str, stroke: &str) -> String {
     format!(
-        "<svg id=\"{svg_id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 {w} {h}\" style=\"max-width: {max_w}px;\" role=\"graphics-document document\" aria-roledescription=\"packet\" aria-labelledby=\"chart-title-{svg_id}\"><title id=\"chart-title-{svg_id}\">Packet</title>",
-    )
-}
-
-/// Render an empty packet SVG placeholder.
-pub fn empty_svg(svg_id: &str, ff: &str) -> String {
-    format!(
-        "<svg id=\"{svg_id}\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 50\"><text x=\"10\" y=\"30\" font-family=\"{ff}\" font-size=\"14\">Empty packet diagram</text></svg>",
+        r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{fill}" stroke="{stroke}" stroke-width="1" class="packetBlock"></rect>"#,
+        x = fmt(x),
+        y = fmt(y),
+        w = fmt(w),
+        h = fmt(h),
     )
 }
 
 // ---------------------------------------------------------------------------
-// Field elements
+// Label — `.packetLabel`
 // ---------------------------------------------------------------------------
 
-/// Render a packet field background rectangle.
-pub fn field_rect(x: &str, y: &str, w: &str, h: &str) -> String {
-    format!("<rect x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" class=\"packetBlock\"></rect>",)
-}
-
-/// Render a packet field label (centered in the box).
-pub fn field_label(x: &str, y: &str, text: &str) -> String {
+/// Field label centred inside the block.
+/// Mermaid: `group.append("text").attr("class","packetLabel")…text(block.label)`
+pub fn block_label(x: f64, y: f64, text: &str, color: &str) -> String {
     format!(
-        "<text x=\"{x}\" y=\"{y}\" class=\"packetLabel\" dominant-baseline=\"middle\" text-anchor=\"middle\">{text}</text>",
-    )
-}
-
-/// Render a bit-number label for a single-bit field (centered, middle anchor).
-pub fn bit_number_single(x: &str, y: &str, bit: u32) -> String {
-    format!(
-        "<text x=\"{x}\" y=\"{y}\" class=\"packetByte start\" dominant-baseline=\"auto\" text-anchor=\"middle\">{bit}</text>",
-    )
-}
-
-/// Render the start bit-number label for a multi-bit field (left-aligned).
-pub fn bit_number_start(x: &str, y: &str, bit: u32) -> String {
-    format!(
-        "<text x=\"{x}\" y=\"{y}\" class=\"packetByte start\" dominant-baseline=\"auto\" text-anchor=\"start\">{bit}</text>",
-    )
-}
-
-/// Render the end bit-number label for a multi-bit field (right-aligned).
-pub fn bit_number_end(x: &str, y: &str, bit: u32) -> String {
-    format!(
-        "<text x=\"{x}\" y=\"{y}\" class=\"packetByte end\" dominant-baseline=\"auto\" text-anchor=\"end\">{bit}</text>",
+        r#"<text x="{x}" y="{y}" fill="{color}" font-size="12px" class="packetLabel" dominant-baseline="middle" text-anchor="middle">{text}</text>"#,
+        x = fmt(x),
+        y = fmt(y),
     )
 }
 
 // ---------------------------------------------------------------------------
-// Title
+// Bit number — `.packetByte start` / `.packetByte end`
 // ---------------------------------------------------------------------------
 
-/// Render the diagram title text element.
-pub fn title(x: &str, y: &str, text: &str) -> String {
+/// Bit number label at the start or end of a block.
+/// Mermaid: `group.append("text").attr("class","packetByte start/end")…text(bit)`
+pub fn bit_label(
+    x: f64,
+    y: f64,
+    bit: u32,
+    class_suffix: &str,
+    anchor: &str,
+    color: &str,
+) -> String {
     format!(
-        "<text x=\"{x}\" y=\"{y}\" dominant-baseline=\"middle\" text-anchor=\"middle\" class=\"packetTitle\">{text}</text>",
+        r#"<text x="{x}" y="{y}" fill="{color}" font-size="10px" class="packetByte {class_suffix}" dominant-baseline="auto" text-anchor="{anchor}">{bit}</text>"#,
+        x = fmt(x),
+        y = fmt(y),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Title — `.packetTitle`
+// ---------------------------------------------------------------------------
+
+/// Diagram title.
+/// Mermaid: `svg.append("text").text(title).attr("class","packetTitle")…`
+pub fn diagram_title(x: f64, y: f64, text: &str, color: &str) -> String {
+    format!(
+        r#"<text x="{x}" y="{y}" fill="{color}" font-size="14px" dominant-baseline="middle" text-anchor="middle" class="packetTitle">{text}</text>"#,
+        x = fmt(x),
+        y = fmt(y),
     )
 }

@@ -12,8 +12,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MERMAID_BUNDLE = join(__dirname, 'node_modules', 'mermaid', 'dist', 'mermaid.min.js');
 
 const inputFile = process.argv[2];
+const themeArg = process.argv[3] || 'default';
 if (!inputFile) {
-  process.stderr.write('Usage: node mermaid_render.mjs <input_file>\n');
+  process.stderr.write('Usage: node mermaid_render.mjs <input_file> [theme]\n');
   process.exit(1);
 }
 
@@ -29,14 +30,14 @@ await page.setViewport({ width: 2000, height: 2000 });
 await page.setContent('<!DOCTYPE html><html><body></body></html>');
 await page.addScriptTag({ path: MERMAID_BUNDLE });
 
-await page.evaluate(() => {
+await page.evaluate((theme) => {
   window.mermaid.initialize({
     startOnLoad: false,
-    theme: 'default',
+    theme,
     securityLevel: 'loose',
     fontFamily: 'Arial, sans-serif',
   });
-});
+}, themeArg);
 
 try {
   const svg = await page.evaluate(async (text) => {

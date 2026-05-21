@@ -4,22 +4,23 @@
 use super::constants::*;
 use super::parser::{ClassDiagram, ClassNode, ClassRelation, EndType, LineStyle};
 use super::templates::{
-    self as tmpl, build_css, build_markers, drop_shadow_filter, drop_shadow_filter_small,
-    edge_label_empty, edge_label_fo, edge_label_text, esc, fmt, svg_root, terminal_label_fo,
+    self as tmpl, build_markers, drop_shadow_filter, drop_shadow_filter_small, edge_label_empty,
+    edge_label_text, esc, fmt, svg_root, terminal_label_text_source, terminal_label_text_target,
 };
 use crate::text::measure;
+use crate::text_browser_metrics::measure_browser;
 use crate::theme::{Theme, ThemeVars};
 use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel, Point};
 use dagre_dgl_rs::layout::layout;
 
 // ─── Public entry points ──────────────────────────────────────────────────────
 
-pub fn render(diag: &ClassDiagram, theme: Theme, use_foreign_object: bool) -> String {
+pub fn render(diag: &ClassDiagram, theme: Theme, _use_foreign_object: bool) -> String {
     let vars = theme.resolve();
-    render_inner(diag, &vars, use_foreign_object)
+    render_inner(diag, &vars)
 }
 
-fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool) -> String {
+fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
     let mut g = Graph::with_options(false, true, true);
     g.set_graph(GraphLabel {
         rankdir: Some(diag.direction.clone()),
@@ -94,52 +95,16 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
     //   content_left  = marginx (leftmost node left edge ≈ marginx after dagre translate)
     //   viewBox_width = max(graph_w_dagre, content_right + marginx)
     let margin_x = 8.0_f64;
-    let mut max_terminal_right: f64 = 0.0;
-    if use_foreign_object {
-        let terminal_marker_size: f64 = 10.0;
-        for (i, rel) in diag.relations.iter().enumerate() {
-            let edge_key = format!("e{}", i);
-            let e = dagre_dgl_rs::graph::Edge::named(&rel.id1, &rel.id2, &edge_key);
-            if let Some(lbl_data) = g.edge(&e) {
-                let pts = lbl_data.points.clone().unwrap_or_default();
-                if pts.len() >= 2 {
-                    if !rel.title1.is_empty() {
-                        let (cx, _) = calc_terminal_label_position(
-                            terminal_marker_size,
-                            TerminalPos::StartRight,
-                            &pts,
-                        );
-                        let style_w = (rel.title1.len() * 9) as f64;
-                        max_terminal_right = max_terminal_right.max(cx + style_w);
-                    }
-                    if !rel.title2.is_empty() {
-                        let (cx, _) = calc_terminal_label_position(
-                            terminal_marker_size,
-                            TerminalPos::EndLeft,
-                            &pts,
-                        );
-                        let style_w = (rel.title2.len() * 9) as f64;
-                        max_terminal_right = max_terminal_right.max(cx + style_w);
-                    }
-                }
-            }
-        }
-    }
-    let graph_w = f64::max(graph_w_dagre, max_terminal_right + margin_x);
+    let graph_w = f64::max(graph_w_dagre, margin_x);
 
     let svg_id = "mermaid-svg";
-    let css = build_css(svg_id, vars);
 
     let mut out = String::new();
 
     out.push_str(&svg_root(svg_id, &fmt(graph_w), &fmt(graph_h)));
 
-    out.push_str("<style>");
-    out.push_str(&css);
-    out.push_str("</style>");
-
     out.push_str("<g>");
-    out.push_str(&build_markers(svg_id));
+    out.push_str(&build_markers(svg_id, vars.primary_color, vars.line_color));
     out.push_str("</g>");
 
     out.push_str(r#"<g class="root">"#);
@@ -167,12 +132,15 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
                 } else {
                     " edge-thickness-normal edge-pattern-solid relation"
                 };
+                let dasharray = if is_dashed { "3" } else { "0" };
                 let marker_start = marker_start_attr(svg_id, rel);
                 let marker_end = marker_end_attr(svg_id, rel);
                 out.push_str(&tmpl::edge_path(
                     &path_d,
                     &edge_id,
                     classes,
+                    vars.line_color,
+                    dasharray,
                     &marker_start,
                     &marker_end,
                 ));
@@ -188,75 +156,61 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
         let e = dagre_dgl_rs::graph::Edge::named(&rel.id1, &rel.id2, &edge_key);
         if let Some(lbl_data) = g.edge(&e) {
             let pts = lbl_data.points.clone().unwrap_or_default();
-            let edge_id = format!("{}-id_{}_{}_{}", svg_id, rel.id1, rel.id2, i + 1);
+            // apts = pts (raw dagre points) — the raw endpoint is the node boundary which
+            // correctly anchors cardinality labels near the arrowhead via calcTerminalLabelPosition.
+            let apts = pts.clone();
             if !rel.title.is_empty() {
                 let mid = midpoint(&pts);
                 let (raw_fo_w, _) = measure(&rel.title, TITLE_FONT_SIZE);
                 let fo_w = raw_fo_w * CONTENT_SCALE;
-                if use_foreign_object {
-                    out.push_str(&edge_label_fo(
-                        &fmt(mid.0),
-                        &fmt(mid.1),
-                        &edge_id,
-                        &fmt(-fo_w / 2.0),
-                        &fmt(fo_w),
-                        &esc(&rel.title),
-                    ));
-                } else {
-                    out.push_str(&edge_label_text(
-                        &fmt(mid.0),
-                        &fmt(mid.1),
-                        &fmt(-fo_w / 2.0),
-                        &fmt(fo_w),
-                        vars.primary_color,
-                        vars.font_family,
-                        &esc(&rel.title),
-                    ));
-                }
+                out.push_str(&edge_label_text(
+                    &fmt(mid.0),
+                    &fmt(mid.1),
+                    &fmt(-fo_w / 2.0),
+                    &fmt(fo_w),
+                    vars.primary_color,
+                    vars.font_family,
+                    vars.primary_text,
+                    &esc(&rel.title),
+                ));
             } else {
-                out.push_str(&edge_label_empty(&edge_id));
+                out.push_str(&edge_label_empty());
             }
 
             // Render start/end cardinality labels (title1 = near id1, title2 = near id2)
-            // Faithfully ports Mermaid's calcTerminalLabelPosition algorithm from utils.ts
-            // and positionEdgeLabel from edges.js:
-            //   title1 → 'start_right' position (left of edge near source)
-            //   title2 → 'end_left'   position (right of edge near target)
-            if use_foreign_object {
-                // terminalMarkerSize: Mermaid passes `edge.arrowTypeStart ? 10 : 0`.
-                // In Mermaid class-diagram rendering the arrowType strings are always set
-                // (e.g. 'none', 'dependencyEnd', etc.) so arrowTypeStart/End are always
-                // truthy JS strings — both terminals always receive terminalMarkerSize = 10.
-                let terminal_marker_size: f64 = 10.0;
-
-                let render_card_label = |text: &str, cx: f64, cy: f64| -> String {
-                    // CSS `.edgeTerminals{font-size:11px}` — measure at 11px with TERMINAL_SCALE
-                    let (fw_raw, _) = measure(text, 11.0);
-                    let fw = fw_raw * TERMINAL_SCALE;
-                    let style_w = text.len() * 9;
-                    terminal_label_fo(&fmt(cx), &fmt(cy), &fmt(fw), style_w, &esc(text))
+            // Mermaid: terminalMarkerSize = arrowTypeStart/End ? 10 : 0
+            // (10 when there is a marker/arrow at that end, 0 for plain/none)
+            // title1: source label — placed beside the source arrowhead
+            if !rel.title1.is_empty() && apts.len() >= 2 {
+                let start_marker_size: f64 = if rel.start == EndType::None {
+                    0.0
+                } else {
+                    10.0
                 };
-
-                if !rel.title1.is_empty() && pts.len() >= 2 {
-                    // title1 near source → 'start_right' position
-                    let (cx, cy) = calc_terminal_label_position(
-                        terminal_marker_size,
-                        TerminalPos::StartRight,
-                        &pts,
-                    );
-                    out.push_str(&render_card_label(&rel.title1, cx, cy));
-                }
-                if !rel.title2.is_empty() && pts.len() >= 2 {
-                    // title2 near target → 'end_left' position
-                    // Apply render-time offset (+10x, +3y) so wider labels clear the edge line.
-                    // This does NOT affect layout calculation (done separately above).
-                    let (cx, cy) = calc_terminal_label_position(
-                        terminal_marker_size,
-                        TerminalPos::EndLeft,
-                        &pts,
-                    );
-                    out.push_str(&render_card_label(&rel.title2, cx + 0.0, cy + 7.0));
-                }
+                let (cx, cy) =
+                    calc_terminal_label_position(start_marker_size, TerminalPos::StartRight, &apts);
+                let w1 = measure_browser(&rel.title1, 11.0).0;
+                out.push_str(&terminal_label_text_source(
+                    &fmt(cx - 5.0),
+                    &fmt(cy + 5.0),
+                    vars.font_family,
+                    vars.primary_text,
+                    &esc(&rel.title1),
+                    w1,
+                ));
+            }
+            // title2: target label — placed beside the arrowhead tip
+            if !rel.title2.is_empty() && apts.len() >= 2 {
+                let (cx, cy) = label_pos_near(&apts, false);
+                let w2 = measure_browser(&rel.title2, 11.0).0;
+                out.push_str(&terminal_label_text_target(
+                    &fmt(cx),
+                    &fmt(cy),
+                    vars.font_family,
+                    vars.primary_text,
+                    &esc(&rel.title2),
+                    w2,
+                ));
             }
         }
     }
@@ -272,16 +226,7 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars, use_foreign_object: bool)
                 let w = n.width;
                 let h = n.height;
                 let dom_id = format!("{}-classId-{}-{}", svg_id, id, class_idx);
-                out.push_str(&render_class_node(
-                    cls,
-                    cx,
-                    cy,
-                    w,
-                    h,
-                    vars,
-                    &dom_id,
-                    use_foreign_object,
-                ));
+                out.push_str(&render_class_node(cls, cx, cy, w, h, vars, &dom_id));
             }
         }
     }
@@ -395,33 +340,39 @@ fn render_class_node(
     h: f64,
     vars: &ThemeVars,
     dom_id: &str,
-    use_foreign_object: bool,
 ) -> String {
     let hw = w / 2.0;
     let hh = h / 2.0;
     let pb = vars.primary_border;
+    let pt = vars.primary_text;
     let pf = vars.primary_color;
 
     let mut s = String::new();
-    s.push_str(&format!(
-        r#"<g class="node default " id="{did}" data-look="classic" transform="translate({cx}, {cy})">"#,
-        did = dom_id, cx = fmt(cx), cy = fmt(cy),
-    ));
+    s.push_str(&tmpl::node_group(dom_id, &fmt(cx), &fmt(cy)));
 
     // Outer rectangle (filled, no stroke for shadow layer)
-    s.push_str(&format!(
-        r#"<g class="basic label-container outer-path"><path d="M{x1} {y1} L{x2} {y1} L{x2} {y2} L{x1} {y2}" stroke="none" stroke-width="0" fill="{pf}" style=""></path>"#,
-        x1 = fmt(-hw), y1 = fmt(-hh), x2 = fmt(hw), y2 = fmt(hh), pf = pf,
+    s.push_str(&tmpl::node_outer_path(
+        &fmt(-hw),
+        &fmt(-hh),
+        &fmt(hw),
+        &fmt(hh),
+        pf,
     ));
     // Sketchy border path (matches Mermaid neo-classic look)
-    s.push_str(&format!(
-        r#"<path d="M{x1} {y1} C{cx1} {y1},{cx2} {y1},{x2} {y1} M{x2} {y1} C{x2} {cy1},{x2} {cy2},{x2} {y2} M{x2} {y2} C{cx3} {y2},{cx4} {y2},{x1} {y2} M{x1} {y2} C{x1} {cy3},{x1} {cy4},{x1} {y1}" stroke="{pb}" stroke-width="1.3" fill="none" stroke-dasharray="0 0" style=""></path></g>"#,
-        x1 = fmt(-hw), y1 = fmt(-hh), x2 = fmt(hw), y2 = fmt(hh),
-        cx1 = fmt(-hw * 0.6), cx2 = fmt(hw * 0.4),
-        cx3 = fmt(hw * 0.5), cx4 = fmt(-hw * 0.2),
-        cy1 = fmt(-hh * 0.6), cy2 = fmt(hh * 0.5),
-        cy3 = fmt(hh * 0.5), cy4 = fmt(-hh * 0.1),
-        pb = pb,
+    s.push_str(&tmpl::node_border_path(
+        &fmt(-hw),
+        &fmt(-hh),
+        &fmt(hw),
+        &fmt(hh),
+        &fmt(-hw * 0.6),
+        &fmt(hw * 0.4),
+        &fmt(hw * 0.5),
+        &fmt(-hw * 0.2),
+        &fmt(-hh * 0.6),
+        &fmt(hh * 0.5),
+        &fmt(hh * 0.5),
+        &fmt(-hh * 0.1),
+        pb,
     ));
 
     // Y layout (all positions relative to node centre = 0, box spans -hh to +hh):
@@ -433,16 +384,9 @@ fn render_class_node(
     //   div2 ──────────────────── methods divider  (= div1 + section_h(members))
     //        section_h(methods)   method rows
     //   +hh ───────────────────── box bottom
-    //
-    // Group positions:
-    //   annotation_group_y = -hh (box top; row i centred at -hh + i*24 + 12)
-    //   label_group_y = -hh + ann*24 + HEADER_H/2 (= centre of header section)
-    //   members_group_y = div1 + MEMBER_ROW_H (first row centred at group_y + 0)
-    //   methods_group_y = div2 + MEMBER_ROW_H (first row centred at group_y + 0)
 
     let ann_rows = cls.annotations.len();
     let member_rows = cls.members.len();
-
     let method_rows = cls.methods.len();
 
     let ann_top_y = -hh;
@@ -456,10 +400,7 @@ fn render_class_node(
     };
     let div2_y = div1_y + members_section_h;
 
-    // ── Annotation group ────────────────────────────────────────────────────────
-    // Vertically center the annotation+class_name block within the combined region.
-    // region_h = ann_rows*24 + HEADER_H; content_h = (ann_rows+1)*24 (each row 24px).
-    // vert_pad = (region_h - content_h) / 2  →  offsets annotation away from box top.
+    // ── Annotation group ──────────────────────────────────────────────────────────
     let region_h = ann_rows as f64 * ANNOTATION_H + HEADER_H;
     let content_h = (ann_rows as f64 + 1.0) * ANNOTATION_H;
     let vert_pad = (region_h - content_h) / 2.0;
@@ -468,134 +409,86 @@ fn render_class_node(
     } else {
         ann_top_y + ann_rows as f64 * ANNOTATION_H + HEADER_H / 2.0
     };
-    s.push_str(&format!(
-        r#"<g class="annotation-group text" transform="translate(0, {})">"#,
-        fmt(ann_group_y),
-    ));
+    s.push_str(&tmpl::annotation_group(&fmt(ann_group_y)));
     for (i, ann) in cls.annotations.iter().enumerate() {
-        // Row i centre is at ann_top_y + i*24 + 12 (absolute).
-        // Relative to ann_group_y (= ann_top_y): offset = i*24 + 12.
         let ann_text = format!("&laquo;{}&raquo;", esc(ann));
         let row_centre_rel = i as f64 * ANNOTATION_H + ANNOTATION_H / 2.0;
-        let (raw_ann_w, _) = measure(&format!("\u{00AB}{}\u{00BB}", ann), FONT_SIZE);
-        let ann_w = raw_ann_w * CONTENT_SCALE;
-        if use_foreign_object {
-            s.push_str(&format!(
-                r#"<g class="label" style="font-style: italic" transform="translate({ox}, {y})"><foreignObject width="{fw}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel markdown-node-label" style=""><p>{text}</p></span></div></foreignObject></g>"#,
-                ox = fmt(-ann_w / 2.0),
-                y  = fmt(row_centre_rel - ANNOTATION_H / 2.0),
-                fw = fmt(ann_w),
-                text = ann_text,
-            ));
-        } else {
-            s.push_str(&format!(
-                r#"<text x="0" y="{y}" text-anchor="middle" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}" font-style="italic">{text}</text>"#,
-                y = fmt(row_centre_rel), fs = FONT_SIZE, pb = pb, text = ann_text,
-            ));
-        }
+        s.push_str(&tmpl::annotation_text(
+            &fmt(row_centre_rel),
+            FONT_SIZE,
+            pt,
+            &ann_text,
+        ));
     }
     s.push_str("</g>");
 
-    // ── Label group (class name) ─────────────────────────────────────────────────
-    // Centred vertically in the header section.
-    // header section runs from (ann_top_y + ann*24) to div1.
-    // Centre of header = ann_top_y + ann*24 + HEADER_H/2.
+    // ── Label group (class name) ──────────────────────────────────────────────────
     let header_centre_y = ann_top_y + ann_rows as f64 * ANNOTATION_H + HEADER_H / 2.0;
     let (raw_name_fo_w, _) = measure(&cls.label, TITLE_FONT_SIZE);
     let name_fo_w = raw_name_fo_w * NAME_SCALE;
-    s.push_str(&format!(
-        r#"<g class="label-group text" transform="translate({ox}, {gy})">"#,
-        ox = fmt(-name_fo_w / 2.0),
-        gy = fmt(header_centre_y),
+    s.push_str(&tmpl::label_group_text(
+        &fmt(-name_fo_w / 2.0),
+        &fmt(header_centre_y),
+        &fmt(name_fo_w / 2.0),
+        TITLE_FONT_SIZE,
+        pt,
+        &esc(&cls.label),
     ));
-    if use_foreign_object {
-        s.push_str(&format!(
-            r#"<g class="label" style="font-weight: bolder" transform="translate(0,-12)"><foreignObject width="{fw}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 100px; text-align: center;"><span class="nodeLabel markdown-node-label" style=""><p>{text}</p></span></div></foreignObject></g>"#,
-            fw = fmt(name_fo_w),
-            text = esc(&cls.label),
-        ));
-    } else {
-        s.push_str(&format!(
-            r#"<text x="{hw}" y="5" text-anchor="middle" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}" font-weight="bold">{text}</text>"#,
-            hw = fmt(name_fo_w / 2.0), fs = TITLE_FONT_SIZE, pb = pb,
-            text = esc(&cls.label),
-        ));
-    }
-    s.push_str("</g>");
 
-    // ── Members group ────────────────────────────────────────────────────────────
-    // members_group_y is the y of the group; row i centre = group_y + i*24.
-    // First row centre = div1 + MEMBER_ROW_H (one full row-height below divider).
+    // ── Members group ──────────────────────────────────────────────────────────────
     let members_group_y = div1_y + MEMBER_ROW_H;
-    s.push_str(&format!(
-        r#"<g class="members-group text" transform="translate({ox}, {gy})">"#,
-        ox = fmt(-hw + H_PAD),
-        gy = fmt(members_group_y),
+    s.push_str(&tmpl::members_group(
+        &fmt(-hw + H_PAD),
+        &fmt(members_group_y),
     ));
     for (i, m) in cls.members.iter().enumerate() {
         let text = m.display_text();
-        let (raw_mem_w, _) = measure(&text, FONT_SIZE);
-        let mem_fo_w = raw_mem_w * CONTENT_SCALE;
-        // Row i centre at group_y + i*24; FO starts 12 above centre.
         let row_y = i as f64 * MEMBER_ROW_H;
-        if use_foreign_object {
-            s.push_str(&format!(
-                r#"<g class="label" style="" transform="translate(0,{y})"><foreignObject width="{fw}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 150px; text-align: center;"><span class="nodeLabel markdown-node-label" style=""><p>{text}</p></span></div></foreignObject></g>"#,
-                y = fmt(row_y - 12.0),
-                fw = fmt(mem_fo_w),
-                text = esc(&text),
-            ));
-        } else {
-            s.push_str(&format!(
-                r#"<text x="0" y="{y}" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}">{text}</text>"#,
-                y = fmt(row_y), fs = FONT_SIZE, pb = pb, text = esc(&text),
-            ));
-        }
+        s.push_str(&tmpl::member_row_text(
+            &fmt(row_y),
+            FONT_SIZE,
+            pt,
+            &esc(&text),
+        ));
     }
     s.push_str("</g>");
 
-    // ── Methods group ─────────────────────────────────────────────────────────────
+    // ── Methods group ──────────────────────────────────────────────────────────────
     let methods_group_y = div2_y + MEMBER_ROW_H;
-    s.push_str(&format!(
-        r#"<g class="methods-group text" transform="translate({ox}, {gy})">"#,
-        ox = fmt(-hw + H_PAD),
-        gy = fmt(methods_group_y),
+    s.push_str(&tmpl::methods_group(
+        &fmt(-hw + H_PAD),
+        &fmt(methods_group_y),
     ));
     for (i, m) in cls.methods.iter().enumerate() {
         let text = m.display_text();
-        let (raw_meth_w, _) = measure(&text, FONT_SIZE);
-        let meth_fo_w = raw_meth_w * CONTENT_SCALE;
         let row_y = i as f64 * MEMBER_ROW_H;
-        if use_foreign_object {
-            s.push_str(&format!(
-                r#"<g class="label" style="" transform="translate(0,{y})"><foreignObject width="{fw}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel markdown-node-label" style=""><p>{text}</p></span></div></foreignObject></g>"#,
-                y = fmt(row_y - 12.0),
-                fw = fmt(meth_fo_w),
-                text = esc(&text),
-            ));
-        } else {
-            s.push_str(&format!(
-                r#"<text x="0" y="{y}" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}">{text}</text>"#,
-                y = fmt(row_y), fs = FONT_SIZE, pb = pb, text = esc(&text),
-            ));
-        }
+        s.push_str(&tmpl::member_row_text(
+            &fmt(row_y),
+            FONT_SIZE,
+            pt,
+            &esc(&text),
+        ));
     }
     s.push_str("</g>");
 
-    // ── Dividers ──────────────────────────────────────────────────────────────────
+    // ── Dividers ───────────────────────────────────────────────────────────────────
     // div1: between header and members section
-    s.push_str(&format!(
-        r#"<g class="divider" style=""><path d="M{x1} {y} C{cx1} {y},{cx2} {y},{x2} {y}" stroke="{pb}" stroke-width="1.3" fill="none" stroke-dasharray="0 0" style=""></path></g>"#,
-        x1 = fmt(-hw), y = fmt(div1_y),
-        cx1 = fmt(-hw * 0.4), cx2 = fmt(hw * 0.4),
-        x2 = fmt(hw), pb = pb,
+    s.push_str(&tmpl::divider_path(
+        &fmt(-hw),
+        &fmt(div1_y),
+        &fmt(-hw * 0.4),
+        &fmt(hw * 0.4),
+        &fmt(hw),
+        pb,
     ));
     // div2: between members and methods section
-    s.push_str(&format!(
-        r#"<g class="divider" style=""><path d="M{x1} {y} C{cx1} {y},{cx2} {y},{x2} {y}" stroke="{pb}" stroke-width="1.3" fill="none" stroke-dasharray="0 0" style=""></path></g>"#,
-        x1 = fmt(-hw), y = fmt(div2_y),
-        cx1 = fmt(-hw * 0.4), cx2 = fmt(hw * 0.4),
-        x2 = fmt(hw), pb = pb,
+    s.push_str(&tmpl::divider_path(
+        &fmt(-hw),
+        &fmt(div2_y),
+        &fmt(-hw * 0.4),
+        &fmt(hw * 0.4),
+        &fmt(hw),
+        pb,
     ));
 
     s.push_str("</g>"); // node
@@ -717,6 +610,41 @@ fn midpoint(pts: &[Point]) -> (f64, f64) {
 // title1 (near source) → position 'start_right'
 // title2 (near target) → position 'end_left'
 //
+/// Place a cardinality label directly beside the arrowhead.
+/// is_source=true → label near the edge start; false → label near the edge end (arrowhead tip).
+/// Offset: 10px perpendicular right of the edge direction, 20px back from the endpoint.
+fn label_pos_near(pts: &[Point], is_source: bool) -> (f64, f64) {
+    let n = pts.len();
+    let (tip, prev) = if is_source {
+        (&pts[0], &pts[1])
+    } else {
+        (&pts[n - 1], &pts[n - 2])
+    };
+    let dx = tip.x - prev.x;
+    let dy = tip.y - prev.y;
+    let len = (dx * dx + dy * dy).sqrt().max(1e-9);
+    let (dirx, diry) = (dx / len, dy / len); // unit vector pointing FROM prev TO tip
+                                             // travel direction = from tip TOWARD prev (forward along edge from source perspective)
+                                             // perp left of travel direction = (diry, -dirx)
+    let (lx, ly) = (diry, -dirx);
+
+    if is_source {
+        // Source label: LEFT of arrow, forward (toward target) from tip
+        let perp = 14.0;
+        let fwd = 17.0;
+        // forward = (-dirx, -diry) = direction source→target
+        let x = tip.x + lx * perp + (-dirx) * fwd;
+        let y = tip.y + ly * perp + (-diry) * fwd;
+        (x, y)
+    } else {
+        // Target label: box left edge aligned with arrow x + 10px right, 12px back from arrowhead
+        let back = 17.0;
+        let x = tip.x - dirx * back + 10.0;
+        let y = tip.y - diry * back;
+        (x, y)
+    }
+}
+
 // terminalMarkerSize = 10 when an arrow marker is present, 0 otherwise.
 
 #[derive(Clone, Copy)]

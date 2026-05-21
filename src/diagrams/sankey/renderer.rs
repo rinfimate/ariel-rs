@@ -1,6 +1,6 @@
-use super::constants::*;
+﻿use super::constants::*;
 use super::parser::{LinkColor, NodeAlignment, SankeyDiagram};
-use super::templates::{self, build_css, esc};
+use super::templates::{self, esc, node_labels_group_open};
 /// Faithful Rust port of Mermaid's sankeyRenderer.ts + d3-sankey v0.12.3.
 ///
 /// Implements the d3-sankey layout algorithm from scratch (since we can't use npm).
@@ -777,6 +777,8 @@ fn label_position_outlined(node: &LayoutNode, central_layer: usize) -> (f64, &'s
 pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
+    let line_color = vars.line_color;
+    let label_color = vars.text_color;
     let svg_id = SVG_ID;
     let conf = &diag.config;
 
@@ -819,12 +821,9 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
     // Color scheme: assign colors by node insertion index (mirrors d3.scaleOrdinal)
     let get_node_color = |_id: &str, idx: usize| -> &'static str { tableau_color_by_index(idx) };
 
-    let css = build_css(svg_id, ff);
-
     let mut parts: Vec<String> = Vec::new();
 
     parts.push(templates::svg_root(svg_id, width, actual_height));
-    parts.push(format!("<style>{}</style>", css));
 
     // ── Nodes ─────────────────────────────────────────────────────────────────
     parts.push(r#"<g class="nodes">"#.to_string());
@@ -842,10 +841,7 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
     parts.push("</g>".to_string());
 
     // ── Node labels ───────────────────────────────────────────────────────────
-    parts.push(format!(
-        r#"<g class="node-labels" font-size="{}">"#,
-        LABEL_FONT_SIZE_ATTR
-    ));
+    parts.push(node_labels_group_open(LABEL_FONT_SIZE_ATTR));
 
     for node in nodes.iter() {
         let label = if show_values {
@@ -869,6 +865,7 @@ pub fn render(diag: &SankeyDiagram, theme: Theme) -> String {
             dy,
             anchor,
             ff,
+            label_color,
             &text_content,
         ));
     }

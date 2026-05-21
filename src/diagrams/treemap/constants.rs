@@ -119,3 +119,113 @@ pub(crate) fn c_scale_label(idx: usize) -> &'static str {
         _ => "black",
     }
 }
+
+// Neutral theme fill palette — all grays, confirmed from reference SVGs.
+const C_SCALE_NEUTRAL: &[&str] = &[
+    "#555", "#F4F4F4", "#555", "#BBB", "#777", "#999", "#DDD", "#FFF", "#DDD", "#BBB", "#999",
+    "#777",
+];
+
+// Neutral theme stroke palette — peer lightness = fill lightness − 10%.
+const C_SCALE_PEER_NEUTRAL: &[&str] = &[
+    "hsl(0, 0%, 23.3333333333%)",
+    "hsl(0, 0%, 85.6862745098%)",
+    "hsl(0, 0%, 23.3333333333%)",
+    "hsl(0, 0%, 63.3333333333%)",
+    "hsl(0, 0%, 36.6666666667%)",
+    "hsl(0, 0%, 50%)",
+    "hsl(0, 0%, 76.6666666667%)",
+    "hsl(0, 0%, 90%)",
+    "hsl(0, 0%, 76.6666666667%)",
+    "hsl(0, 0%, 63.3333333333%)",
+    "hsl(0, 0%, 50%)",
+    "hsl(0, 0%, 36.6666666667%)",
+];
+
+// Forest theme fill palette — green HSL values, confirmed from reference SVGs.
+const C_SCALE_FOREST: &[&str] = &[
+    "hsl(78.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(98.961038961, 100%, 74.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(118.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(58.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(138.961038961, 100%, 74.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 84.5098039216%)",
+    "hsl(98.961038961, 100%, 84.9019607843%)",
+    "hsl(78.1578947368, 40%, 64.5098039216%)",
+    "hsl(98.961038961, 80%, 74.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 54.5098039216%)",
+    "hsl(98.961038961, 100%, 64.9019607843%)",
+];
+
+// Forest theme stroke palette — peer lightness = fill lightness − 25%.
+const C_SCALE_PEER_FOREST: &[&str] = &[
+    "hsl(78.1578947368, 58.4615384615%, 39.5098039216%)",
+    "hsl(98.961038961, 100%, 39.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 44.5098039216%)",
+    "hsl(118.1578947368, 58.4615384615%, 39.5098039216%)",
+    "hsl(58.1578947368, 58.4615384615%, 39.5098039216%)",
+    "hsl(138.961038961, 100%, 39.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 59.5098039216%)",
+    "hsl(98.961038961, 100%, 59.9019607843%)",
+    "hsl(78.1578947368, 40%, 39.5098039216%)",
+    "hsl(98.961038961, 80%, 49.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 29.5098039216%)",
+    "hsl(98.961038961, 100%, 39.9019607843%)",
+];
+
+// ---------------------------------------------------------------------------
+// Theme-aware color palette accessors
+// ---------------------------------------------------------------------------
+
+pub(crate) fn theme_c_scale(theme: crate::theme::Theme) -> &'static [&'static str] {
+    match theme {
+        crate::theme::Theme::Dark => &[
+            "#1f2020", "#0b0000", "#4d1037", "#3f5258", "#4f2f1b", "#6e0a0a", "#3b0048", "#995a01",
+            "#154706", "#161722", "#00296f", "#01629c",
+        ],
+        crate::theme::Theme::Neutral => C_SCALE_NEUTRAL,
+        crate::theme::Theme::Forest => C_SCALE_FOREST,
+        _ => C_SCALE,
+    }
+}
+
+pub(crate) fn theme_c_scale_peer(theme: crate::theme::Theme) -> &'static [&'static str] {
+    match theme {
+        crate::theme::Theme::Dark => &[
+            "hsl(180, 1.5873015873%, 22.3529411765%)",
+            "hsl(0, 100%, 12.1568627451%)",
+            "hsl(321.6393442623, 65.5913978495%, 28.2352941176%)",
+            "hsl(196.3636363636, 14.0625%, 28.0392156863%)",
+            "hsl(24.8571428571, 46.0784313725%, 21.9607843137%)",
+            "hsl(0, 83.5820895522%, 23.1372549020%)",
+            "hsl(288, 100%, 14.1176470588%)",
+            "hsl(34.2857142857, 100%, 29.8039215686%)",
+            "hsl(125.2173913043, 56.3218390805%, 14.9019607843%)",
+            "hsl(238.4615384615, 13.5922330097%, 17.2549019608%)",
+            "hsl(232.7272727273, 100%, 21.7647058824%)",
+            "hsl(204.9230769231, 100%, 31.1764705882%)",
+        ],
+        crate::theme::Theme::Neutral => C_SCALE_PEER_NEUTRAL,
+        crate::theme::Theme::Forest => C_SCALE_PEER_FOREST,
+        _ => C_SCALE_PEER,
+    }
+}
+
+/// Return the cScaleLabel text color for the given theme and palette index.
+///
+/// Dark: all labels use `lightgrey`.
+/// Neutral: white for dark fills (#555 at indices 0, 2, 4, 11), `#333` elsewhere.
+/// Default/Forest: indices 0 and 3 are white, all others black.
+pub(crate) fn theme_c_scale_label(theme: crate::theme::Theme, idx: usize) -> &'static str {
+    match theme {
+        crate::theme::Theme::Dark => "lightgrey",
+        crate::theme::Theme::Forest => "black",
+        // Neutral: dark fills (#555) at indices 0 and 2 need light text; all others use dark text
+        crate::theme::Theme::Neutral => match idx % 12 {
+            0 | 2 => "#F4F4F4",
+            _ => "#333",
+        },
+        _ => c_scale_label(idx),
+    }
+}

@@ -39,8 +39,8 @@ fn req_geom(req: &Requirement) -> NodeGeom {
     let n_body = 4usize; // ID, Text, Risk, Verification
     NodeGeom {
         id: req.name.clone(),
-        width: (max_w + PAD_X * 2.0).max(MIN_WIDTH),
-        height: HEADER_H + (n_body as f64 + 0.5) * ROW_H + PAD_Y,
+        width: (max_w + PAD_X * 2.0),
+        height: (HEADER_H + (n_body as f64 + 0.5) * ROW_H + PAD_Y),
     }
 }
 
@@ -56,8 +56,8 @@ fn elem_geom(elem: &Element) -> NodeGeom {
     let body_rows = tw.len().saturating_sub(2);
     NodeGeom {
         id: elem.name.clone(),
-        width: (max_w + PAD_X * 2.0).max(MIN_WIDTH),
-        height: HEADER_H + (body_rows as f64 + 0.5) * ROW_H + PAD_Y,
+        width: (max_w + PAD_X * 2.0),
+        height: (HEADER_H + (body_rows as f64 + 0.5) * ROW_H + PAD_Y),
     }
 }
 
@@ -68,62 +68,66 @@ fn xe(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-fn render_req(req: &Requirement, geom: &NodeGeom, cx: f64, cy: f64) -> String {
+struct ReqColors<'a> {
+    box_fill: &'a str,
+    box_stroke: &'a str,
+    font_color: &'a str,
+}
+
+fn render_req(req: &Requirement, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColors) -> String {
     let (w, h) = (geom.width, geom.height);
     let (hw, hh) = (w / 2.0, h / 2.0);
     // Divider separates header (type + name) from body (data items)
     let sep_y = -hh + HEADER_H;
     let mut o = templates::node_group_open(cx, cy);
     // Fill path (background) with border stroke
-    o += &templates::node_box_path(-hw, -hh, hw, hh, BOX_STROKE, BOX_FILL);
+    o += &templates::node_box_path(-hw, -hh, hw, hh, col.box_stroke, col.box_fill);
     // Divider line
-    o += &templates::node_divider(-hw, hw, sep_y, BOX_STROKE);
-    // Header: <<type>> using foreignObject (resvg-invisible, matches reference)
+    o += &templates::node_divider(-hw, hw, sep_y, col.box_stroke);
+    // Header: <<type>> centered in header rows
     let type_str = format!("&lt;&lt;{}&gt;&gt;", req.req_type.display());
-    let type_w = tmw(&format!("<<{}>>", req.req_type.display()));
-    let name_w = tmw(&req.name);
-    let type_lx = -(type_w / 2.0);
-    let name_lx = -(name_w / 2.0);
-    let type_ly = -hh + PAD_Y + ROW_H / 2.0 - 12.0; // top of foreignObject (center-12)
-    let name_ly = -hh + PAD_Y + ROW_H * 1.5 - 12.0;
-    o += &templates::label_fo(type_lx, type_ly, type_w, &type_str);
-    o += &templates::label_fo_bold(name_lx, name_ly, name_w, &xe(&req.name));
-    // Body items using foreignObject
+    // y center of each header row: -hh + PAD_Y + ROW_H/2 and -hh + PAD_Y + ROW_H*1.5
+    let type_cy = -hh + PAD_Y + ROW_H / 2.0;
+    let name_cy = -hh + PAD_Y + ROW_H * 1.5;
+    o += &templates::label_text(0.0, type_cy, FONT_SIZE, col.font_color, &type_str);
+    o += &templates::label_text_bold(0.0, name_cy, FONT_SIZE, col.font_color, &xe(&req.name));
+    // Body items: left-aligned, each row centered vertically at sep_y + PAD_Y + (i+0.5)*ROW_H
     let items = [
         format!("ID: {}", req.id),
         format!("Text: {}", req.text),
         format!("Risk: {}", req.risk.display()),
         format!("Verification: {}", req.verify_method.display()),
     ];
-    let mut ry = sep_y + PAD_Y + ROW_H / 2.0 - 12.0; // top of foreignObject
+    let mut row_cy = sep_y + PAD_Y + ROW_H / 2.0;
     for item in &items {
-        let iw = tmw(item);
         let ix = -hw + PAD_X;
-        o += &templates::label_fo_body(ix, ry, iw, &xe(item));
-        ry += ROW_H;
+        o += &templates::label_text_body(ix, row_cy, FONT_SIZE, col.font_color, &xe(item));
+        row_cy += ROW_H;
     }
     o + "</g>"
 }
 
-fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64) -> String {
+fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColors) -> String {
     let (w, h) = (geom.width, geom.height);
     let (hw, hh) = (w / 2.0, h / 2.0);
     let sep_y = -hh + HEADER_H;
     let mut o = templates::node_group_open(cx, cy);
     // Fill path (background) with border stroke
-    o += &templates::node_box_path(-hw, -hh, hw, hh, ELEM_STROKE, ELEM_FILL);
+    o += &templates::node_box_path(-hw, -hh, hw, hh, col.box_stroke, col.box_fill);
     // Divider line
-    o += &templates::node_divider(-hw, hw, sep_y, ELEM_STROKE);
-    // Header: <<Element>> and name using foreignObject
-    let elem_w = tmw("<<Element>>");
-    let name_w = tmw(&elem.name);
-    let type_lx = -(elem_w / 2.0);
-    let name_lx = -(name_w / 2.0);
-    let type_ly = -hh + PAD_Y + ROW_H / 2.0 - 12.0;
-    let name_ly = -hh + PAD_Y + ROW_H * 1.5 - 12.0;
-    o += &templates::label_fo(type_lx, type_ly, elem_w, "&lt;&lt;Element&gt;&gt;");
-    o += &templates::label_fo_bold(name_lx, name_ly, name_w, &xe(&elem.name));
-    // Body items using foreignObject
+    o += &templates::node_divider(-hw, hw, sep_y, col.box_stroke);
+    // Header: <<Element>> and name centered in header rows
+    let type_cy = -hh + PAD_Y + ROW_H / 2.0;
+    let name_cy = -hh + PAD_Y + ROW_H * 1.5;
+    o += &templates::label_text(
+        0.0,
+        type_cy,
+        FONT_SIZE,
+        col.font_color,
+        "&lt;&lt;Element&gt;&gt;",
+    );
+    o += &templates::label_text_bold(0.0, name_cy, FONT_SIZE, col.font_color, &xe(&elem.name));
+    // Body items: left-aligned, each row centered vertically
     let mut body: Vec<String> = vec![];
     if !elem.elem_type.is_empty() {
         body.push(format!("Type: {}", elem.elem_type));
@@ -131,12 +135,11 @@ fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64) -> String {
     if !elem.doc_ref.is_empty() {
         body.push(format!("DocRef: {}", elem.doc_ref));
     }
-    let mut ry = sep_y + PAD_Y + ROW_H / 2.0 - 12.0;
+    let mut row_cy = sep_y + PAD_Y + ROW_H / 2.0;
     for item in &body {
-        let iw = tmw(item);
         let ix = -hw + PAD_X;
-        o += &templates::label_fo_body(ix, ry, iw, &xe(item));
-        ry += ROW_H;
+        o += &templates::label_text_body(ix, row_cy, FONT_SIZE, col.font_color, &xe(item));
+        row_cy += ROW_H;
     }
     o + "</g>"
 }
@@ -190,7 +193,14 @@ fn fallback_pts(g: &Graph, v: &str, w: &str) -> Vec<(f64, f64)> {
     }
 }
 
-fn render_relation(rel: &super::parser::Relation, pts: &[(f64, f64)], sid: &str) -> String {
+fn render_relation(
+    rel: &super::parser::Relation,
+    pts: &[(f64, f64)],
+    sid: &str,
+    line_color: &str,
+    font_color: &str,
+    label_bg: &str,
+) -> String {
     if pts.len() < 2 {
         return String::new();
     }
@@ -206,37 +216,28 @@ fn render_relation(rel: &super::parser::Relation, pts: &[(f64, f64)], sid: &str)
     } else {
         String::new()
     };
-    let path = templates::relation_path(&d, REL_COLOR, dash, &marker_start, &marker_end);
+    let path = templates::relation_path(&d, line_color, dash, &marker_start, &marker_end);
     let lhtml = format!("&lt;&lt;{}&gt;&gt;", rel.rel_type.display());
     let (mx, my) = midpt(pts);
-    // Edge label using foreignObject (like reference). Mermaid uses 16px text width.
     let (lw, _) = measure_browser(&format!("<<{}>>", rel.rel_type.display()), FONT_SIZE);
-    let lbl_inner_x = -(lw / 2.0);
-    let lbl = templates::edge_label_fo(mx, my, lbl_inner_x, lw, &lhtml);
+    let lbl = templates::edge_label_text(mx, my, lw, FONT_SIZE, font_color, label_bg, &lhtml);
     format!("{path}{lbl}")
 }
 
-fn markers(sid: &str) -> String {
-    let mut o = templates::marker_arrow_end(sid, REL_COLOR);
-    o += &templates::marker_contains_start(sid, REL_COLOR);
+fn markers(sid: &str, line_color: &str) -> String {
+    let mut o = templates::marker_arrow_end(sid, line_color);
+    o += &templates::marker_contains_start(sid, line_color);
     o
 }
 
-fn css(sid: &str) -> String {
-    format!(
-        "#{sid}{{font-family:Arial,sans-serif;font-size:{fs}px;fill:{FONT_COLOR};}}\
-        #{sid} p{{margin:0;}}\
-        #{sid} .node rect{{stroke-width:1.3;}}\
-        #{sid} .relationshipLine{{fill:none;stroke-width:1.5;}}\
-        #{sid} .labelBkg{{background-color:rgba(232,232,232,0.8);text-align:center;}}\
-        #{sid} .edgeLabel{{background-color:rgba(232,232,232,0.8);text-align:center;}}\
-        #{sid} .edgeLabel p{{background-color:rgba(232,232,232,0.8);}}",
-        fs = FONT_SIZE as i64
-    )
-}
-
 pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
-    let _vars = theme.resolve();
+    let vars = theme.resolve();
+    let col = ReqColors {
+        box_fill: vars.primary_color,
+        box_stroke: vars.primary_border,
+        font_color: vars.primary_text,
+    };
+    let line_color = vars.line_color;
     let sid = "mermaid-req-svg";
     // Guard: empty diagram
     if diag.requirements.is_empty() && diag.elements.is_empty() {
@@ -298,8 +299,8 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
         g.graph().width.unwrap_or(600.0),
         g.graph().height.unwrap_or(400.0),
     );
-    let mut svg = templates::svg_root(sid, gw, gh, &css(sid));
-    svg += &markers(sid);
+    let mut svg = templates::svg_root(sid, gw, gh);
+    svg += &markers(sid, line_color);
     svg += "<g class=\"req-root\"><g class=\"req-relationships\">";
     for (i, rel) in diag.relations.iter().enumerate() {
         let ename = format!("rel{i}");
@@ -320,7 +321,14 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
                     .unwrap_or_else(|| fallback_pts(&g, &rel.src, &rel.dst))
             }
         };
-        svg += &render_relation(rel, &pts, sid);
+        svg += &render_relation(
+            rel,
+            &pts,
+            sid,
+            line_color,
+            col.font_color,
+            vars.edge_label_bg,
+        );
     }
     svg += "</g><g class=\"req-nodes\">";
     for (i, req) in diag.requirements.iter().enumerate() {
@@ -329,7 +337,7 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
             .node_opt(&geom.id)
             .and_then(|n| n.x.zip(n.y))
             .unwrap_or((0.0, 0.0));
-        svg += &render_req(req, geom, cx, cy);
+        svg += &render_req(req, geom, cx, cy, &col);
     }
     for (i, elem) in diag.elements.iter().enumerate() {
         let geom = &eg[i];
@@ -337,7 +345,7 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
             .node_opt(&geom.id)
             .and_then(|n| n.x.zip(n.y))
             .unwrap_or((0.0, 0.0));
-        svg += &render_elem(elem, geom, cx, cy);
+        svg += &render_elem(elem, geom, cx, cy, &col);
     }
     svg + "</g></g></svg>"
 }

@@ -368,26 +368,6 @@ pub fn marker(id: &str, attrs: &[(&str, &str)], content: &str) -> String {
     format!(r#"<marker id="{id}"{extra}>{content}</marker>"#)
 }
 
-/// Render a `<foreignObject>` element with an HTML `<div>` label inside.
-///
-/// Produces a `<foreignObject>` sized to `w × h` at position `(x, y)`.
-/// `label` is placed inside a `<div>` whose inline style is set to
-/// `div_style` (may be empty). This matches the pattern used by Mermaid for
-/// rich-text node and edge labels.
-#[allow(dead_code)]
-pub fn foreign_object_label(
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    label: &str,
-    div_style: &str,
-) -> String {
-    format!(
-        r#"<foreignObject x="{x}" y="{y}" width="{w}" height="{h}"><div xmlns="http://www.w3.org/1999/xhtml" style="{div_style}">{label}</div></foreignObject>"#
-    )
-}
-
 /// Render an SVG attribute string from key-value pairs.
 ///
 /// This is the free-function alias for [`svg_attrs`]; both are identical.

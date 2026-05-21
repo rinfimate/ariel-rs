@@ -19,7 +19,7 @@
 
 use super::constants::*;
 use super::parser::{GraticuleType, RadarDiagram};
-use super::templates::{self, centered_group_open, curve_style_entry, esc, fmt};
+use super::templates::{self, centered_group_open, esc, fmt};
 use crate::theme::Theme;
 use std::f64::consts::PI;
 
@@ -56,42 +56,39 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
     let min_val = diag.options.min;
     let ticks = diag.options.ticks.max(1);
 
-    // ── CSS class styles for curves ────────────────────────────────────────
-    // Mirror Mermaid JS genIndexStyles(): use cScale theme variables.
-    // For simplicity we define up to 12 entries matching cScale0-11.
-    let curve_count = diag.curves.len().min(12);
-    let curve_styles = build_curve_styles(curve_count, theme);
+    // ── Curve colors ───────────────────────────────────────────────────────
+    let c_scale = theme_c_scale(theme);
 
     // ── SVG root ───────────────────────────────────────────────────────────
     let mut out = String::new();
     out.push_str(&templates::svg_root(&fmt(total_w), &fmt(total_h)));
-
-    // Style block
-    out.push_str(&templates::style_block(
-        vars.font_family,
-        "16",
-        vars.title_color,
-        vars.line_color,
-        &fmt(AXIS_LABEL_FONT_SIZE),
-        GRATICULE_COLOR,
-        &fmt(GRATICULE_OPACITY),
-        &fmt(GRATICULE_STROKE_WIDTH),
-        &fmt(LEGEND_FONT_SIZE),
-        &curve_styles,
-    ));
 
     // ── Centered group (all drawing relative to chart centre) ──────────────
     out.push_str(&centered_group_open(&fmt(cx), &fmt(cy)));
 
     // ── drawGraticule ──────────────────────────────────────────────────────
     // Mermaid JS: for i in 0..ticks => r = radius * (i+1) / ticks
+    // Graticule rings use a neutral grey (#DEDEDE), not the theme line_color.
+    // This matches Mermaid's radarGraticuleColor which is fixed across themes.
+    let graticule_color = GRATICULE_COLOR;
+
     for i in 0..ticks {
         let r = radius * (i as f64 + 1.0) / ticks as f64;
         if diag.options.graticule == GraticuleType::Circle {
-            out.push_str(&templates::graticule_circle(&fmt(r)));
+            out.push_str(&templates::graticule_circle(
+                &fmt(r),
+                graticule_color,
+                &fmt(GRATICULE_OPACITY),
+                &fmt(GRATICULE_STROKE_WIDTH),
+            ));
         } else if n_axes >= 3 {
             let pts = polygon_points(r, n_axes);
-            out.push_str(&templates::graticule_polygon(&pts));
+            out.push_str(&templates::graticule_polygon(
+                &pts,
+                graticule_color,
+                &fmt(GRATICULE_OPACITY),
+                &fmt(GRATICULE_STROKE_WIDTH),
+            ));
         }
     }
 
@@ -101,7 +98,11 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
         // Spoke end at axisScaleFactor * radius
         let spoke_x = AXIS_SCALE_FACTOR * radius * angle.cos();
         let spoke_y = AXIS_SCALE_FACTOR * radius * angle.sin();
-        out.push_str(&templates::axis_line(&fmt(spoke_x), &fmt(spoke_y)));
+        out.push_str(&templates::axis_line(
+            &fmt(spoke_x),
+            &fmt(spoke_y),
+            graticule_color,
+        ));
 
         // Label at axisLabelFactor * radius
         let label_x = AXIS_LABEL_FACTOR * radius * angle.cos();
@@ -110,6 +111,8 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
             &fmt(label_x),
             &fmt(label_y),
             &esc(&axis.label),
+            vars.text_color,
+            &fmt(AXIS_LABEL_FONT_SIZE),
         ));
     }
 
@@ -119,6 +122,8 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
         if curve.entries.len() != n_axes {
             continue;
         }
+
+        let color = c_scale[ci % c_scale.len()];
 
         // Points relative to centre (the g transform moves us there)
         let points: Vec<(f64, f64)> = curve
@@ -134,14 +139,26 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
 
         if diag.options.graticule == GraticuleType::Circle {
             let d = closed_round_curve(&points, CURVE_TENSION);
-            out.push_str(&templates::curve_path(&d, ci));
+            out.push_str(&templates::curve_path(
+                &d,
+                ci,
+                color,
+                CURVE_OPACITY,
+                CURVE_STROKE_WIDTH,
+            ));
         } else {
             let pts = points
                 .iter()
                 .map(|(x, y)| format!("{},{}", fmt(*x), fmt(*y)))
                 .collect::<Vec<_>>()
                 .join(" ");
-            out.push_str(&templates::curve_polygon(&pts, ci));
+            out.push_str(&templates::curve_polygon(
+                &pts,
+                ci,
+                color,
+                CURVE_OPACITY,
+                CURVE_STROKE_WIDTH,
+            ));
         }
     }
 
@@ -154,10 +171,15 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
         let legend_x = (CHART_WIDTH / 2.0 + MARGIN_RIGHT) * 0.75;
         let legend_y = -(CHART_HEIGHT / 2.0 + MARGIN_TOP) * 0.75;
         for (ci, curve) in diag.curves.iter().enumerate() {
+            let color = c_scale[ci % c_scale.len()];
             let item_y = legend_y + ci as f64 * LEGEND_LINE_HEIGHT;
             out.push_str(&templates::legend_group_open(&fmt(legend_x), &fmt(item_y)));
-            out.push_str(&templates::legend_rect(ci));
-            out.push_str(&templates::legend_label(&esc(&curve.label)));
+            out.push_str(&templates::legend_rect(ci, color, CURVE_OPACITY));
+            out.push_str(&templates::legend_label(
+                &esc(&curve.label),
+                &fmt(LEGEND_FONT_SIZE),
+                vars.text_color,
+            ));
             out.push_str("</g>");
         }
     }
@@ -166,7 +188,12 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
     // Mermaid JS: y = -(config.height / 2 + config.marginTop)
     if let Some(t) = &diag.title {
         let title_y = -(CHART_HEIGHT / 2.0 + MARGIN_TOP);
-        out.push_str(&templates::title_text(&fmt(title_y), &esc(t)));
+        out.push_str(&templates::title_text(
+            &fmt(title_y),
+            &esc(t),
+            vars.title_color,
+            "16",
+        ));
     }
 
     // Close the centred group and outer wrapper group
@@ -177,19 +204,6 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
 
 // ─── Curve colour generation ──────────────────────────────────────────────────
 
-/// Build CSS class definitions for radarCurve-N and radarLegendBox-N.
-/// Mirrors Mermaid JS genIndexStyles() using cScale theme variables.
-/// We use the same HSL palette the default theme exports.
-fn build_curve_styles(count: usize, theme: Theme) -> String {
-    let colors = theme_c_scale(theme);
-    let mut s = String::new();
-    for i in 0..count {
-        let c = colors[i % colors.len()];
-        s.push_str(&curve_style_entry(i, c, CURVE_OPACITY, CURVE_STROKE_WIDTH));
-    }
-    s
-}
-
 /// cScale palette for the default and dark themes (12 entries).
 /// Values taken from Mermaid JS theme variable output in the reference SVG:
 ///   cScale0  = hsl(240,100%,76.27%)  (blue-ish)
@@ -198,18 +212,26 @@ fn build_curve_styles(count: usize, theme: Theme) -> String {
 fn theme_c_scale(theme: Theme) -> &'static [&'static str] {
     match theme {
         Theme::Dark => &[
-            "hsl(240,100%,76.2745098039%)",
-            "hsl(60,100%,73.5294117647%)",
-            "hsl(80,100%,76.2745098039%)",
-            "hsl(270,100%,76.2745098039%)",
-            "hsl(300,100%,76.2745098039%)",
-            "hsl(330,100%,76.2745098039%)",
-            "hsl(0,100%,76.2745098039%)",
-            "hsl(30,100%,76.2745098039%)",
-            "hsl(90,100%,76.2745098039%)",
-            "hsl(150,100%,76.2745098039%)",
-            "hsl(180,100%,76.2745098039%)",
-            "hsl(210,100%,76.2745098039%)",
+            "#1f2020", "#0b0000", "#4d1037", "#3f5258", "#4f2f1b", "#6e0a0a", "#3b0048", "#995a01",
+            "#154706", "#161722", "#00296f", "#01629c",
+        ],
+        Theme::Forest => &[
+            "hsl(78.1578947368, 58.4615384615%, 64.5098039216%)",
+            "hsl(98.961038961, 100%, 74.9019607843%)",
+            "hsl(78.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(108.1578947368, 58.4615384615%, 64.5098039216%)",
+            "hsl(138.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(168.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(198.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(228.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(288.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(348.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(18.1578947368, 58.4615384615%, 74.5098039216%)",
+            "hsl(48.1578947368, 58.4615384615%, 74.5098039216%)",
+        ],
+        Theme::Neutral => &[
+            "#555", "#F4F4F4", "#555", "#BBB", "#999", "#777", "#AAA", "#888", "#666", "#CCC",
+            "#444", "#DDD",
         ],
         _ => &[
             "hsl(240,100%,76.2745098039%)",

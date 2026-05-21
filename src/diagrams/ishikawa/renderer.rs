@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{IshikawaDiagram, IshikawaNode};
-use super::templates::{self, build_style, esc, fmt};
+use super::templates::{self, esc, fmt};
 /// Faithful Rust port of Mermaid's ishikawaRenderer.ts.
 ///
 /// Key algorithm details (from TypeScript source):
@@ -107,7 +107,12 @@ fn measure_layout_width(text: &str, font_size: f64) -> (f64, f64, usize) {
 
 pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
+    let pc = vars.primary_color;
+    let lc = vars.git_spine_color;
+    let pt = match theme {
+        crate::theme::Theme::Forest | crate::theme::Theme::Neutral => "#000000",
+        _ => vars.text_color,
+    };
     let root = match &diag.root {
         Some(r) => r,
         None => return templates::empty_svg().to_string(),
@@ -155,7 +160,7 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
 
     // Arrow marker definition
     let marker_id = "ishikawa-arrow";
-    elements.push(templates::arrowhead_marker(marker_id));
+    elements.push(templates::arrowhead_marker(marker_id, lc));
 
     let marker_url = format!("url(#{marker_id})");
 
@@ -194,6 +199,9 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
                     dir,
                     if dir < 0 { upper_len } else { lower_len },
                     &marker_url,
+                    lc,
+                    pc,
+                    pt,
                 );
                 branch_elements.extend(elems);
                 pair_leftmost = pair_leftmost.min(leftmost_x);
@@ -212,7 +220,7 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     content_min_x = content_min_x.min(spine_x_left);
 
     // Spine line (horizontal)
-    elements.push(templates::spine_line(spine_x_left, spine_y));
+    elements.push(templates::spine_line(spine_x_left, spine_y, lc));
 
     elements.extend(branch_elements);
 
@@ -245,18 +253,22 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     //   (w - tb.width)/2 - tb.x + 3 = (w - tb.width)/2 + tb.width/2 + 3 = w/2 + 3
     // → text center at x = head_w/2 + 3
     let head_text_x = head_w / 2.0 + 3.0;
-    let head_text_svg = build_multiline_text(
+    let head_text_svg = build_multiline_text_weighted(
         &wrapped_head,
         head_text_x,
         0.0,
         "ishikawa-head-label",
         "middle",
-        head_font_size,
+        14.0,
+        "600",
+        pt,
     );
 
     elements.push(format!(
-        r#"<g class="ishikawa-head-group" transform="translate(0,{:.5})"><path class="ishikawa-head" d="{hp}"/>{ht}</g>"#,
+        r##"<g class="ishikawa-head-group" transform="translate(0,{:.5})"><path class="ishikawa-head" fill="{pc}" stroke="{lc}" stroke-width="2" d="{hp}"/>{ht}</g>"##,
         spine_y,
+        pc = pc,
+        lc = lc,
         hp = head_path,
         ht = head_text_svg,
     ));
@@ -281,13 +293,12 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     let total_w = content_w + PADDING * 2.0;
     let total_h = content_h + PADDING * 2.0;
 
-    let style = build_style(ff);
     let content = elements.join("");
     templates::svg_root(
         total_w,
         total_h,
         total_w,
-        &style,
+        "",
         "",
         translate_x,
         translate_y,
@@ -327,6 +338,9 @@ fn draw_branch(
     dir: i32,
     length: f64,
     marker_url: &str,
+    line_color: &str,
+    primary_color: &str,
+    primary_text: &str,
 ) -> (Vec<String>, f64, f64, f64) {
     let mut elements: Vec<String> = Vec::new();
     let children = &node.children;
@@ -344,7 +358,7 @@ fn draw_branch(
 
     // Main branch line
     elements.push(templates::branch_line(
-        start_x, start_y, end_x, end_y, marker_url,
+        start_x, start_y, end_x, end_y, marker_url, line_color,
     ));
 
     // Cause label at end of branch
@@ -359,6 +373,7 @@ fn draw_branch(
         "ishikawa-label cause",
         "middle",
         FONT_SIZE,
+        primary_text,
     );
     let (tw, _, n_lines_cause) = measure_layout_width(node.text.as_str(), FONT_SIZE);
     let lh = FONT_SIZE * 1.05;
@@ -372,7 +387,7 @@ fn draw_branch(
     let box_y = cause_label_y - box_h * 0.57;
     elements.push(format!(
         r#"<g class="ishikawa-label-group">{}{}</g>"#,
-        templates::cause_label_rect(box_x, box_y, box_w, box_h),
+        templates::cause_label_rect(box_x, box_y, box_w, box_h, primary_color, line_color),
         cause_text_svg,
     ));
 
@@ -453,7 +468,7 @@ fn draw_branch(
             };
             bx1 = bx0 - stub_len;
 
-            sub_el = templates::sub_branch_line(bx0, y, bx1, y, marker_url);
+            sub_el = templates::sub_branch_line(bx0, y, bx1, y, marker_url, line_color);
 
             // drawMultilineText at (bx1, y) text-anchor=end class=ishikawa-label align
             // Mermaid: drawMultilineText(grp, e.text, bx1, y, "ishikawa-label align", "end", fontSize)
@@ -467,6 +482,7 @@ fn draw_branch(
                 "ishikawa-label align",
                 "end",
                 FONT_SIZE,
+                primary_text,
             );
             // leftmost text x: with text-anchor=end, text extends left of bx1
             text_lx = bx1 - tw_sub;
@@ -483,7 +499,7 @@ fn draw_branch(
             by0 = par_y0;
             bx1 = bx0 + diag_x * ((y - by0) / diag_y);
 
-            sub_el = templates::sub_branch_line(bx0, by0, bx1, y, marker_url);
+            sub_el = templates::sub_branch_line(bx0, by0, bx1, y, marker_url, line_color);
 
             // drawMultilineText at (bx1, y) text-anchor=end
             // class: "ishikawa-label up" if dir<0, "ishikawa-label down" if dir>0
@@ -493,7 +509,15 @@ fn draw_branch(
                 "ishikawa-label down"
             };
             let (tw_sub, _, _) = measure_layout_width(&entry.text, FONT_SIZE);
-            text_el = build_multiline_text(&entry.text, bx1, y, odd_class, "end", FONT_SIZE);
+            text_el = build_multiline_text(
+                &entry.text,
+                bx1,
+                y,
+                odd_class,
+                "end",
+                FONT_SIZE,
+                primary_text,
+            );
             text_lx = bx1 - tw_sub;
             grp_class = "ishikawa-sub-group";
 
@@ -542,6 +566,20 @@ fn build_multiline_text(
     cls: &str,
     anchor: &str,
     font_size: f64,
+    fill: &str,
+) -> String {
+    build_multiline_text_weighted(text, x, y, cls, anchor, font_size, "", fill)
+}
+
+fn build_multiline_text_weighted(
+    text: &str,
+    x: f64,
+    y: f64,
+    cls: &str,
+    anchor: &str,
+    font_size: f64,
+    font_weight: &str,
+    fill: &str,
 ) -> String {
     let lines = split_lines(text);
     let lh = font_size * 1.05;
@@ -560,9 +598,14 @@ fn build_multiline_text(
             esc(line)
         ));
     }
+    let weight_attr = if font_weight.is_empty() {
+        String::new()
+    } else {
+        format!(" font-weight=\"{}\"", font_weight)
+    };
     format!(
-        r#"<text class="{}" text-anchor="{}" x="{:.5}" y="{:.5}" font-size="{}" dominant-baseline="middle">{}</text>"#,
-        cls, anchor, x, y_first, font_size, tspans,
+        r#"<text class="{}" fill="{}" text-anchor="{}" x="{:.5}" y="{:.5}" font-size="{}"{} dominant-baseline="middle">{}</text>"#,
+        cls, fill, anchor, x, y_first, font_size, weight_attr, tspans,
     )
 }
 

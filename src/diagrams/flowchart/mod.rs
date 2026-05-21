@@ -31,9 +31,9 @@ pub(crate) fn validate(diagram: &parser::FlowchartDiagram) -> Vec<ParseError> {
     errors
 }
 
-/// Render with <foreignObject> HTML labels (matches Mermaid reference output).
+/// Render using native SVG `<text>` labels.
 pub fn render_html(input: &str, theme: Theme) -> String {
     let mut result = parser::parse(input);
     result.errors.extend(validate(&result.diagram));
-    renderer::render(&result.diagram, theme, true)
+    renderer::render(&result.diagram, theme)
 }

@@ -68,6 +68,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<JourneyDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // title directive
         if let Some(rest) = trimmed.strip_prefix("title") {
             let t = rest.trim();

@@ -314,6 +314,16 @@ pub fn parse(input: &str) -> crate::error::ParseResult<ClassDiagram> {
             continue;
         }
 
+        // title / accTitle / accDescr / link / click — skip
+        if line.starts_with("title")
+            || line.starts_with("accTitle")
+            || line.starts_with("accDescr")
+            || line.starts_with("link ")
+            || line.starts_with("click ")
+        {
+            continue;
+        }
+
         // direction keyword
         if let Some(stripped) = line.strip_prefix("direction ") {
             let dir = stripped.trim().to_uppercase();

@@ -22,6 +22,7 @@ pub enum BlockShape {
     Diamond,     // A{"label"}  diamond/rhombus
     Circle,      // A(("label"))
     Hexagon,     // A{{"label"}}
+    BlockArrow,  // A<["label"]>(direction)  block arrow shape
     Default,     // bare A
 }
 
@@ -30,7 +31,10 @@ pub struct BlockNode {
     pub id: String,
     pub label: String,
     pub shape: BlockShape,
-    pub col_span: usize, // how many columns this occupies
+    pub col_span: usize,             // how many columns this occupies
+    pub is_group: bool,              // true for nested block:id nodes
+    pub group_children: Vec<String>, // ordered child node IDs (for nested blocks)
+    pub style: Option<String>,       // user inline style from `style X fill:...,stroke:...`
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +73,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
     let mut current_row_items: Vec<RowItem> = Vec::new();
     let mut current_columns = 1usize;
     let mut in_block_stack: Vec<String> = Vec::new(); // nested block ids
+    let mut in_yaml = false;
 
     let lines = input.lines().peekable();
 
@@ -78,8 +83,22 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
             continue;
         }
 
+        // YAML frontmatter
+        if line == "---" {
+            in_yaml = !in_yaml;
+            continue;
+        }
+        if in_yaml {
+            continue;
+        }
+
         // Diagram declaration
         if line == "block-beta" || line.starts_with("block-beta") {
+            continue;
+        }
+
+        // accTitle / accDescr — skip
+        if line.starts_with("accTitle") || line.starts_with("accDescr") {
             continue;
         }
 
@@ -96,13 +115,10 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
             continue;
         }
 
-        // End of nested block
+        // End of nested block — pop the block stack, restore columns
         if line == "end" {
-            if !current_row_items.is_empty() {
-                diag.rows.push(BlockRow {
-                    items: std::mem::take(&mut current_row_items),
-                });
-            }
+            // Children were already added to group_children via the `continue` path above.
+            // current_row_items still holds the group node itself — leave it for parent layout.
             in_block_stack.pop();
             current_columns = diag.columns;
             continue;
@@ -125,10 +141,34 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
                     label,
                     shape,
                     col_span: 1,
+                    is_group: true,
+                    group_children: Vec::new(),
+                    style: None,
                 },
             );
             current_row_items.push(RowItem::Node(id.clone(), 1));
             in_block_stack.push(id);
+            // Inside a nested block, items are added as group_children, not diag.rows
+            current_columns = usize::MAX;
+            continue;
+        }
+
+        // Style directive: style <id> <attrs> — parse and apply to node
+        if line.starts_with("classDef ") || line.starts_with("class ") {
+            continue;
+        }
+        if let Some(style_rest) = line.strip_prefix("style ") {
+            let rest = style_rest.trim();
+            // rest = "<id> <attrs>"
+            if let Some(sp) = rest.find(|c: char| c.is_whitespace()) {
+                let node_id = rest[..sp].trim().to_string();
+                let attrs = rest[sp..].trim();
+                // Convert comma-separated CSS props to semicolons: "fill:#969,stroke:#333" → "fill:#969;stroke:#333"
+                let css = attrs.replace(',', ";");
+                if let Some(node) = diag.nodes.get_mut(&node_id) {
+                    node.style = Some(css);
+                }
+            }
             continue;
         }
 
@@ -150,6 +190,9 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
                                 label: id.clone(),
                                 shape: BlockShape::Default,
                                 col_span: 1,
+                                is_group: false,
+                                group_children: Vec::new(),
+                                style: None,
                             },
                         );
                     }
@@ -160,22 +203,38 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
         }
 
         // Row of nodes / spaces
-        // Parse space[:N] and node tokens on the same line
         let items = parse_row_items(&line, &mut diag.nodes);
         if !items.is_empty() {
-            // Check if we need a new row
+            // Inside a nested block: add nodes as group_children of the current group
+            if let Some(group_id) = in_block_stack.last().cloned() {
+                for item in &items {
+                    if let RowItem::Node(child_id, _) = item {
+                        if let Some(group) = diag.nodes.get_mut(&group_id) {
+                            group.group_children.push(child_id.clone());
+                        }
+                    }
+                }
+                // Don't add to current_row_items or diag.rows
+                continue;
+            }
+
+            // Top-level: check if we need a new row
             let cur_len: usize = current_row_items.iter().map(item_span).sum();
             let new_len: usize = items.iter().map(item_span).sum();
-            if cur_len + new_len > current_columns && current_columns > 1 && cur_len > 0 {
+            // Flush current row if: overflow, OR columns=1 (each item on its own row)
+            let should_flush = cur_len > 0
+                && ((cur_len + new_len > current_columns && current_columns > 1)
+                    || current_columns <= 1);
+            if should_flush {
                 diag.rows.push(BlockRow {
                     items: std::mem::take(&mut current_row_items),
                 });
             }
             current_row_items.extend(items);
 
-            // Auto-flush row when columns reached
+            // Auto-flush row when columns reached or columns=1
             let total: usize = current_row_items.iter().map(item_span).sum();
-            if total >= current_columns && current_columns > 1 {
+            if (total >= current_columns && current_columns > 1) || current_columns <= 1 {
                 diag.rows.push(BlockRow {
                     items: std::mem::take(&mut current_row_items),
                 });
@@ -300,6 +359,9 @@ fn parse_row_items(line: &str, nodes: &mut indexmap::IndexMap<String, BlockNode>
                     label,
                     shape,
                     col_span: span,
+                    is_group: false,
+                    group_children: Vec::new(),
+                    style: None,
                 },
             );
         }
@@ -368,6 +430,29 @@ pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape) {
     //   A(("Label"))    → id="A", label="Label", shape=Circle
     //   A{{"Label"}}    → id="A", label="Label", shape=Hexagon
     let tok = tok.trim();
+
+    // Block arrow: id<["label"]>(direction)
+    if let Some(lt_pos) = tok.find('<') {
+        let id_part = tok[..lt_pos].trim().to_string();
+        let rest = &tok[lt_pos..];
+        // Extract label from <["..."]> and direction from (...)
+        if let Some(lb) = rest.find("[\"").or_else(|| rest.find("['")) {
+            let rb = rest.rfind(']').unwrap_or(rest.len());
+            let inner = &rest[lb + 2..rb.min(rest.len()).saturating_sub(1)];
+            return (id_part, inner.to_string(), BlockShape::BlockArrow);
+        }
+        // Simple <["label"]> without quotes
+        if rest.starts_with("<[") {
+            let inner = rest
+                .trim_start_matches("<[")
+                .trim_end_matches("]>")
+                .trim_end_matches("](down)")
+                .trim_end_matches("](up)")
+                .trim_end_matches("](left)")
+                .trim_end_matches("](right)");
+            return (id_part, inner.to_string(), BlockShape::BlockArrow);
+        }
+    }
 
     // Find where the shape bracket starts
     let bracket_start = tok.find(['[', '(', '{']);

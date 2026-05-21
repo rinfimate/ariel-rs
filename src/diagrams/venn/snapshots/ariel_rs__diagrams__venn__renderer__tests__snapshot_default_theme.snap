@@ -2,12 +2,12 @@
 source: src/diagrams/venn/renderer.rs
 expression: "crate::svg::normalize_floats(&svg)"
 ---
-<svg id="mermaid-venn" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 800 450" style="max-width: 800px;" role="graphics-document document" aria-roledescription="venn"><style>.venn-title{font-family:Arial, sans-serif;} .venn-circle text{font-family:Arial, sans-serif;} .venn-intersection text{font-family:Arial, sans-serif;} .venn-text-node{font-family:Arial, sans-serif;}</style><text class="venn-title" font-size="32px" text-anchor="middle" dominant-baseline="middle" x="50%" y="16" style="fill: #333333;">Sets</text><g transform="translate(0, 24)"><g class="venn-area venn-circle venn-set-0" data-venn-sets="A"><path d="
+<svg id="mermaid-venn" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 800 450" style="max-width: 800px;" role="graphics-document document" aria-roledescription="venn"><text class="venn-title" font-size="32px" text-anchor="middle" dominant-baseline="middle" x="50%" y="16" style="fill: #333333; font-family: Arial, sans-serif;">Sets</text><g transform="translate(0, 24)"><g class="venn-area venn-circle venn-set-0" data-venn-sets="A"><path d="
 M 274.328 213
 m -198 0
 a 198 198 0 1 0 396 0
-a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #5353ff; stroke: #5353ff; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="205" y="239" style="fill: #313199; font-size: 24px;"><tspan x="205" y="239" dy="0.35em">A</tspan></text></g><g class="venn-area venn-circle venn-set-1" data-venn-sets="B"><path d="
+a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #5353ff; stroke: #5353ff; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="205" y="239" style="fill: #333333; font-size: 24px; font-family: Arial, sans-serif;"><tspan x="205" y="239" dy="0.35em">A</tspan></text></g><g class="venn-area venn-circle venn-set-1" data-venn-sets="B"><path d="
 M 525.672 213
 m -198 0
 a 198 198 0 1 0 396 0
-a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #ffff45; stroke: #ffff45; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="594" y="239" style="fill: #999929; font-size: 24px;"><tspan x="594" y="239" dy="0.35em">B</tspan></text></g></g></svg>
+a 198 198 0 1 0 -396 0" style="fill-opacity: 0.1; fill: #ffff45; stroke: #ffff45; stroke-width: 2.5; stroke-opacity: 0.95;"></path><text class="label" text-anchor="middle" dy=".35em" x="594" y="239" style="fill: #333333; font-size: 24px; font-family: Arial, sans-serif;"><tspan x="594" y="239" dy="0.35em">B</tspan></text></g></g></svg>

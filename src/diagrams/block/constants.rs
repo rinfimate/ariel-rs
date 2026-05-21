@@ -1,4 +1,4 @@
-//! Layout and styling constants for the block diagram renderer.
+﻿//! Layout and styling constants for the block diagram renderer.
 #![allow(dead_code)]
 
 // ---------------------------------------------------------------------------
@@ -17,8 +17,13 @@ pub const H_GAP: f64 = 8.0;
 /// Vertical gap between rows (px).
 pub const V_GAP: f64 = 8.0;
 
-/// Outer margin around all nodes (px).
+/// Outer margin around all nodes for viewBox calculation (px).
+/// defaultConfig.block.padding = 8 but the block renderer applies 5 to the
+/// viewBox margin — confirmed from Mermaid JS ref SVG (viewBox x=-5, y=-(NODE_H/2+5)).
 pub const MARGIN: f64 = 5.0;
+
+/// Padding inside a group node (between border and children), px.
+pub const GROUP_PAD: f64 = 8.0;
 
 // ---------------------------------------------------------------------------
 // Typography
@@ -37,11 +42,7 @@ pub const TEXT_SCALE: f64 = 1.117;
 /// Cylinder ellipse ry for block shapes (px).
 pub const CYLINDER_RY: f64 = 7.0;
 
-/// Fill color for cylinder shapes.
-pub const CYLINDER_FILL: &str = "#ECECFF";
-
-/// Stroke color for cylinder shapes.
-pub const CYLINDER_STROKE: &str = "#9370DB";
+// CYLINDER_FILL and CYLINDER_STROKE removed — use vars.primary_color / vars.primary_border at render time.
 
 // ---------------------------------------------------------------------------
 // Edge trim

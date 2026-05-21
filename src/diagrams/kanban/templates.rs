@@ -10,116 +10,81 @@
 pub use crate::diagrams::util::esc;
 
 // ---------------------------------------------------------------------------
-// CSS
+// Section colour helpers (inline — no CSS required)
 // ---------------------------------------------------------------------------
 
-use super::constants::{SECTION_HUES, SECTION_L, SECTION_L_0, SECTION_L_0_DARK, SECTION_L_DARK};
+use super::constants::{SECTION_HUES, SECTION_L, SECTION_L_0};
+use crate::theme::Theme;
 
-fn section_text_color(i: usize) -> &'static str {
-    match i {
-        2 => "#ffffff",
+// Dark theme cScale colors for kanban sections (Mermaid dark cScale palette, section-1 first).
+const DARK_SECTION_FILLS: &[&str] = &[
+    "hsl(321.6393442623, 65.5913978495%, 28.2352941176%)",
+    "hsl(194.4, 16.5562913907%, 39.6078431373%)",
+    "hsl(23.0769230769, 49.0566037736%, 30.7843137255%)",
+    "hsl(0, 83.3333333333%, 33.5294117647%)",
+    "hsl(289.1666666667, 100%, 24.1176470588%)",
+    "hsl(35.1315789474, 98.7012987013%, 40.1960784314%)",
+    "hsl(106.1538461538, 84.4155844156%, 25.0980392157%)",
+    "hsl(235, 21.4285714286%, 20.9803921569%)",
+];
+
+// Forest theme cScale colors (section-1 first).
+const FOREST_SECTION_FILLS: &[&str] = &[
+    "hsl(78.1578947368, 58.4615384615%, 84.5098039216%)",
+    "hsl(108.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(138.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(168.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(198.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(228.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(288.1578947368, 58.4615384615%, 74.5098039216%)",
+];
+
+// Neutral theme section fills (section-1 first, greyscale, 6-entry cycle matching Mermaid CSS).
+const NEUTRAL_SECTION_FILLS: &[&str] = &[
+    "hsl(0, 0%, 43.3333333333%)",
+    "hsl(0, 0%, 83.3333333333%)",
+    "hsl(0, 0%, 56.6666666667%)",
+    "hsl(0, 0%, 70%)",
+    "hsl(0, 0%, 96.6666666667%)",
+    "#FFF",
+];
+// Neutral section header text colours — only index 0 (section-1, dark bg) uses light text.
+const NEUTRAL_SECTION_TEXTS: &[&str] = &["#F4F4F4", "#333", "#333", "#333", "#333", "#333"];
+
+/// Return the `fill` HSL color string for a given section index and theme.
+/// sec_idx is 1-based (first column = 1), so subtract 1 for 0-based palette indexing.
+pub fn section_fill_color(sec_idx: usize, theme: Theme) -> String {
+    let i = sec_idx.saturating_sub(1);
+    match theme {
+        Theme::Dark => DARK_SECTION_FILLS[i % DARK_SECTION_FILLS.len()].to_string(),
+        Theme::Forest => FOREST_SECTION_FILLS[i % FOREST_SECTION_FILLS.len()].to_string(),
+        Theme::Neutral => NEUTRAL_SECTION_FILLS[i % NEUTRAL_SECTION_FILLS.len()].to_string(),
+        _ => {
+            let hue = SECTION_HUES[sec_idx % SECTION_HUES.len()];
+            let l = if sec_idx == 0 { SECTION_L_0 } else { SECTION_L };
+            format!("hsl({hue}, 100%, {l})")
+        }
+    }
+}
+
+/// Return the text color for a given section index and theme.
+pub fn section_text_color(theme: Theme) -> &'static str {
+    match theme {
+        Theme::Dark => "#ccc",
         _ => "black",
     }
 }
 
-pub fn build_css(svg_id: &str, ff: &str) -> String {
-    let mut s = format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .edge{{stroke-width:3;}}",
-        ),
-        id = svg_id,
-        ff = ff,
-    );
-
-    // section--1 (default/fallback)
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section--1 rect,#{id} .section--1 path,#{id} .section--1 circle,",
-            "#{id} .section--1 polygon,#{id} .section--1 path{{",
-            "fill:hsl(240, 100%, {l});stroke:hsl(240, 100%, {l});}}",
-            "#{id} .section--1 text{{fill:#ffffff;}}",
-        ),
-        id = svg_id,
-        l = SECTION_L,
-    ));
-
-    // section-0
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section-0 rect,#{id} .section-0 path,#{id} .section-0 circle,",
-            "#{id} .section-0 polygon,#{id} .section-0 path{{",
-            "fill:hsl({h}, 100%, {l});stroke:hsl({h}, 100%, {l});}}",
-            "#{id} .section-0 text{{fill:black;}}",
-        ),
-        id = svg_id,
-        h = SECTION_HUES[0],
-        l = SECTION_L_0,
-    ));
-
-    // section-1 through section-10
-    for (i, &hue) in SECTION_HUES.iter().enumerate().skip(1) {
-        let text_color = section_text_color(i);
-        let (l, _ld) = if i == 0 {
-            (SECTION_L_0, SECTION_L_0_DARK)
-        } else {
-            (SECTION_L, SECTION_L_DARK)
-        };
-        s.push_str(&format!(
-            concat!(
-                "#{id} .section-{idx} rect,#{id} .section-{idx} path,#{id} .section-{idx} circle,",
-                "#{id} .section-{idx} polygon,#{id} .section-{idx} path{{",
-                "fill:hsl({h}, 100%, {l});stroke:hsl({h}, 100%, {l});}}",
-                "#{id} .section-{idx} text{{fill:{tc};}}",
-            ),
-            id = svg_id,
-            idx = i,
-            h = hue,
-            l = l,
-            tc = text_color,
-        ));
+/// Per-section header text colour (for themes with varying text per section index).
+pub fn section_header_text(sec_idx: usize, theme: Theme) -> &'static str {
+    match theme {
+        Theme::Neutral => {
+            let i = sec_idx.saturating_sub(1);
+            NEUTRAL_SECTION_TEXTS[i % NEUTRAL_SECTION_TEXTS.len()]
+        }
+        Theme::Dark => "#ccc",
+        _ => "#333333",
     }
-
-    // Node (card) styles
-    s.push_str(&format!(
-        concat!(
-            "#{id} .node rect,#{id} .node circle,#{id} .node ellipse,",
-            "#{id} .node polygon,#{id} .node path{{",
-            "fill:white;stroke:#9370DB;stroke-width:1px;}}",
-            "#{id} .kanban-ticket-link{{fill:white;stroke:#9370DB;text-decoration:underline;}}",
-        ),
-        id = svg_id,
-    ));
-
-    // kanban-label
-    s.push_str(&format!(
-        concat!(
-            "#{id} .kanban-label{{",
-            "dy:1em;alignment-baseline:middle;text-anchor:middle;",
-            "dominant-baseline:middle;text-align:center;}}",
-        ),
-        id = svg_id,
-    ));
-
-    // cluster-label / label
-    s.push_str(&format!(
-        "#{id} .cluster-label,#{id} .label{{color:#333;fill:#333;}}",
-        id = svg_id,
-    ));
-
-    // section-root
-    s.push_str(&format!(
-        concat!(
-            "#{id} .section-root rect,#{id} .section-root path,",
-            "#{id} .section-root circle,#{id} .section-root polygon{{",
-            "fill:hsl(240, 100%, 46.2745098039%);}}",
-            "#{id} .section-root text{{fill:#ffffff;}}",
-        ),
-        id = svg_id,
-    ));
-
-    s
 }
 
 // ---------------------------------------------------------------------------
@@ -129,13 +94,13 @@ pub fn build_css(svg_id: &str, ff: &str) -> String {
 /// Render the outer `<svg>` element for a kanban diagram.
 pub fn svg_root(id: &str, mw: f64, vbx: i64, vby: i64, vbw: u64, vbh: u64) -> String {
     format!(
-        r#"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="max-width: {mw:.0}px;" viewBox="{vbx} {vby} {vbw} {vbh}" role="graphics-document document" aria-roledescription="kanban">"#,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: {mw:.0}px;" viewBox="{vbx} {vby} {vbw} {vbh}" role="graphics-document document" aria-roledescription="kanban">"##,
     )
 }
 
 /// Render an empty kanban SVG (no sections).
 pub fn empty_svg() -> &'static str {
-    r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>"#
+    r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>"##
 }
 
 // ---------------------------------------------------------------------------
@@ -145,21 +110,23 @@ pub fn empty_svg() -> &'static str {
 /// Render the opening `<g>` for a section/column cluster.
 pub fn section_group_open(sec_idx: usize, svg_id: &str, id: &str) -> String {
     format!(
-        r#"<g class="cluster undefined section-{sec_idx}" id="{svg_id}-{id}" data-look="classic">"#,
+        r##"<g class="cluster undefined section-{sec_idx}" id="{svg_id}-{id}" data-look="classic">"##,
     )
 }
 
-/// Render the column background `<rect>`.
-pub fn section_rect(x: f64, y: f64, w: f64, h: f64) -> String {
+/// Render the column background `<rect>` with inline section color.
+pub fn section_rect(x: f64, y: f64, w: f64, h: f64, sec_idx: usize, theme: Theme) -> String {
+    let fill = section_fill_color(sec_idx, theme);
     format!(
-        r#"<rect style="" rx="5" ry="5" x="{x:.0}" y="{y:.0}" width="{w:.0}" height="{h:.0}"></rect>"#,
+        r##"<rect style="fill:{fill};stroke:{fill};" rx="5" ry="5" x="{x:.0}" y="{y:.0}" width="{w:.0}" height="{h:.0}"></rect>"##,
     )
 }
 
-/// Render the column header label using `<foreignObject>`.
-pub fn section_label_fo(tx: f64, ty: f64, label: &str) -> String {
+/// Render the column header label as a native SVG `<text>`.
+pub fn section_label_fo(tx: f64, ty: f64, label: &str, primary_text: &str) -> String {
     format!(
-        r#"<g class="cluster-label " transform="translate({tx:.4}, {ty:.0})"><foreignObject width="160" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: block; white-space: nowrap; line-height: 1.5; width: 160px; text-align: center;"><span class="nodeLabel "><p>{label}</p></span></div></foreignObject></g>"#,
+        r##"<g class="cluster-label " transform="translate({tx:.4}, {ty:.0})"><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="middle" dominant-baseline="middle" x="80" y="12">{label}</text></g>"##,
+        primary_text = primary_text,
     )
 }
 
@@ -170,81 +137,152 @@ pub fn section_label_fo(tx: f64, ty: f64, label: &str) -> String {
 /// Render the opening `<g>` for an item node.
 pub fn item_group_open(svg_id: &str, id: &str, cx: f64, cy: f64) -> String {
     format!(
-        r#"<g class="node undefined " id="{svg_id}-{id}" transform="translate({cx:.0}, {cy:.0})">"#,
+        r##"<g class="node undefined " id="{svg_id}-{id}" transform="translate({cx:.0}, {cy:.0})">"##,
     )
 }
 
 /// Render a circle-shaped item card.
-pub fn item_circle(r: f64) -> String {
-    format!(r#"<circle class="basic label-container" cx="0" cy="0" r="{r:.2}" style=""/>"#,)
+pub fn item_circle(r: f64, primary_border: &str, bg: &str) -> String {
+    format!(
+        r##"<circle class="basic label-container" cx="0" cy="0" r="{r:.2}" style="fill:{bg};stroke:{primary_border};stroke-width:1px;"/>"##,
+        primary_border = primary_border,
+        bg = bg,
+    )
 }
 
 /// Render a hexagon-shaped item card.
-pub fn item_hexagon(pts: &str) -> String {
-    format!(r#"<polygon class="basic label-container __APA__" points="{pts}" style=""/>"#,)
+pub fn item_hexagon(pts: &str, primary_border: &str, bg: &str) -> String {
+    format!(
+        r##"<polygon class="basic label-container __APA__" points="{pts}" style="fill:{bg};stroke:{primary_border};stroke-width:1px;"/>"##,
+        primary_border = primary_border,
+        bg = bg,
+    )
 }
 
 /// Render a default (no-border) item card rect.
-pub fn item_default_rect(x: f64, y: f64, w: f64, h: f64) -> String {
+pub fn item_default_rect(x: f64, y: f64, w: f64, h: f64, primary_border: &str, bg: &str) -> String {
     format!(
-        r#"<rect class="basic label-container __APA__" style="" rx="5" ry="5" x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}"></rect>"#,
+        r##"<rect class="basic label-container __APA__" style="fill:{bg};stroke:{primary_border};stroke-width:1px;" rx="5" ry="5" x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}"></rect>"##,
+        primary_border = primary_border,
+        bg = bg,
     )
 }
 
 /// Render a rounded/rect item card with explicit rx.
-pub fn item_rect(rx: f64, x: f64, y: f64, w: f64, h: f64) -> String {
+pub fn item_rect(
+    rx: f64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    primary_border: &str,
+    bg: &str,
+) -> String {
     format!(
-        r#"<rect class="basic label-container __APA__" style="" rx="{rx:.0}" ry="{rx:.0}" x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}"></rect>"#,
+        r##"<rect class="basic label-container __APA__" style="fill:{bg};stroke:{primary_border};stroke-width:1px;" rx="{rx:.0}" ry="{rx:.0}" x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}"></rect>"##,
+        primary_border = primary_border,
+        bg = bg,
     )
 }
 
-/// Render an item label using `<foreignObject>` (primary label).
-pub fn item_label_fo(tx: f64, ty: f64, fw: f64, mw: f64, fh: f64, label: &str) -> String {
+/// Render a multi-line item label using `<tspan>` per line, vertically centered.
+/// `lines` — pre-wrapped text lines. `line_h` — line height in px.
+pub fn item_label_wrapped(
+    tx: f64,
+    ty: f64,
+    lines: &[String],
+    line_h: f64,
+    primary_text: &str,
+) -> String {
+    let n = lines.len() as f64;
+    // Center the text block: first line center = -(n-1)*line_h/2
+    let y0 = -((n - 1.0) * line_h / 2.0);
+    let mut tspans = String::new();
+    for (i, line) in lines.iter().enumerate() {
+        if i == 0 {
+            tspans.push_str(&format!(r#"<tspan x="0" dy="0">{}</tspan>"#, esc(line)));
+        } else {
+            tspans.push_str(&format!(
+                r#"<tspan x="0" dy="{lh:.0}">{line}</tspan>"#,
+                lh = line_h,
+                line = esc(line)
+            ));
+        }
+    }
     format!(
-        r#"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><foreignObject width="{fw:.6}" height="{fh:.0}"><div style="text-align: center; display: table-cell; white-space: normal; word-wrap: break-word; line-height: 1.5; max-width: {mw:.0}px;" xmlns="http://www.w3.org/1999/xhtml"><span style="text-align:left !important" class="nodeLabel markdown-node-label"><p>{label}</p></span></div></foreignObject></g>"#,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y0:.1}">{tspans}</text></g>"##,
+        primary_text = primary_text,
     )
 }
 
-/// Render an item label with fixed width and dynamic height.
-pub fn item_label_fo_fixed(tx: f64, ty: f64, fw: f64, mw: f64, fh: f64, label: &str) -> String {
+/// Render an item label as a native SVG `<text>` (primary label) — kept for metadata case.
+pub fn item_label_fo(
+    tx: f64,
+    ty: f64,
+    _fw: f64,
+    _mw: f64,
+    fh: f64,
+    label: &str,
+    primary_text: &str,
+) -> String {
+    let y = fh / 2.0;
     format!(
-        r#"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><foreignObject width="{fw:.0}" height="{fh:.0}"><div style="text-align: center; display: table-cell; white-space: normal; word-wrap: break-word; line-height: 1.5; max-width: {mw:.0}px;" xmlns="http://www.w3.org/1999/xhtml"><span style="text-align:left !important" class="nodeLabel markdown-node-label"><p>{label}</p></span></div></foreignObject></g>"#,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y:.0}">{label}</text></g>"##,
+        primary_text = primary_text,
     )
 }
 
-/// Render an empty secondary item label placeholder (0×0 foreignObject).
-pub fn item_label_empty(tx: f64, ty: f64, mw: f64) -> String {
+/// Render an item label with fixed width and dynamic height as a native SVG `<text>`.
+pub fn item_label_fo_fixed(
+    tx: f64,
+    ty: f64,
+    _fw: f64,
+    _mw: f64,
+    fh: f64,
+    label: &str,
+    primary_text: &str,
+) -> String {
+    let y = fh / 2.0;
     format!(
-        r#"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><foreignObject width="0" height="0"><div style="text-align: center; display: table-cell; white-space: normal; word-wrap: break-word; line-height: 1.5; max-width: {mw:.0}px;" xmlns="http://www.w3.org/1999/xhtml"><span style="text-align:left !important" class="nodeLabel "></span></div></foreignObject></g>"#,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y:.0}">{label}</text></g>"##,
+        primary_text = primary_text,
     )
 }
 
-/// Render a ticket link `<a>` wrapping a label foreignObject.
-pub fn ticket_link(url: &str, tx: f64, ty: f64, label: &str) -> String {
+/// Render an empty secondary item label placeholder (no foreignObject).
+pub fn item_label_empty(tx: f64, ty: f64, _mw: f64) -> String {
     format!(
-        r#"<a class="kanban-ticket-link" xlink:href="{url}" target="_blank"><g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><foreignObject width="60" height="24"><div style="text-align: center; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 175px;" xmlns="http://www.w3.org/1999/xhtml"><span style="text-align:left !important" class="nodeLabel"><p>{label}</p></span></div></foreignObject></g></a>"#,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect></g>"##,
+    )
+}
+
+/// Render a ticket link `<a>` wrapping a native SVG `<text>` label.
+pub fn ticket_link(url: &str, tx: f64, ty: f64, label: &str, primary_text: &str) -> String {
+    format!(
+        r##"<a class="kanban-ticket-link" xlink:href="{url}" target="_blank" style="text-decoration:none;"><g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" text-decoration="underline" x="0" y="12">{label}</text></g></a>"##,
         url = url,
         tx = tx,
         ty = ty,
         label = label,
+        primary_text = primary_text,
     )
 }
 
-/// Render an assignee label foreignObject.
-pub fn assignee_label(tx: f64, ty: f64, fw: f64, label: &str) -> String {
+/// Render an assignee label as a native SVG `<text>`.
+pub fn assignee_label(tx: f64, ty: f64, _fw: f64, label: &str, primary_text: &str) -> String {
     format!(
-        r#"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><foreignObject width="{fw:.0}" height="24"><div style="text-align: center; display: table-cell; white-space: nowrap; line-height: 1.5; max-width: {fw:.0}px;" xmlns="http://www.w3.org/1999/xhtml"><span style="text-align:left !important" class="nodeLabel"><p>{label}</p></span></div></foreignObject></g>"#,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="12">{label}</text></g>"##,
         tx = tx,
         ty = ty,
-        fw = fw,
         label = label,
+        primary_text = primary_text,
     )
 }
 
 /// Render a priority indicator vertical `<line>`.
 pub fn priority_line(x: f64, y1: f64, y2: f64, color: &str) -> String {
     format!(
-        r#"<line x1="{x}" y1="{y1}" x2="{x}" y2="{y2}" stroke-width="4" stroke="{color}"></line>"#,
+        r##"<line x1="{x}" y1="{y1}" x2="{x}" y2="{y2}" stroke-width="4" stroke="{color}"></line>"##,
         x = x,
         y1 = y1,
         y2 = y2,

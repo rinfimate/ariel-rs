@@ -22,7 +22,7 @@
 
 use super::constants::*;
 use super::parser::{EdgeStyle, FlowchartDiagram, NodeShape, NodeStyle, Subgraph};
-use super::templates::{self, build_css, esc, fmt};
+use super::templates::{self, esc, fmt};
 use crate::icons::parse_fa_label;
 use crate::svg::SvgWriter;
 use crate::text::measure;
@@ -33,10 +33,8 @@ use std::collections::{HashMap, HashSet};
 
 // --- Public entry point -------------------------------------------------------
 
-/// Render a flowchart diagram to SVG.
-/// `use_foreign_object`: when true, node/edge labels use <foreignObject> HTML (matching Mermaid);
-///                       when false, plain SVG <text> elements are used.
-pub fn render(diag: &FlowchartDiagram, theme: Theme, use_foreign_object: bool) -> String {
+/// Render a flowchart diagram to SVG using native SVG `<text>` elements for labels.
+pub fn render(diag: &FlowchartDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
 
     let subgraph_ids: HashSet<String> = diag.subgraphs.iter().map(|sg| sg.id.clone()).collect();
@@ -463,17 +461,14 @@ pub fn render(diag: &FlowchartDiagram, theme: Theme, use_foreign_object: bool) -
     let g = g_full; // use g_full for SVG rendering
 
     let svg_id = "mermaid-svg";
-    let css = build_css(svg_id, &vars);
 
     let mut w = SvgWriter::with_capacity(32_768);
 
     w.raw(&templates::svg_root(svg_id, graph_w, graph_w, graph_h));
 
-    w.raw("<style>").raw(&css).raw("</style>");
-
     // Markers in a bare <g> before <g class="root">
     w.raw("<g>")
-        .raw(&templates::all_markers(svg_id))
+        .raw(&templates::all_markers(svg_id, vars.line_color))
         .raw("</g>");
 
     w.raw(r#"<g class="root">"#);
@@ -504,7 +499,6 @@ pub fn render(diag: &FlowchartDiagram, theme: Theme, use_foreign_object: bool) -
         &top_level_sgs,
         None, // self_cluster: None at top level
         None, // no parent offset
-        use_foreign_object,
         &vars,
     );
 
@@ -541,7 +535,6 @@ fn render_root_group(
     context_sgs: &[&Subgraph],
     self_cluster: Option<&Subgraph>,
     parent_offset: Option<(f64, f64)>,
-    use_foreign_object: bool,
     vars: &ThemeVars,
 ) {
     let (off_x, off_y) = parent_offset.unwrap_or((0.0, 0.0));
@@ -572,14 +565,7 @@ fn render_root_group(
             let rect_h = comp_h - SG_LAYOUT_MARGIN;
             let local_cx = comp_w / 2.0;
             out.push_str(&render_cluster_rect(
-                svg_id,
-                sc,
-                rect_x,
-                rect_y,
-                local_cx,
-                rect_w,
-                rect_h,
-                use_foreign_object,
+                svg_id, sc, rect_x, rect_y, local_cx, rect_w, rect_h, vars,
             ));
         }
     }
@@ -592,14 +578,7 @@ fn render_root_group(
             let lx = local_cx - w / 2.0;
             let ly = local_cy - h / 2.0;
             out.push_str(&render_cluster_rect(
-                svg_id,
-                sg,
-                lx,
-                ly,
-                local_cx,
-                w,
-                h,
-                use_foreign_object,
+                svg_id, sg, lx, ly, local_cx, w, h, vars,
             ));
         }
     }
@@ -665,11 +644,22 @@ fn render_root_group(
                     }
                 }
                 let edge_id = format!("{}-L_{}_{}_{}", svg_id, edge.from, edge.to, i);
-                let is_thick = matches!(edge.style, EdgeStyle::ThickArrow);
-                let is_dashed = matches!(edge.style, EdgeStyle::DotArrow | EdgeStyle::DotLine);
-                let has_arrow = !matches!(edge.style, EdgeStyle::Line | EdgeStyle::DotLine);
+                let is_thick =
+                    matches!(edge.style, EdgeStyle::ThickArrow | EdgeStyle::BiThickArrow);
+                let is_dashed = matches!(
+                    edge.style,
+                    EdgeStyle::DotArrow | EdgeStyle::DotLine | EdgeStyle::BiDotArrow
+                );
+                let has_arrow = !matches!(
+                    edge.style,
+                    EdgeStyle::Line | EdgeStyle::DotLine | EdgeStyle::Invisible
+                );
                 let is_cross = matches!(edge.style, EdgeStyle::CrossArrow);
                 let is_open = matches!(edge.style, EdgeStyle::OpenArrow);
+                let _is_bidirectional = matches!(
+                    edge.style,
+                    EdgeStyle::BiArrow | EdgeStyle::BiDotArrow | EdgeStyle::BiThickArrow
+                );
                 // Trim end so arrowhead tip lands on node boundary, not inside the fill.
                 let end_trim = if has_arrow && !is_cross && !is_open {
                     POINT_END_TRIM
@@ -685,6 +675,10 @@ fn render_root_group(
                 } else {
                     " edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link"
                 };
+                // Inline the stroke-width and stroke-dasharray that the CSS classes used
+                // to provide, so the SVG is independent of any embedded stylesheet.
+                let stroke_width = if is_thick { "3.5px" } else { "1px" };
+                let stroke_dasharray = if is_dashed { "3" } else { "0" };
                 let marker_end = if is_cross {
                     templates::marker_end_cross(svg_id)
                 } else if is_open {
@@ -698,6 +692,9 @@ fn render_root_group(
                     &path_d,
                     &edge_id,
                     classes,
+                    vars.line_color,
+                    stroke_width,
+                    stroke_dasharray,
                     &marker_end,
                 ));
             }
@@ -738,7 +735,7 @@ fn render_root_group(
         let e = dagre_dgl_rs::graph::Edge::new(&from_key, &to_key);
         if let Some(lbl_data) = g.edge(&e) {
             let pts = lbl_data.points.clone().unwrap_or_default();
-            let edge_id = format!("{}-L_{}_{}_{}", svg_id, edge.from, edge.to, i);
+            let _edge_id = format!("{}-L_{}_{}_{}", svg_id, edge.from, edge.to, i);
             match edge.label.as_deref() {
                 Some(lbl_text) if !lbl_text.is_empty() => {
                     let mid_abs = midpoint(&pts);
@@ -746,34 +743,23 @@ fn render_root_group(
                     let my = mid_abs.1 - off_y;
                     let (fo_w_raw, _) = measure(lbl_text, FONT_SIZE);
                     let fo_w = fo_w_raw * TEXT_SCALE;
-                    if use_foreign_object {
-                        out.push_str(&templates::edge_label_fo(
-                            &fmt(mx),
-                            &fmt(my),
-                            &edge_id,
-                            &fmt(-fo_w / 2.0),
-                            &fmt(fo_w),
-                            LABEL_FO_HEIGHT,
-                            LABEL_Y_OFFSET,
-                            &esc(lbl_text),
-                        ));
-                    } else {
-                        out.push_str(&templates::edge_label_text(
-                            &fmt(mx),
-                            &fmt(my),
-                            &fmt(-fo_w / 2.0),
-                            &fmt(fo_w),
-                            LABEL_FO_HEIGHT,
-                            LABEL_Y_OFFSET,
-                            TEXT_LABEL_Y,
-                            ff,
-                            FONT_SIZE,
-                            &esc(lbl_text),
-                        ));
-                    }
+                    out.push_str(&templates::edge_label_text(
+                        &fmt(mx),
+                        &fmt(my),
+                        &fmt(-fo_w / 2.0),
+                        &fmt(fo_w),
+                        LABEL_FO_HEIGHT,
+                        LABEL_Y_OFFSET,
+                        TEXT_LABEL_Y,
+                        ff,
+                        FONT_SIZE,
+                        &esc(lbl_text),
+                        vars.primary_text,
+                        vars.edge_label_bg,
+                    ));
                 }
                 _ => {
-                    out.push_str(&templates::edge_label_empty(&edge_id));
+                    out.push_str(templates::edge_label_empty());
                 }
             }
         }
@@ -821,7 +807,6 @@ fn render_root_group(
                 &child_sgs,
                 Some(sg), // self_cluster = render sg's own rect in its clusters section
                 Some((abs_ox, abs_oy)),
-                use_foreign_object,
                 vars,
             );
 
@@ -865,7 +850,6 @@ fn render_root_group(
                 vars,
                 node_style,
                 &node_dom_id,
-                use_foreign_object,
             ));
         }
         node_idx += 1;
@@ -886,29 +870,17 @@ fn render_cluster_rect(
     local_cx: f64, // local center x (for label centering)
     w: f64,
     h: f64,
-    use_foreign_object: bool,
+    vars: &ThemeVars,
 ) -> String {
     let label = sg.label.as_deref().unwrap_or(&sg.id);
-    let (lw_raw, _) = measure(label, FONT_SIZE);
-    let lw = lw_raw * TEXT_SCALE;
-
-    let label_html = if use_foreign_object {
-        templates::cluster_label_fo(
-            &fmt(local_cx - lw / 2.0),
-            &fmt(y),
-            &fmt(lw),
-            LABEL_FO_HEIGHT,
-            &esc(label),
-        )
-    } else {
-        templates::cluster_label_text(
-            &fmt(local_cx),
-            &fmt(y + CLUSTER_LABEL_TEXT_DY),
-            "Arial, sans-serif",
-            FONT_SIZE,
-            &esc(label),
-        )
-    };
+    let label_html = templates::cluster_label_text(
+        &fmt(local_cx),
+        &fmt(y + CLUSTER_LABEL_TEXT_DY),
+        "Arial, sans-serif",
+        FONT_SIZE,
+        &esc(label),
+        vars.title_color,
+    );
 
     templates::cluster_group(
         svg_id,
@@ -917,6 +889,8 @@ fn render_cluster_rect(
         &fmt(y),
         &fmt(w),
         &fmt(h),
+        vars.cluster_bg,
+        vars.cluster_border,
         &label_html,
     )
 }
@@ -1504,6 +1478,13 @@ fn node_size(label: &str, shape: &NodeShape) -> (f64, f64) {
             // so dagre sees the full width correctly.
             ((tw + ASYMMETRIC_BASE_PAD).max(40.0), COMPACT_H)
         }
+        NodeShape::Trapezoid
+        | NodeShape::TrapezoidAlt
+        | NodeShape::Parallelogram
+        | NodeShape::ParallelogramAlt => {
+            // Parallelogram-family shapes use rectangle sizing with slight extra width.
+            ((tw + H_PAD * 2.0 + COMPACT_H / 2.0).max(50.0), COMPACT_H)
+        }
     }
 }
 
@@ -1519,18 +1500,21 @@ fn render_node(
     vars: &ThemeVars,
     style: Option<&NodeStyle>,
     dom_id: &str,
-    use_foreign_object: bool,
 ) -> String {
     let (raw_tw, _) = measure(&node.label, FONT_SIZE);
-    let tw = raw_tw * TEXT_SCALE;
+    let _tw = raw_tw * TEXT_SCALE;
     let ff = vars.font_family;
 
-    // Build inline style override from NodeStyle (Mermaid applies these after layout).
-    // Mermaid appends " !important" to each property so user styles win over CSS classes.
-    // `color` is applied to the <g class="label"> element, NOT the shape, so that it
-    // inherits into the foreignObject HTML content.
-    let (inline_style, label_color_style, div_color_style) = if let Some(s) = style {
-        let mut shape_parts = Vec::new();
+    // Build inline style for node shapes.
+    // Base style provides fill/stroke/stroke-width from theme vars so that the SVG
+    // is self-contained without any embedded CSS stylesheet.
+    // User NodeStyle overrides are appended with !important to win over the base values.
+    let base_shape_style = format!(
+        "fill:{};stroke:{};stroke-width:1px",
+        vars.primary_color, vars.primary_border
+    );
+    let (inline_style, label_color_style) = if let Some(s) = style {
+        let mut shape_parts = vec![base_shape_style.clone()];
         if let Some(f) = s.fill.as_deref() {
             shape_parts.push(format!("fill:{} !important", f));
         }
@@ -1545,14 +1529,9 @@ fn render_node(
             .as_deref()
             .map(|c| format!("color:{} !important", c))
             .unwrap_or_default();
-        let dc = s
-            .color
-            .as_deref()
-            .map(|c| format!("color: {} !important; ", c))
-            .unwrap_or_default();
-        (shape_parts.join(";"), lc, dc)
+        (shape_parts.join(";"), lc)
     } else {
-        (String::new(), String::new(), String::new())
+        (base_shape_style, String::new())
     };
 
     let mut s = String::new();
@@ -1708,84 +1687,119 @@ fn render_node(
             );
             s.push_str(&templates::node_hexagon(&pts, &inline_style));
         }
+        NodeShape::Trapezoid => {
+            let hw = w / 2.0;
+            let hh = h / 2.0;
+            let pts = format!(
+                "{},{} {},{} {},{} {},{}",
+                fmt(-hw + hh / 2.0),
+                fmt(-hh),
+                fmt(hw + hh / 2.0),
+                fmt(-hh),
+                fmt(hw - hh / 2.0),
+                fmt(hh),
+                fmt(-hw - hh / 2.0),
+                fmt(hh),
+            );
+            s.push_str(&templates::node_polygon(&pts, &inline_style));
+        }
+        NodeShape::TrapezoidAlt => {
+            let hw = w / 2.0;
+            let hh = h / 2.0;
+            let pts = format!(
+                "{},{} {},{} {},{} {},{}",
+                fmt(-hw - hh / 2.0),
+                fmt(-hh),
+                fmt(hw - hh / 2.0),
+                fmt(-hh),
+                fmt(hw + hh / 2.0),
+                fmt(hh),
+                fmt(-hw + hh / 2.0),
+                fmt(hh),
+            );
+            s.push_str(&templates::node_polygon(&pts, &inline_style));
+        }
+        NodeShape::Parallelogram => {
+            let hw = w / 2.0;
+            let hh = h / 2.0;
+            let pts = format!(
+                "{},{} {},{} {},{} {},{}",
+                fmt(-hw + hh / 2.0),
+                fmt(-hh),
+                fmt(hw + hh / 2.0),
+                fmt(-hh),
+                fmt(hw - hh / 2.0),
+                fmt(hh),
+                fmt(-hw - hh / 2.0),
+                fmt(hh),
+            );
+            s.push_str(&templates::node_polygon(&pts, &inline_style));
+        }
+        NodeShape::ParallelogramAlt => {
+            let hw = w / 2.0;
+            let hh = h / 2.0;
+            let pts = format!(
+                "{},{} {},{} {},{} {},{}",
+                fmt(-hw - hh / 2.0),
+                fmt(-hh),
+                fmt(hw - hh / 2.0),
+                fmt(-hh),
+                fmt(hw + hh / 2.0),
+                fmt(hh),
+                fmt(-hw + hh / 2.0),
+                fmt(hh),
+            );
+            s.push_str(&templates::node_polygon(&pts, &inline_style));
+        }
     }
-
-    // Label — apply color to the <g>, the div, the span, AND the <p> so that
-    // the CSS rule "#id span { color:#333 }" cannot override via direct targeting.
-    let span_color = if !div_color_style.is_empty() {
-        format!(
-            " style=\"{}\"",
-            div_color_style.trim_end_matches(' ').trim_end_matches(';')
-        )
-    } else {
-        String::new()
-    };
 
     // Resolve FA icon syntax: "fa:fa-ban forbidden" → icon char + remaining text.
     let (fa_char, fa_text) = parse_fa_label(&node.label);
 
-    if use_foreign_object {
-        // Cylinder labels sit lower to center in the body, not at the top ellipse.
-        let label_ty = if node.shape == NodeShape::Cylinder {
-            CYLINDER_LABEL_Y_OFFSET
-        } else {
-            LABEL_Y_OFFSET
-        };
-        // For the FO path the label goes inside an HTML <p> element. When a Font
-        // Awesome icon is present, wrap the glyph in a <span> with the FA font
-        // so the icon renders when FA is loaded and degrades to a box otherwise.
-        // Show only the text portion of FA labels — the unicode glyph is omitted
-        // because Font Awesome is not guaranteed to be loaded in all contexts.
-        let fo_label = if fa_char.is_some() {
-            esc(fa_text)
-        } else {
-            esc(&node.label)
-        };
-        // Asymmetric shape is shifted right by h/8 — label center follows.
-        let label_tx = if node.shape == NodeShape::Asymmetric {
-            fmt(-tw / 2.0 + h / 8.0)
-        } else {
-            fmt(-tw / 2.0)
-        };
-        s.push_str(&templates::node_label_fo(
-            &label_color_style,
-            &label_tx,
-            label_ty,
-            &fmt(tw),
-            LABEL_FO_HEIGHT,
-            &div_color_style,
-            &span_color,
-            &fo_label,
-        ));
+    let text_fill = if !label_color_style.is_empty() {
+        style
+            .and_then(|s| s.color.as_deref())
+            .unwrap_or(vars.primary_text)
     } else {
-        let text_fill = if !label_color_style.is_empty() {
-            style
-                .and_then(|s| s.color.as_deref())
-                .unwrap_or(vars.primary_text)
+        vars.primary_text
+    };
+    // For the plain SVG text path, show only the text portion of any FA label.
+    // We don't embed the FA glyph here because Font Awesome may not be loaded
+    // in static contexts (resvg, PNG export), which would show a broken box.
+    let svg_label = if fa_char.is_some() {
+        if fa_text.is_empty() {
+            String::new()
         } else {
-            vars.primary_text
-        };
-        // For the plain SVG text path, show only the text portion of any FA label.
-        // We don't embed the FA glyph here because Font Awesome may not be loaded
-        // in static contexts (resvg, PNG export), which would show a broken box.
-        let svg_label = if fa_char.is_some() {
-            if fa_text.is_empty() {
-                String::new()
-            } else {
-                esc(fa_text)
-            }
-        } else {
-            esc(&node.label)
-        };
-        s.push_str(&templates::node_label_text(
-            &label_color_style,
-            TEXT_LABEL_Y,
-            ff,
-            FONT_SIZE,
-            text_fill,
-            &svg_label,
-        ));
-    }
+            esc(fa_text)
+        }
+    } else {
+        esc(&node.label)
+    };
+    // Per-shape label adjustments (from ref SVG measurements):
+    // Cylinder: ref label group at translate(x,-2), fo height=24 → text center y = -2+12 = 10
+    //   → TEXT_LABEL_Y=10 (slightly below center, in the body)
+    // Asymmetric (rectLeftInvArrow): ref label at translate(-36.9,-12), fo height=24
+    //   → text center y = -12+12 = 0 (node center); x = -36.9+41.8 = +4.9 ≈ +h/8 (RIGHT)
+    let (label_tx, label_ty) = match node.shape {
+        NodeShape::Cylinder => (0, 10), // body center + slight downward offset matching ref
+        NodeShape::Asymmetric => {
+            // Mermaid: label at translate(-notch/2, -12) with fo h=24 → text center y=0
+            // But foreignObject CSS centering vs SVG dominant-baseline differ slightly;
+            // +h/8 right aligns with the polygon's rightward shift
+            let shift = (h / 8.0).round() as i32;
+            (shift, TEXT_LABEL_Y) // keep TEXT_LABEL_Y=5 for slight downward push
+        }
+        _ => (0, TEXT_LABEL_Y),
+    };
+    s.push_str(&templates::node_label_text_xy(
+        &label_color_style,
+        label_tx,
+        label_ty,
+        ff,
+        FONT_SIZE,
+        text_fill,
+        &svg_label,
+    ));
 
     s.push_str("</g>");
     s
@@ -2205,7 +2219,7 @@ mod tests {
     #[test]
     fn basic_render_produces_svg() {
         let diag = parser::parse(FLOWCHART_BASIC).diagram;
-        let svg = render(&diag, Theme::Default, false);
+        let svg = render(&diag, Theme::Default);
         assert!(svg.contains("<svg"), "missing <svg tag");
         assert!(svg.contains("Christmas"), "missing node label");
         assert!(svg.contains("Go shopping"), "missing node label");
@@ -2214,14 +2228,14 @@ mod tests {
     #[test]
     fn dark_theme() {
         let diag = parser::parse(FLOWCHART_BASIC).diagram;
-        let svg = render(&diag, Theme::Dark, false);
+        let svg = render(&diag, Theme::Dark);
         assert!(svg.contains("<svg"), "missing <svg tag");
     }
 
     #[test]
     fn snapshot_default_theme() {
         let diag = parser::parse(FLOWCHART_BASIC).diagram;
-        let svg = render(&diag, crate::theme::Theme::Default, false);
+        let svg = render(&diag, crate::theme::Theme::Default);
         insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

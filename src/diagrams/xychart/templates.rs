@@ -23,38 +23,13 @@ pub fn escape_attr(s: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-pub fn build_style(id: &str, ff: &str) -> String {
-    use super::constants::{AXIS_LABEL_FONT_SIZE, TITLE_COLOR, TITLE_FONT_SIZE};
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "#{id} .main{{}}",
-            "#{id} text{{font-family:{ff};}}",
-            "#{id} .chart-title text{{font-size:{tfs}px;fill:{tc};text-anchor:middle;dominant-baseline:middle;}}",
-            "#{id} .left-axis path,#{id} .bottom-axis path,#{id} .top-axis path{{fill:none;stroke:#333;}}",
-            "#{id} .left-axis .label text,#{id} .bottom-axis .label text,#{id} .top-axis .label text{{fill:#333;font-size:{lfs}px;}}",
-            "#{id} .plot rect{{opacity:0.85;}}",
-            "#{id} .plot path{{fill:none;}}",
-        ),
-        id = id,
-        ff = ff,
-        tfs = TITLE_FONT_SIZE as i64,
-        tc = TITLE_COLOR,
-        lfs = AXIS_LABEL_FONT_SIZE as i64,
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
 /// Render the outer SVG root element for an xychart diagram.
 pub fn svg_root(id: &str, width: i64, height: i64) -> String {
     format!(
-        r#"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="max-width: {w}px;" viewBox="0 0 {w} {h}" role="graphics-document document" aria-roledescription="xychart">"#,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: {w}px;" viewBox="0 0 {w} {h}" role="graphics-document document" aria-roledescription="xychart">"##,
         id = id,
         w = width,
         h = height,
@@ -68,7 +43,7 @@ pub fn svg_root(id: &str, width: i64, height: i64) -> String {
 /// Render the chart background `<rect>` inside the `.main` group.
 pub fn main_group_with_bg(width: i64, height: i64, bg_color: &str) -> String {
     format!(
-        r#"<g class="main"><rect width="{}" height="{}" class="background" fill="{}"></rect>"#,
+        r##"<g class="main"><rect width="{}" height="{}" class="background" fill="{}"></rect>"##,
         width, height, bg_color,
     )
 }
@@ -88,7 +63,7 @@ pub fn chart_rect(
     stroke_w: &str,
 ) -> String {
     format!(
-        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" stroke="{}" stroke-width="{}"></rect>"#,
+        r##"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" stroke="{}" stroke-width="{}"></rect>"##,
         x, y, w, h, fill, stroke, stroke_w,
     )
 }
@@ -103,7 +78,7 @@ pub fn chart_text(
     text: &str,
 ) -> String {
     format!(
-        r#"<text x="0" y="0" fill="{}" font-size="{}" dominant-baseline="{}" text-anchor="{}" transform="{}">{}</text>"#,
+        r##"<text x="0" y="0" fill="{}" font-size="{}" dominant-baseline="{}" text-anchor="{}" transform="{}">{}</text>"##,
         fill, font_size, dominant_baseline, text_anchor, transform, text,
     )
 }
@@ -111,12 +86,12 @@ pub fn chart_text(
 /// Render a single chart `<path>` element.
 pub fn chart_path(path_d: &str, fill: &str, stroke: &str, stroke_w: &str) -> String {
     format!(
-        r#"<path d="{}" fill="{}" stroke="{}" stroke-width="{}"></path>"#,
+        r##"<path d="{}" fill="{}" stroke="{}" stroke-width="{}"></path>"##,
         path_d, fill, stroke, stroke_w,
     )
 }
 
 /// Render the opening `<g class="...">` for a group level.
 pub fn group_open(class: &str) -> String {
-    format!(r#"<g class="{}">"#, class)
+    format!(r##"<g class="{}">"##, class)
 }

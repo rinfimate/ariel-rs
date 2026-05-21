@@ -4,8 +4,6 @@
 //! No rendering logic lives here — only string formatting.
 #![allow(dead_code)]
 
-use crate::theme::ThemeVars;
-
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
@@ -17,84 +15,115 @@ pub fn escape_id(s: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// CSS
+// Inline style helpers (replaces CSS class rules)
 // ---------------------------------------------------------------------------
 
-pub fn build_style(id: &str, vars: &ThemeVars) -> String {
-    let ff = vars.font_family;
-    format!(
-        concat!(
-            "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}",
-            "@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}",
-            "@keyframes dash{{to{{stroke-dashoffset:0;}}}}",
-            "#{id} .edge-animation-slow{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}}",
-            "#{id} .edge-animation-fast{{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}}",
-            "#{id} .error-icon{{fill:#552222;}}",
-            "#{id} .error-text{{fill:#552222;stroke:#552222;}}",
-            "#{id} .edge-thickness-normal{{stroke-width:1px;}}",
-            "#{id} .edge-thickness-thick{{stroke-width:3.5px;}}",
-            "#{id} .edge-pattern-solid{{stroke-dasharray:0;}}",
-            "#{id} .edge-thickness-invisible{{stroke-width:0;fill:none;}}",
-            "#{id} .edge-pattern-dashed{{stroke-dasharray:3;}}",
-            "#{id} .edge-pattern-dotted{{stroke-dasharray:2;}}",
-            "#{id} .marker{{fill:#333333;stroke:#333333;}}",
-            "#{id} .marker.cross{{stroke:#333333;}}",
-            "#{id} svg{{font-family:{ff};font-size:16px;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} .mermaid-main-font{{font-family:{ff};}}",
-            "#{id} .exclude-range{{fill:#eeeeee;}}",
-            "#{id} .section{{stroke:none;opacity:0.2;}}",
-            "#{id} .section0{{fill:rgba(102, 102, 255, 0.49);}}",
-            "#{id} .section2{{fill:#fff400;}}",
-            "#{id} .section1,#{id} .section3{{fill:white;opacity:0.2;}}",
-            "#{id} .sectionTitle0{{fill:#333;}}",
-            "#{id} .sectionTitle1{{fill:#333;}}",
-            "#{id} .sectionTitle2{{fill:#333;}}",
-            "#{id} .sectionTitle3{{fill:#333;}}",
-            "#{id} .sectionTitle{{text-anchor:start;font-family:{ff};}}",
-            "#{id} .grid .tick{{stroke:lightgrey;opacity:0.8;shape-rendering:crispEdges;}}",
-            "#{id} .grid .tick text{{font-family:{ff};fill:#333;}}",
-            "#{id} .grid path{{stroke-width:0;}}",
-            "#{id} .today{{fill:none;stroke:red;stroke-width:2px;}}",
-            "#{id} .task{{stroke-width:2;}}",
-            "#{id} .taskText{{text-anchor:middle;font-family:{ff};}}",
-            "#{id} .taskTextOutsideRight{{fill:black;text-anchor:start;font-family:{ff};}}",
-            "#{id} .taskTextOutsideLeft{{fill:black;text-anchor:end;}}",
-            "#{id} .task.clickable{{cursor:pointer;}}",
-            "#{id} .taskText.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskTextOutsideLeft.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskTextOutsideRight.clickable{{cursor:pointer;fill:#003163!important;font-weight:bold;}}",
-            "#{id} .taskText0,#{id} .taskText1,#{id} .taskText2,#{id} .taskText3{{fill:white;}}",
-            "#{id} .task0,#{id} .task1,#{id} .task2,#{id} .task3{{fill:#8a90dd;stroke:#534fbc;}}",
-            "#{id} .taskTextOutside0,#{id} .taskTextOutside2{{fill:black;}}",
-            "#{id} .taskTextOutside1,#{id} .taskTextOutside3{{fill:black;}}",
-            "#{id} .active0,#{id} .active1,#{id} .active2,#{id} .active3{{fill:#bfc7ff;stroke:#534fbc;}}",
-            "#{id} .activeText0,#{id} .activeText1,#{id} .activeText2,#{id} .activeText3{{fill:black!important;}}",
-            "#{id} .done0,#{id} .done1,#{id} .done2,#{id} .done3{{stroke:grey;fill:lightgrey;stroke-width:2;}}",
-            "#{id} .doneText0,#{id} .doneText1,#{id} .doneText2,#{id} .doneText3{{fill:black!important;}}",
-            "#{id} .doneText0.taskTextOutsideLeft,#{id} .doneText0.taskTextOutsideRight,",
-            "#{id} .doneText1.taskTextOutsideLeft,#{id} .doneText1.taskTextOutsideRight,",
-            "#{id} .doneText2.taskTextOutsideLeft,#{id} .doneText2.taskTextOutsideRight,",
-            "#{id} .doneText3.taskTextOutsideLeft,#{id} .doneText3.taskTextOutsideRight{{fill:black!important;}}",
-            "#{id} .crit0,#{id} .crit1,#{id} .crit2,#{id} .crit3{{stroke:#ff8888;fill:red;stroke-width:2;}}",
-            "#{id} .activeCrit0,#{id} .activeCrit1,#{id} .activeCrit2,#{id} .activeCrit3{{stroke:#ff8888;fill:#bfc7ff;stroke-width:2;}}",
-            "#{id} .doneCrit0,#{id} .doneCrit1,#{id} .doneCrit2,#{id} .doneCrit3{{stroke:#ff8888;fill:lightgrey;stroke-width:2;cursor:pointer;shape-rendering:crispEdges;}}",
-            "#{id} .milestone{{transform:rotate(45deg) scale(0.8,0.8);}}",
-            "#{id} .milestoneText{{font-style:italic;}}",
-            "#{id} .doneCritText0,#{id} .doneCritText1,#{id} .doneCritText2,#{id} .doneCritText3{{fill:black!important;}}",
-            "#{id} .doneCritText0.taskTextOutsideLeft,#{id} .doneCritText0.taskTextOutsideRight,",
-            "#{id} .doneCritText1.taskTextOutsideLeft,#{id} .doneCritText1.taskTextOutsideRight,",
-            "#{id} .doneCritText2.taskTextOutsideLeft,#{id} .doneCritText2.taskTextOutsideRight,",
-            "#{id} .doneCritText3.taskTextOutsideLeft,#{id} .doneCritText3.taskTextOutsideRight{{fill:black!important;}}",
-            "#{id} .vert{{stroke:navy;}}",
-            "#{id} .vertText{{font-size:15px;text-anchor:middle;fill:navy!important;}}",
-            "#{id} .activeCritText0,#{id} .activeCritText1,#{id} .activeCritText2,#{id} .activeCritText3{{fill:black!important;}}",
-            "#{id} .titleText{{text-anchor:middle;font-size:18px;fill:#333;font-family:{ff};}}",
-            "#{id} :root{{--mermaid-font-family:{ff};}}",
-        ),
-        id = id,
-        ff = ff,
-    )
+/// Return the inline fill and stroke attributes for a section band, by class index (0–3).
+/// Matches Mermaid's .section0 (colour A), .section2 (colour B), .section1/.section3 (background).
+/// `section_color` — fill for index 0 (and 4, 8, …).
+/// `section_color2` — fill for index 2 (and 6, 10, …). May differ from section_color (e.g. yellow in default theme).
+/// `bg_color` — fill for odd indices (1, 3, …); typically white/background.
+pub fn section_band_style(
+    class_idx: usize,
+    section_color: &str,
+    section_color2: &str,
+    bg_color: &str,
+) -> String {
+    match class_idx % 4 {
+        0 => format!(r##"fill="{section_color}" stroke="none" opacity="0.2""##),
+        2 => format!(r##"fill="{section_color2}" stroke="none" opacity="0.2""##),
+        _ => format!(r##"fill="{bg_color}" stroke="none" opacity="0.2""##),
+    }
+}
+
+/// Return the inline style for a task bar class string (e.g. "task0", "done2").
+/// Colors match Mermaid's per-theme gantt CSS (.task0, .active0, .done0, .crit0, etc.).
+pub fn task_bar_style(tc: &str, theme: crate::theme::Theme) -> String {
+    use crate::theme::Theme;
+    match theme {
+        Theme::Dark => {
+            if tc.starts_with("doneCrit") {
+                "stroke:#E83737;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("activeCrit") {
+                "stroke:#E83737;fill:#81B1DB;stroke-width:2"
+            } else if tc.starts_with("done") {
+                "stroke:grey;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("active") {
+                "fill:#81B1DB;stroke:#ffffff;stroke-width:2"
+            } else if tc.starts_with("crit") {
+                "stroke:#E83737;fill:#E83737;stroke-width:2"
+            } else {
+                "fill:hsl(180,1.5873015873%,35.3529411765%);stroke:#ffffff;stroke-width:2"
+            }
+        }
+        Theme::Forest => {
+            if tc.starts_with("doneCrit") {
+                "stroke:#ff8888;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("activeCrit") {
+                "stroke:#ff8888;fill:#cde498;stroke-width:2"
+            } else if tc.starts_with("done") {
+                "stroke:grey;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("active") {
+                "fill:#cde498;stroke:#13540c;stroke-width:2"
+            } else if tc.starts_with("crit") {
+                "stroke:#ff8888;fill:red;stroke-width:2"
+            } else {
+                "fill:#487e3a;stroke:#13540c;stroke-width:2"
+            }
+        }
+        Theme::Neutral => {
+            if tc.starts_with("doneCrit") {
+                "stroke:hsl(10.9090909091,73.3333333333%,40%);fill:#bbb;stroke-width:2"
+            } else if tc.starts_with("activeCrit") {
+                "stroke:hsl(10.9090909091,73.3333333333%,40%);fill:#eee;stroke-width:2"
+            } else if tc.starts_with("done") {
+                "stroke:#666;fill:#bbb;stroke-width:2"
+            } else if tc.starts_with("active") {
+                "fill:#eee;stroke:hsl(0,0%,33.9215686275%);stroke-width:2"
+            } else if tc.starts_with("crit") {
+                "stroke:hsl(10.9090909091,73.3333333333%,40%);fill:#d42;stroke-width:2"
+            } else {
+                "fill:#707070;stroke:hsl(0,0%,33.9215686275%);stroke-width:2"
+            }
+        }
+        Theme::Default => {
+            if tc.starts_with("doneCrit") {
+                "stroke:#ff8888;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("activeCrit") {
+                "stroke:#ff8888;fill:#bfc7ff;stroke-width:2"
+            } else if tc.starts_with("done") {
+                "stroke:grey;fill:lightgrey;stroke-width:2"
+            } else if tc.starts_with("active") {
+                "fill:#bfc7ff;stroke:#534fbc;stroke-width:2"
+            } else if tc.starts_with("crit") {
+                "stroke:#ff8888;fill:red;stroke-width:2"
+            } else {
+                "fill:#8a90dd;stroke:#534fbc;stroke-width:2"
+            }
+        }
+    }
+    .to_string()
+}
+
+/// Return inline fill for task text class string.
+/// `contrast_color` is the per-theme dark text colour used for done/active/crit states.
+pub fn task_text_fill<'a>(
+    cls: &str,
+    outside: bool,
+    text_color: &'a str,
+    contrast_color: &'a str,
+) -> &'a str {
+    if outside {
+        text_color
+    } else if cls.contains("doneCritText")
+        || cls.contains("doneText")
+        || cls.contains("activeCritText")
+        || cls.contains("activeText")
+    {
+        contrast_color
+    } else {
+        "white"
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +133,7 @@ pub fn build_style(id: &str, vars: &ThemeVars) -> String {
 /// Render the outer SVG wrapper for a Gantt chart.
 pub fn svg_root(id: &str, w: f64, h: i64) -> String {
     format!(
-        r#"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="gantt">"#,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="gantt">"##,
         id = id,
         w = w,
         h = h,
@@ -118,7 +147,7 @@ pub fn svg_root(id: &str, w: f64, h: i64) -> String {
 /// Render the x-axis grid `<g>` opening tag with translate and font attributes.
 pub fn grid_group_open(left_pad: i64, grid_y: i64, axis_font_size: i64) -> String {
     format!(
-        r#"<g class="grid" transform="translate({left_pad}, {grid_y})" fill="none" font-size="{axis_font_size}" font-family="sans-serif" text-anchor="middle">"#,
+        r##"<g class="grid" transform="translate({left_pad}, {grid_y})" fill="none" font-size="{axis_font_size}" font-family="sans-serif" text-anchor="middle">"##,
         left_pad = left_pad,
         grid_y = grid_y,
         axis_font_size = axis_font_size,
@@ -128,17 +157,17 @@ pub fn grid_group_open(left_pad: i64, grid_y: i64, axis_font_size: i64) -> Strin
 /// Render the x-axis domain `<path>` (horizontal baseline with top-tick caps).
 pub fn grid_domain_path(top: i64, right: f64) -> String {
     format!(
-        r#"<path class="domain" stroke="currentColor" d="M0.5,{top}V0.5H{right}V{top}"></path>"#,
+        r##"<path class="domain" stroke="none" d="M0.5,{top}V0.5H{right}V{top}"></path>"##,
         top = top,
         right = right,
     )
 }
 
 /// Render a single x-axis tick `<g>` (line + label).
-pub fn grid_tick(x: f64, top: i64, axis_font_size: i64, label: &str) -> String {
+pub fn grid_tick(x: f64, top: i64, axis_font_size: i64, label: &str, text_color: &str) -> String {
     format!(
-        "<g class=\"tick\" opacity=\"1\" transform=\"translate({x},0)\"><line stroke=\"currentColor\" y2=\"{top}\"></line><text fill=\"#000\" y=\"3\" dy=\"1em\" stroke=\"none\" font-size=\"{afs}\" style=\"text-anchor: middle;\">{label}</text></g>",
-        x = x, top = top, afs = axis_font_size, label = label,
+        "<g class=\"tick\" opacity=\"1\" transform=\"translate({x},0)\"><line stroke=\"currentColor\" y2=\"{top}\"></line><text fill=\"{text_color}\" y=\"3\" dy=\"1em\" stroke=\"none\" font-size=\"{afs}\" style=\"text-anchor: middle;\">{label}</text></g>",
+        x = x, top = top, afs = axis_font_size, label = label, text_color = text_color,
     )
 }
 
@@ -157,9 +186,10 @@ pub fn exclude_rect(
     h: i64,
     ox: i64,
     oy: i64,
+    exclude_color: &str,
 ) -> String {
     format!(
-        r#"<rect id="{id}-exclude-{date}" x="{x}" y="{y}" width="{w}" height="{h}" transform-origin="{ox}px {oy}px" class="exclude-range"></rect>"#,
+        r##"<rect id="{id}-exclude-{date}" x="{x}" y="{y}" width="{w}" height="{h}" transform-origin="{ox}px {oy}px" fill="{exclude_color}" class="exclude-range"></rect>"##,
         id = id,
         date = date,
         x = x,
@@ -168,6 +198,7 @@ pub fn exclude_rect(
         h = h,
         ox = ox,
         oy = oy,
+        exclude_color = exclude_color,
     )
 }
 
@@ -176,12 +207,22 @@ pub fn exclude_rect(
 // ---------------------------------------------------------------------------
 
 /// Render a section background band `<rect>`.
-pub fn section_band_rect(y: i64, w: f64, h: i64, class_idx: usize) -> String {
+pub fn section_band_rect(
+    y: i64,
+    w: f64,
+    h: i64,
+    class_idx: usize,
+    section_color: &str,
+    section_color2: &str,
+    bg_color: &str,
+) -> String {
+    let style = section_band_style(class_idx, section_color, section_color2, bg_color);
     format!(
-        r#"<rect x="0" y="{y}" width="{w}" height="{h}" class="section section{ci}"></rect>"#,
+        r##"<rect x="0" y="{y}" width="{w}" height="{h}" {style} class="section section{ci}"></rect>"##,
         y = y,
         w = w,
         h = h,
+        style = style,
         ci = class_idx,
     )
 }
@@ -201,9 +242,11 @@ pub fn milestone_rect(
     ox: f64,
     oy: f64,
     tc: &str,
+    theme: crate::theme::Theme,
 ) -> String {
+    let bar_style = task_bar_style(tc, theme);
     format!(
-        r#"<rect id="{id}-{tid}" rx="0" ry="0" x="{rx}" y="{ry}" width="{size}" height="{size}" transform-origin="{ox}px {oy}px" transform="rotate(45)" class="task {tc} milestone"></rect>"#,
+        r##"<rect id="{id}-{tid}" rx="0" ry="0" x="{rx}" y="{ry}" width="{size}" height="{size}" transform-origin="{ox}px {oy}px" transform="rotate(45)" style="{bar_style}" class="task {tc} milestone"></rect>"##,
         id = id,
         tid = tid,
         rx = rx,
@@ -212,6 +255,7 @@ pub fn milestone_rect(
         ox = ox,
         oy = oy,
         tc = tc,
+        bar_style = bar_style,
     )
 }
 
@@ -227,9 +271,11 @@ pub fn task_bar_rect(
     cx: i64,
     cy: i64,
     tc: &str,
+    theme: crate::theme::Theme,
 ) -> String {
+    let bar_style = task_bar_style(tc, theme);
     format!(
-        r#"<rect id="{id}-{tid}" rx="3" ry="3" x="{bx}" y="{by}" width="{bw}" height="{bh}" transform-origin="{cx}px {cy}px" class="task {tc} "></rect>"#,
+        r##"<rect id="{id}-{tid}" rx="3" ry="3" x="{bx}" y="{by}" width="{bw}" height="{bh}" transform-origin="{cx}px {cy}px" style="{bar_style}" class="task {tc} "></rect>"##,
         id = id,
         tid = tid,
         bx = bx,
@@ -239,6 +285,7 @@ pub fn task_bar_rect(
         cx = cx,
         cy = cy,
         tc = tc,
+        bar_style = bar_style,
     )
 }
 
@@ -253,15 +300,35 @@ pub fn task_text(
     bh: i64,
     tc: &str,
     label: &str,
+    text_color: &str,
+    contrast_color: &str,
 ) -> String {
+    // Determine text fill from class name (replaces CSS class rules)
+    let outside = tc.contains("Outside");
+    let fill = task_text_fill(tc, outside, text_color, contrast_color);
+    let anchor = if tc.contains("OutsideRight") {
+        "start"
+    } else if tc.contains("OutsideLeft") {
+        "end"
+    } else {
+        "middle"
+    };
+    let italic = if tc.contains("milestone") {
+        " font-style=\"italic\""
+    } else {
+        ""
+    };
     format!(
-        r#"<text id="{id}-{tid}-text" font-size="{fs}" x="{tx}" y="{ty}" text-height="{bh}" class="{tc}">{label}</text>"#,
+        r##"<text id="{id}-{tid}-text" font-size="{fs}" x="{tx}" y="{ty}" text-height="{bh}" fill="{fill}" text-anchor="{anchor}"{italic} class="{tc}">{label}</text>"##,
         id = id,
         tid = tid,
         fs = fs,
         tx = tx,
         ty = ty,
         bh = bh,
+        fill = fill,
+        anchor = anchor,
+        italic = italic,
         tc = tc,
         label = label,
     )
@@ -272,13 +339,14 @@ pub fn task_text(
 // ---------------------------------------------------------------------------
 
 /// Render a section title `<text>` with `<tspan>`.
-pub fn section_title(y: i64, fs: i64, class_idx: usize, label: &str) -> String {
+pub fn section_title(y: i64, fs: i64, class_idx: usize, label: &str, text_color: &str) -> String {
     format!(
-        r#"<text dy="0em" x="10" y="{y}" font-size="{fs}" class="sectionTitle sectionTitle{ci}"><tspan alignment-baseline="central" x="10">{label}</tspan></text>"#,
+        r##"<text dy="0em" x="10" y="{y}" font-size="{fs}" fill="{text_color}" text-anchor="start" class="sectionTitle sectionTitle{ci}"><tspan alignment-baseline="central" x="10">{label}</tspan></text>"##,
         y = y,
         fs = fs,
         ci = class_idx,
         label = label,
+        text_color = text_color,
     )
 }
 
@@ -289,7 +357,7 @@ pub fn section_title(y: i64, fs: i64, class_idx: usize, label: &str) -> String {
 /// Render the today marker `<line>`.
 pub fn today_line(tx: i64, top: i64, bot: i64) -> String {
     format!(
-        r#"<g class="today"><line x1="{tx}" x2="{tx}" y1="{top}" y2="{bot}" class="today"></line></g>"#,
+        r##"<g class="today"><line x1="{tx}" x2="{tx}" y1="{top}" y2="{bot}" fill="none" stroke="red" stroke-width="2" class="today"></line></g>"##,
         tx = tx,
         top = top,
         bot = bot,
@@ -301,12 +369,13 @@ pub fn today_line(tx: i64, top: i64, bot: i64) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the Gantt diagram title `<text>`.
-pub fn title_text(cx: i64, ty: i64, title: &str) -> String {
+pub fn title_text(cx: i64, ty: i64, title: &str, text_color: &str) -> String {
     format!(
-        r#"<text x="{cx}" y="{ty}" class="titleText">{title}</text>"#,
+        r##"<text x="{cx}" y="{ty}" text-anchor="middle" font-size="18" fill="{text_color}" class="titleText">{title}</text>"##,
         cx = cx,
         ty = ty,
         title = title,
+        text_color = text_color,
     )
 }
 
@@ -316,5 +385,5 @@ pub fn title_text(cx: i64, ty: i64, title: &str) -> String {
 
 /// Render the empty Gantt fallback SVG.
 pub fn empty_svg() -> &'static str {
-    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text x="10" y="30">Empty Gantt</text></svg>"#
+    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text x="10" y="30">Empty Gantt</text></svg>"##
 }

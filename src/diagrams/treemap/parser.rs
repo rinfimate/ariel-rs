@@ -63,6 +63,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<TreemapDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // title
         if let Some(rest) = trimmed
             .strip_prefix("title ")

@@ -32,13 +32,15 @@ pub const SMALL_PAD: f64 = 15.0;
 pub const DIAMOND_PAD: f64 = 27.0;
 
 /// Total horizontal padding for Subroutine nodes (inner pad + line offsets, px).
-pub const SUBROUTINE_H_PAD: f64 = 38.0;
+/// = inner_pad(7.5 each side) * 2 + line_offset(8 each side) * 2 = 15 + 16 = 31.
+pub const SUBROUTINE_H_PAD: f64 = 31.0;
 
 /// Inset from the left/right edge for the decorative vertical lines on Subroutine nodes (px).
 pub const SUBROUTINE_LINE_INSET: f64 = 6.0;
 
 /// Total horizontal padding for Asymmetric nodes (base pad, px).
-pub const ASYMMETRIC_BASE_PAD: f64 = 20.0;
+/// Matches Mermaid reference: total extra = 15px (same as SMALL_PAD).
+pub const ASYMMETRIC_BASE_PAD: f64 = 15.0;
 
 /// Depth of the V-notch on the left side of an Asymmetric node (px).
 #[allow(dead_code)]
@@ -51,10 +53,12 @@ pub const CIRCLE_MIN_RADIUS: f64 = 27.0;
 pub const CIRCLE_LABEL_PAD: f64 = 7.5;
 
 /// Horizontal padding for Cylinder nodes (px).
-pub const CYLINDER_H_PAD: f64 = 16.0;
+/// Matches Mermaid reference: cylinder width = label_w + 15 (total, 7.5 each side).
+pub const CYLINDER_H_PAD: f64 = 15.0;
 
 /// Fraction of the half-width used as the ellipse ry for Cylinder nodes.
-pub const CYLINDER_RY_FACTOR: f64 = 0.24;
+/// Calibrated to 0.2398: for half-width 41.75 gives ry=10.012, matching the reference.
+pub const CYLINDER_RY_FACTOR: f64 = 0.2398;
 
 /// Minimum ellipse ry for Cylinder nodes (px).
 pub const CYLINDER_MIN_RY: f64 = 7.0;
@@ -72,6 +76,7 @@ pub const LABEL_FO_HEIGHT: f64 = 24.0;
 /// Y-offset applied to the label `<g>` element (= -LABEL_FO_HEIGHT / 2, px).
 pub const LABEL_Y_OFFSET: i32 = -12;
 
+#[allow(dead_code)]
 /// Y-offset for Cylinder node labels, which sit lower to centre in the body (px).
 pub const CYLINDER_LABEL_Y_OFFSET: i32 = -2;
 

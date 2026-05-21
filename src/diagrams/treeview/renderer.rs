@@ -18,7 +18,7 @@
 
 use super::constants::*;
 use super::parser::TreeViewDiagram;
-use super::templates::{self, build_css, esc};
+use super::templates::{self, esc};
 use crate::text_browser_metrics::measure_browser;
 use crate::theme::Theme;
 
@@ -121,7 +121,6 @@ pub fn render(diag: &TreeViewDiagram, _theme: Theme) -> String {
     let vb_w = max_right + VIEWBOX_RIGHT_PAD - VIEWBOX_X;
 
     let svg_id = "mermaid-svg-99";
-    let css = build_css(svg_id);
 
     let mut out = String::new();
 
@@ -134,7 +133,6 @@ pub fn render(diag: &TreeViewDiagram, _theme: Theme) -> String {
         vb_w,
         vb_h,
     ));
-    out.push_str(&format!("<style>{css}</style>"));
 
     // Empty g (Mermaid boilerplate).
     out.push_str("<g></g>");

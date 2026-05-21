@@ -15,7 +15,22 @@ use super::parser::{Sourcing, WardleyDiagram, WardleyNode, WardleyNodeKind};
 use super::templates::{self, esc, fmt_f};
 use crate::theme::Theme;
 
-pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
+pub fn render(diag: &WardleyDiagram, theme: Theme) -> String {
+    let vars = theme.resolve();
+    let line_color = vars.line_color;
+    let text_color = vars.text_color;
+    // Wardley chart background: dark theme uses #333 (lighter than page bg), others use white
+    let bg = if matches!(theme, crate::theme::Theme::Dark) {
+        "#333333"
+    } else {
+        vars.background
+    };
+    // Trend/evolve arrow color: dark theme uses a lighter red (#ff6b6b), others use standard red
+    let trend_color = if matches!(theme, crate::theme::Theme::Dark) {
+        "#ff6b6b"
+    } else {
+        "#dc3545"
+    };
     let width = diag.width;
     let height = diag.height;
     let chart_width = width - PADDING * 2.0;
@@ -30,13 +45,13 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
     out.push_str(&templates::svg_root(width, height));
 
     // ── <defs> with arrow markers ─────────────────────────────────────────────
-    out.push_str(&templates::defs_block(svg_id));
+    out.push_str(&templates::defs_block(svg_id, line_color, trend_color));
 
     // ── wardley-map group ─────────────────────────────────────────────────────
     out.push_str("<g class=\"wardley-map\">");
 
     // ── Background rect ───────────────────────────────────────────────────────
-    out.push_str(&templates::background_rect(width, height));
+    out.push_str(&templates::background_rect(width, height, bg));
 
     // ── Title ─────────────────────────────────────────────────────────────────
     if let Some(ref title) = diag.title {
@@ -45,6 +60,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
             PADDING / 2.0,
             TITLE_FONT_SIZE,
             &esc(title),
+            text_color,
         ));
     }
 
@@ -56,6 +72,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
         width - PADDING,
         height - PADDING,
         height - PADDING,
+        line_color,
     ));
     // Y axis (left)
     out.push_str(&templates::axis_line(
@@ -63,17 +80,19 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
         PADDING,
         PADDING,
         height - PADDING,
+        line_color,
     ));
     // X axis label "Evolution"
     out.push_str(&templates::axis_label_x(
         PADDING + chart_width / 2.0,
         height - PADDING / 4.0,
         AXIS_FONT_SIZE,
+        text_color,
     ));
     // Y axis label "Visibility" (rotated)
     let ry = PADDING + chart_height / 2.0;
     let rx = PADDING / 3.0;
-    out.push_str(&templates::axis_label_y(rx, ry, AXIS_FONT_SIZE));
+    out.push_str(&templates::axis_label_y(rx, ry, AXIS_FONT_SIZE, text_color));
     out.push_str("</g>"); // wardley-axes
 
     // ── Evolution stages ──────────────────────────────────────────────────────
@@ -112,6 +131,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
                 height - PADDING / 1.5,
                 STAGE_FONT_SIZE,
                 &esc(stage_label),
+                text_color,
             ));
         }
 
@@ -158,6 +178,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
                 &fmt_f(sx2),
                 &fmt_f(sy2),
                 &dash_attr,
+                line_color,
             ));
 
             // Link label
@@ -169,6 +190,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
                     &fmt_f(my - 4.0),
                     LABEL_FONT_SIZE,
                     &esc(label),
+                    text_color,
                 ));
             }
         }
@@ -199,6 +221,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
                 &fmt_f(ax2),
                 &fmt_f(ay2),
                 svg_id,
+                trend_color,
             ));
         }
     }
@@ -208,7 +231,7 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
     out.push_str("<g class=\"wardley-nodes\">");
     for (i, node) in diag.nodes.iter().enumerate() {
         let (cx, cy) = positions[i];
-        render_node(&mut out, node, cx, cy);
+        render_node(&mut out, node, cx, cy, line_color, text_color, bg);
     }
     out.push_str("</g>"); // wardley-nodes
 
@@ -218,7 +241,14 @@ pub fn render(diag: &WardleyDiagram, _theme: Theme) -> String {
         for ann in &diag.annotations {
             let ax = project_x(ann.evolution, PADDING, chart_width);
             let ay = project_y(ann.visibility, height, PADDING, chart_height);
-            out.push_str(&templates::annotation(&fmt_f(ax), &fmt_f(ay), ann.number));
+            out.push_str(&templates::annotation(
+                &fmt_f(ax),
+                &fmt_f(ay),
+                ann.number,
+                line_color,
+                bg,
+                text_color,
+            ));
         }
         out.push_str("</g>"); // wardley-annotations
     }
@@ -239,7 +269,15 @@ fn project_y(value: f64, height: f64, padding: f64, chart_height: f64) -> f64 {
     height - padding - value / 100.0 * chart_height
 }
 
-fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
+fn render_node(
+    out: &mut String,
+    node: &WardleyNode,
+    cx: f64,
+    cy: f64,
+    line_color: &str,
+    text_color: &str,
+    bg: &str,
+) {
     let class_suffix = match node.kind {
         WardleyNodeKind::Anchor => "anchor",
         WardleyNodeKind::Note => "note",
@@ -257,6 +295,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                 &fmt_f(ly),
                 LABEL_FONT_SIZE,
                 &esc(&node.label),
+                text_color,
             ));
         }
         WardleyNodeKind::Note => {
@@ -265,6 +304,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                 &fmt_f(cx),
                 &fmt_f(cy),
                 &esc(&node.label),
+                text_color,
             ));
         }
         WardleyNodeKind::Component => {
@@ -277,7 +317,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                         &fmt_f(cy),
                         NODE_RADIUS * 2.0,
                         "#666",
-                        "#333333",
+                        line_color,
                     ));
                 }
                 Sourcing::Buy => {
@@ -287,7 +327,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                         &fmt_f(cy),
                         NODE_RADIUS * 2.0,
                         "#ccc",
-                        "#333333",
+                        line_color,
                     ));
                 }
                 Sourcing::Build => {
@@ -308,6 +348,8 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                 &fmt_f(cx),
                 &fmt_f(cy),
                 NODE_RADIUS,
+                line_color,
+                bg,
             ));
 
             // Inertia: vertical line to the right of the node
@@ -318,6 +360,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                     &fmt_f(line_x),
                     &fmt_f(cy - half_h),
                     &fmt_f(cy + half_h),
+                    line_color,
                 ));
             }
 
@@ -329,6 +372,7 @@ fn render_node(out: &mut String, node: &WardleyNode, cx: f64, cy: f64) {
                 &fmt_f(ly),
                 LABEL_FONT_SIZE,
                 &esc(&node.label),
+                text_color,
             ));
         }
     }

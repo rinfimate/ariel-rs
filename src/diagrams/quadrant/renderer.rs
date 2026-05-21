@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::QuadrantDiagram;
-use super::templates::{self, build_style, esc, fmt};
+use super::templates::{self, esc, fmt};
 /// Faithful Rust port of Mermaid's quadrantBuilder.ts + quadrantRenderer.ts.
 ///
 /// Layout algorithm is a direct translation of QuadrantBuilder.calculateSpace(),
@@ -15,6 +15,19 @@ use super::templates::{self, build_style, esc, fmt};
 /// - scaleLinear: x maps [0,1] -> [quadrantLeft, quadrantLeft+quadrantWidth]
 ///   y maps [0,1] -> [quadrantTop+quadrantHeight, quadrantTop] (inverted)
 use crate::theme::Theme;
+
+// ── Theme-resolved colour set ─────────────────────────────────────────────────
+
+/// Colours resolved from a [`Theme`] for the quadrant diagram.
+struct QuadrantColors {
+    quadrant1_fill: &'static str,
+    quadrant2_fill: &'static str,
+    quadrant3_fill: &'static str,
+    quadrant4_fill: &'static str,
+    text_fill: &'static str,
+    point_fill: &'static str,
+    border_fill: &'static str,
+}
 
 // ── Internal layout data types ────────────────────────────────────────────────
 
@@ -95,7 +108,6 @@ fn calculate_space(
         0.0
     };
 
-    // y-axis is always "left" (default)
     let y_axis_space_calc = Y_AXIS_LABEL_PADDING * 2.0 + Y_AXIS_LABEL_FONT_SIZE;
     let y_axis_space_left = if show_y_axis { y_axis_space_calc } else { 0.0 };
 
@@ -129,7 +141,11 @@ fn calculate_space(
 
 // ── get_quadrants (port of QuadrantBuilder.getQuadrants) ─────────────────────
 
-fn get_quadrants(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<QuadrantEl> {
+fn get_quadrants(
+    diag: &QuadrantDiagram,
+    space: &SpaceData,
+    colors: &QuadrantColors,
+) -> Vec<QuadrantEl> {
     let has_points = !diag.points.is_empty();
     let ql = space.quadrant_left;
     let qt = space.quadrant_top;
@@ -140,36 +156,27 @@ fn get_quadrants(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<QuadrantEl> {
     let defs = [
         (
             diag.quadrant1_text.as_str(),
-            QUADRANT1_FILL,
-            QUADRANT1_TEXT_FILL,
+            colors.quadrant1_fill,
             ql + qhw,
             qt,
         ),
-        (
-            diag.quadrant2_text.as_str(),
-            QUADRANT2_FILL,
-            QUADRANT2_TEXT_FILL,
-            ql,
-            qt,
-        ),
+        (diag.quadrant2_text.as_str(), colors.quadrant2_fill, ql, qt),
         (
             diag.quadrant3_text.as_str(),
-            QUADRANT3_FILL,
-            QUADRANT3_TEXT_FILL,
+            colors.quadrant3_fill,
             ql,
             qt + qhh,
         ),
         (
             diag.quadrant4_text.as_str(),
-            QUADRANT4_FILL,
-            QUADRANT4_TEXT_FILL,
+            colors.quadrant4_fill,
             ql + qhw,
             qt + qhh,
         ),
     ];
 
     defs.iter()
-        .map(|(label, fill, text_fill, x, y)| {
+        .map(|(label, fill, x, y)| {
             let text_x = x + qhw / 2.0;
             let (text_y, horiz) = if has_points {
                 (y + QUADRANT_TEXT_TOP_PADDING, "top")
@@ -186,7 +193,7 @@ fn get_quadrants(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<QuadrantEl> {
                     text: (*label).to_string(),
                     x: text_x,
                     y: text_y,
-                    fill: text_fill,
+                    fill: colors.text_fill,
                     font_size: QUADRANT_LABEL_FONT_SIZE,
                     vertical_pos: "center",
                     horizontal_pos: horiz,
@@ -205,6 +212,7 @@ fn get_axis_labels(
     show_x_axis: bool,
     show_y_axis: bool,
     space: &SpaceData,
+    colors: &QuadrantColors,
 ) -> Vec<TextEl> {
     let mut labels = Vec::new();
     let ql = space.quadrant_left;
@@ -218,7 +226,6 @@ fn get_axis_labels(
     let draw_x_mid = !diag.x_axis_right_text.is_empty();
     let draw_y_mid = !diag.y_axis_top_text.is_empty();
 
-    // x-axis left label
     if !diag.x_axis_left_text.is_empty() && show_x_axis {
         let x = ql + if draw_x_mid { qhw / 2.0 } else { 0.0 };
         let y = if x_axis_position == "top" {
@@ -230,7 +237,7 @@ fn get_axis_labels(
             text: diag.x_axis_left_text.clone(),
             x,
             y,
-            fill: QUADRANT_X_AXIS_TEXT_FILL,
+            fill: colors.text_fill,
             font_size: X_AXIS_LABEL_FONT_SIZE,
             vertical_pos: if draw_x_mid { "center" } else { "left" },
             horizontal_pos: "top",
@@ -238,7 +245,6 @@ fn get_axis_labels(
         });
     }
 
-    // x-axis right label
     if !diag.x_axis_right_text.is_empty() && show_x_axis {
         let x = ql + qhw + if draw_x_mid { qhw / 2.0 } else { 0.0 };
         let y = if x_axis_position == "top" {
@@ -250,7 +256,7 @@ fn get_axis_labels(
             text: diag.x_axis_right_text.clone(),
             x,
             y,
-            fill: QUADRANT_X_AXIS_TEXT_FILL,
+            fill: colors.text_fill,
             font_size: X_AXIS_LABEL_FONT_SIZE,
             vertical_pos: if draw_x_mid { "center" } else { "left" },
             horizontal_pos: "top",
@@ -258,16 +264,14 @@ fn get_axis_labels(
         });
     }
 
-    // y-axis bottom label
     if !diag.y_axis_bottom_text.is_empty() && show_y_axis {
-        // y-axis position is always "left"
         let x = Y_AXIS_LABEL_PADDING;
         let y = qt + qh - if draw_y_mid { qhh / 2.0 } else { 0.0 };
         labels.push(TextEl {
             text: diag.y_axis_bottom_text.clone(),
             x,
             y,
-            fill: QUADRANT_Y_AXIS_TEXT_FILL,
+            fill: colors.text_fill,
             font_size: Y_AXIS_LABEL_FONT_SIZE,
             vertical_pos: if draw_y_mid { "center" } else { "left" },
             horizontal_pos: "top",
@@ -275,7 +279,6 @@ fn get_axis_labels(
         });
     }
 
-    // y-axis top label
     if !diag.y_axis_top_text.is_empty() && show_y_axis {
         let x = Y_AXIS_LABEL_PADDING;
         let y = qt + qhh - if draw_y_mid { qhh / 2.0 } else { 0.0 };
@@ -283,7 +286,7 @@ fn get_axis_labels(
             text: diag.y_axis_top_text.clone(),
             x,
             y,
-            fill: QUADRANT_Y_AXIS_TEXT_FILL,
+            fill: colors.text_fill,
             font_size: Y_AXIS_LABEL_FONT_SIZE,
             vertical_pos: if draw_y_mid { "center" } else { "left" },
             horizontal_pos: "top",
@@ -296,16 +299,18 @@ fn get_axis_labels(
 
 // ── get_quadrant_points (port of QuadrantBuilder.getQuadrantPoints) ───────────
 
-fn get_quadrant_points(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<PointEl> {
+fn get_quadrant_points(
+    diag: &QuadrantDiagram,
+    space: &SpaceData,
+    colors: &QuadrantColors,
+) -> Vec<PointEl> {
     let ql = space.quadrant_left;
     let qt = space.quadrant_top;
     let qw = space.quadrant_width;
     let qh = space.quadrant_height;
 
-    // scaleLinear: x domain [0,1] -> range [quadrantLeft, quadrantLeft + quadrantWidth]
-    // scaleLinear: y domain [0,1] -> range [quadrantTop + quadrantHeight, quadrantTop]  (inverted)
     let scale_x = |v: f64| ql + v * qw;
-    let scale_y = |v: f64| (qh + qt) + v * (qt - (qh + qt)); // = qt + qh - v*qh
+    let scale_y = |v: f64| (qh + qt) + v * (qt - (qh + qt));
 
     diag.points
         .iter()
@@ -316,14 +321,14 @@ fn get_quadrant_points(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<PointEl
                 x: px,
                 y: py,
                 radius: POINT_RADIUS,
-                fill: QUADRANT_POINT_FILL,
-                stroke_color: QUADRANT_POINT_FILL,
+                fill: colors.point_fill,
+                stroke_color: colors.point_fill,
                 stroke_width: "0px",
                 text: TextEl {
                     text: p.text.clone(),
                     x: px,
                     y: py + POINT_TEXT_PADDING,
-                    fill: QUADRANT_POINT_TEXT_FILL,
+                    fill: colors.text_fill,
                     font_size: POINT_LABEL_FONT_SIZE,
                     vertical_pos: "center",
                     horizontal_pos: "top",
@@ -336,7 +341,7 @@ fn get_quadrant_points(diag: &QuadrantDiagram, space: &SpaceData) -> Vec<PointEl
 
 // ── get_borders (port of QuadrantBuilder.getBorders) ─────────────────────────
 
-fn get_borders(space: &SpaceData) -> Vec<LineEl> {
+fn get_borders(space: &SpaceData, colors: &QuadrantColors) -> Vec<LineEl> {
     let hw = QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH / 2.0;
     let ql = space.quadrant_left;
     let qt = space.quadrant_top;
@@ -346,58 +351,52 @@ fn get_borders(space: &SpaceData) -> Vec<LineEl> {
     let qhh = space.quadrant_half_height;
 
     vec![
-        // top border
         LineEl {
             x1: ql - hw,
             y1: qt,
             x2: ql + qw + hw,
             y2: qt,
-            stroke_fill: QUADRANT_EXTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH,
         },
-        // right border
         LineEl {
             x1: ql + qw,
             y1: qt + hw,
             x2: ql + qw,
             y2: qt + qh - hw,
-            stroke_fill: QUADRANT_EXTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH,
         },
-        // bottom border
         LineEl {
             x1: ql - hw,
             y1: qt + qh,
             x2: ql + qw + hw,
             y2: qt + qh,
-            stroke_fill: QUADRANT_EXTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH,
         },
-        // left border
         LineEl {
             x1: ql,
             y1: qt + hw,
             x2: ql,
             y2: qt + qh - hw,
-            stroke_fill: QUADRANT_EXTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_EXTERNAL_BORDER_STROKE_WIDTH,
         },
-        // vertical inner border
         LineEl {
             x1: ql + qhw,
             y1: qt + hw,
             x2: ql + qhw,
             y2: qt + qh - hw,
-            stroke_fill: QUADRANT_INTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_INTERNAL_BORDER_STROKE_WIDTH,
         },
-        // horizontal inner border
         LineEl {
             x1: ql + hw,
             y1: qt + qhh,
             x2: ql + qw - hw,
             y2: qt + qhh,
-            stroke_fill: QUADRANT_INTERNAL_BORDER_STROKE_FILL,
+            stroke_fill: colors.border_fill,
             stroke_width: QUADRANT_INTERNAL_BORDER_STROKE_WIDTH,
         },
     ]
@@ -405,13 +404,13 @@ fn get_borders(space: &SpaceData) -> Vec<LineEl> {
 
 // ── get_title (port of QuadrantBuilder.getTitle) ──────────────────────────────
 
-fn get_title(diag: &QuadrantDiagram, show_title: bool) -> Option<TextEl> {
+fn get_title(diag: &QuadrantDiagram, show_title: bool, colors: &QuadrantColors) -> Option<TextEl> {
     if show_title {
         Some(TextEl {
             text: diag.title.clone(),
             x: CHART_WIDTH / 2.0,
             y: TITLE_PADDING,
-            fill: QUADRANT_TITLE_FILL,
+            fill: colors.text_fill,
             font_size: TITLE_FONT_SIZE,
             vertical_pos: "center",
             horizontal_pos: "top",
@@ -424,7 +423,6 @@ fn get_title(diag: &QuadrantDiagram, show_title: bool) -> Option<TextEl> {
 
 // ── SVG rendering helpers ─────────────────────────────────────────────────────
 
-/// dominant-baseline from horizontal position
 fn dominant_baseline(horiz: &str) -> &'static str {
     if horiz == "top" {
         "hanging"
@@ -433,7 +431,6 @@ fn dominant_baseline(horiz: &str) -> &'static str {
     }
 }
 
-/// text-anchor from vertical position
 fn text_anchor(vert: &str) -> &'static str {
     if vert == "left" {
         "start"
@@ -467,12 +464,29 @@ fn render_text_el(el: &TextEl) -> String {
 
 pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
+
+    // Quadrant fills: per-theme base colours matching Mermaid's quadrant cScale.
+    // Each subsequent quadrant lightens the base by +5 per RGB channel.
+    let (q1, q2, q3, q4) = match theme {
+        crate::theme::Theme::Dark => ("#1f2020", "#242525", "#292a2a", "#2e2f2f"),
+        crate::theme::Theme::Forest => ("#cde498", "#d2e99d", "#d7eea2", "#dcf3a7"),
+        crate::theme::Theme::Neutral => ("#eeeeee", "#f3f3f3", "#f8f8f8", "#fdfdfd"),
+        _ => ("#ECECFF", "#f1f1ff", "#f6f6ff", "#fbfbff"),
+    };
+    let colors = QuadrantColors {
+        quadrant1_fill: q1,
+        quadrant2_fill: q2,
+        quadrant3_fill: q3,
+        quadrant4_fill: q4,
+        text_fill: vars.text_color,
+        point_fill: vars.text_color,
+        border_fill: vars.line_color,
+    };
+
     let show_x_axis = !diag.x_axis_left_text.is_empty() || !diag.x_axis_right_text.is_empty();
     let show_y_axis = !diag.y_axis_top_text.is_empty() || !diag.y_axis_bottom_text.is_empty();
     let show_title = !diag.title.is_empty();
 
-    // When data points exist, force x-axis to bottom (quadrantBuilder.ts build())
     let x_axis_position = if !diag.points.is_empty() {
         "bottom"
     } else {
@@ -481,11 +495,18 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
 
     let space = calculate_space(x_axis_position, show_x_axis, show_y_axis, show_title);
 
-    let quadrants = get_quadrants(diag, &space);
-    let points = get_quadrant_points(diag, &space);
-    let axis_labels = get_axis_labels(diag, x_axis_position, show_x_axis, show_y_axis, &space);
-    let borders = get_borders(&space);
-    let title = get_title(diag, show_title);
+    let quadrants = get_quadrants(diag, &space, &colors);
+    let points = get_quadrant_points(diag, &space, &colors);
+    let axis_labels = get_axis_labels(
+        diag,
+        x_axis_position,
+        show_x_axis,
+        show_y_axis,
+        &space,
+        &colors,
+    );
+    let borders = get_borders(&space, &colors);
+    let title = get_title(diag, show_title, &colors);
 
     let id = "mermaid-quadrant";
     let width = CHART_WIDTH;
@@ -494,13 +515,8 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
     let mut out = Vec::<String>::new();
 
     out.push(templates::svg_root(id, &fmt(width), &fmt(height)));
-
-    out.push(format!("<style>{}</style>", build_style(id, ff)));
-
-    // Main group
     out.push(r#"<g class="main">"#.to_string());
 
-    // Quadrant backgrounds
     out.push(r#"<g class="quadrants">"#.to_string());
     for q in &quadrants {
         out.push(templates::quadrant_group(
@@ -514,7 +530,6 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
     }
     out.push("</g>".to_string());
 
-    // Border lines
     out.push(r#"<g class="border">"#.to_string());
     for b in &borders {
         out.push(templates::border_line(
@@ -528,7 +543,6 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
     }
     out.push("</g>".to_string());
 
-    // Data points
     out.push(r#"<g class="data-points">"#.to_string());
     for p in &points {
         out.push(templates::data_point_group(
@@ -543,14 +557,12 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
     }
     out.push("</g>".to_string());
 
-    // Axis labels
     out.push(r#"<g class="labels">"#.to_string());
     for l in &axis_labels {
         out.push(templates::label_group(&render_text_el(l)));
     }
     out.push("</g>".to_string());
 
-    // Title
     out.push(r#"<g class="title">"#.to_string());
     if let Some(t) = &title {
         out.push(render_text_el(t));
@@ -643,10 +655,8 @@ mod tests {
 
     #[test]
     fn x_axis_bottom_when_points() {
-        // When points exist, x-axis should be at bottom (y > midpoint of chart)
         let diag = sample_diagram();
         let svg = render(&diag, Theme::Default);
-        // The bottom x-axis label for "Influence" should exist somewhere
         assert!(svg.contains("Influence"));
     }
 

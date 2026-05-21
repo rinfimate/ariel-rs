@@ -1,5 +1,5 @@
 use super::constants::*;
-use super::templates::{self, defs_svg, esc, sequence_css};
+use super::templates::{self, actor_man as tmpl_actor_man, defs_svg, esc};
 /// Sequence diagram renderer — faithful port of Mermaid sequenceRenderer.ts
 ///
 /// Algorithm (same as Mermaid):
@@ -176,13 +176,31 @@ impl Bounds {
 
 // ─── SVG helpers ────────────────────────────────────────────────────────────
 
-fn actor_rect_svg(x: f64, y: f64, w: f64, h: f64, name: &str, cls: &str) -> String {
-    templates::actor_rect(x, y, w, h, &esc(name), cls)
+fn actor_rect_svg(
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    name: &str,
+    cls: &str,
+    pf: &str,
+    pb: &str,
+) -> String {
+    templates::actor_rect(x, y, w, h, &esc(name), cls, pf, pb)
 }
 
 /// Render an actor-man (stick figure) at actor box position (top or bottom)
 /// cx = center x, box_y = top of the actor box area (y=0 for top, bottom_actor_y for bottom)
-fn actor_man_svg(cx: f64, box_y: f64, name: &str, cls: &str, idx: usize) -> String {
+fn actor_man_svg(
+    cx: f64,
+    box_y: f64,
+    name: &str,
+    cls: &str,
+    idx: usize,
+    pf: &str,
+    pb: &str,
+    tc: &str,
+) -> String {
     let cy = box_y + 10.0; // circle center y
     let r = 15.0_f64;
     let ts = cy + r; // torso start y
@@ -196,41 +214,34 @@ fn actor_man_svg(cx: f64, box_y: f64, name: &str, cls: &str, idx: usize) -> Stri
     let rl = cx + 16.0; // leg right x
     let ty = box_y + ACTOR_MAN_HEIGHT - 12.5; // text y (ref uses -12.5 for 2px gap below legs)
     let esc_name = esc(name);
-    format!(
-        concat!(
-            r#"<g class="actor-man {cls}" name="{name}" data-et="participant" data-type="actor" data-id="{name}" style="stroke: rgb(147, 112, 219);">"#,
-            r#"<line id="actor-man-torso{idx}" x1="{cx}" y1="{ts}" x2="{cx}" y2="{te}"></line>"#,
-            r#"<line id="actor-man-arms{idx}" x1="{al}" y1="{ay}" x2="{ar}" y2="{ay}"></line>"#,
-            r#"<line x1="{ll}" y1="{le}" x2="{cx}" y2="{ls}"></line>"#,
-            r#"<line x1="{cx}" y1="{ls}" x2="{rl}" y2="{le}"></line>"#,
-            r#"<circle cx="{cx}" cy="{cy}" r="{r}" width="{w}" height="{h}"></circle>"#,
-            r#"<text x="{cx}" y="{ty}" dominant-baseline="central" alignment-baseline="central" class="actor actor-man" style="text-anchor: middle; font-size: {fs}px; font-weight: 400; font-family: Arial, sans-serif;"><tspan x="{cx}" dy="0">{name}</tspan></text>"#,
-            r#"</g>"#,
-        ),
-        cls = cls,
-        name = esc_name,
-        idx = idx,
-        cx = cx,
-        cy = cy,
-        r = r,
-        ts = ts,
-        te = te,
-        al = al,
-        ar = ar,
-        ay = ay,
-        ll = ll,
-        rl = rl,
-        ls = ls,
-        le = le,
-        w = ACTOR_WIDTH,
-        h = ACTOR_MAN_HEIGHT,
-        ty = ty,
-        fs = FONT_SIZE as u32,
+    tmpl_actor_man(
+        cls,
+        &esc_name,
+        idx,
+        cx,
+        cy,
+        r,
+        ts,
+        te,
+        al,
+        ar,
+        ay,
+        ll,
+        rl,
+        ls,
+        le,
+        ty,
+        ACTOR_WIDTH,
+        ACTOR_MAN_HEIGHT,
+        FONT_SIZE as u32,
+        pf,
+        pb,
+        tc,
     )
 }
 
-fn actor_text_svg(cx: f64, cy: f64, name: &str) -> String {
-    templates::actor_text(cx, cy, FONT_SIZE, &esc(name))
+fn actor_text_svg(cx: f64, cy: f64, name: &str, tc: &str) -> String {
+    templates::actor_text(cx, cy, FONT_SIZE, &esc(name), tc)
 }
 
 // ─── Main render entry point ─────────────────────────────────────────────────
@@ -449,7 +460,11 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 SeqItem::LoopStart(_)
                 | SeqItem::AltStart(_)
                 | SeqItem::OptStart(_)
-                | SeqItem::ParStart(_) => {
+                | SeqItem::ParStart(_)
+                | SeqItem::CriticalStart(_)
+                | SeqItem::BreakStart(_)
+                | SeqItem::RectStart(_)
+                | SeqItem::BoxStart { .. } => {
                     stack.push((
                         item_idx,
                         LoopBound {
@@ -458,10 +473,10 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                         },
                     ));
                 }
-                SeqItem::AltElse(_) | SeqItem::ParAnd(_) => {
+                SeqItem::AltElse(_) | SeqItem::ParAnd(_) | SeqItem::CriticalOption(_) => {
                     // section dividers don't pop the frame
                 }
-                SeqItem::LoopEnd => {
+                SeqItem::BlockEnd => {
                     if let Some((start_idx, bound)) = stack.pop() {
                         let loop_from = if bound.from == f64::MAX {
                             0.0
@@ -479,7 +494,11 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                             SeqItem::LoopStart(l)
                             | SeqItem::AltStart(l)
                             | SeqItem::OptStart(l)
-                            | SeqItem::ParStart(l) => l.clone(),
+                            | SeqItem::ParStart(l)
+                            | SeqItem::CriticalStart(l)
+                            | SeqItem::BreakStart(l)
+                            | SeqItem::RectStart(l) => l.clone(),
+                            SeqItem::BoxStart { label, .. } => label.clone(),
                             _ => String::new(),
                         };
                         // Measure label with brackets, as Mermaid does: wrapLabel('[label]', available, messageFont)
@@ -587,7 +606,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
 
     for (item_idx, item) in diag.items.iter().enumerate() {
         match item {
-            SeqItem::AutoNumber => {
+            SeqItem::AutoNumber { .. } => {
                 auto_number = true;
             }
 
@@ -874,7 +893,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 });
             }
 
-            SeqItem::LoopEnd => {
+            SeqItem::BlockEnd => {
                 if let Some(frame) = bounds.loop_stack.pop() {
                     // Mermaid: bump to loopModel.stopy (= frame.stop_y from updateBounds)
                     if frame.stop_y > bounds.vertical_pos {
@@ -985,6 +1004,56 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             }
 
             SeqItem::Participant(_) => {} // handled in step 1
+
+            // New grammar variants — treat as loop-like blocks or skip
+            SeqItem::CriticalStart(label) | SeqItem::BreakStart(label) => {
+                let label_h = loop_label_heights.get(&item_idx).copied().unwrap_or(0.0);
+                let height_adjust = BOX_MARGIN + BOX_TEXT_MARGIN + label_h.max(LABEL_BOX_HEIGHT);
+                bounds.bump(BOX_MARGIN);
+                let frame_start_y = bounds.getvertical();
+                bounds.bump(height_adjust);
+                bounds.loop_stack.push(LoopFrame {
+                    label: label.clone(),
+                    kind: ControlKind::Loop,
+                    from: f64::MAX,
+                    to: f64::MIN,
+                    start_y: frame_start_y,
+                    stop_y: 0.0,
+                    sections: Vec::new(),
+                    is_alt: false,
+                });
+            }
+
+            SeqItem::CriticalOption(label) => {
+                // Same as AltElse
+                bounds.bump(BOX_MARGIN + BOX_TEXT_MARGIN);
+                let section_y = bounds.getvertical();
+                bounds.bump(BOX_MARGIN + LABEL_BOX_HEIGHT);
+                if let Some(frame) = bounds.loop_stack.last_mut() {
+                    frame.sections.push(ControlSection {
+                        y: section_y,
+                        label: label.clone(),
+                    });
+                }
+            }
+
+            SeqItem::RectStart(_) | SeqItem::BoxStart { .. } => {
+                // Rect/box — bump for the block header
+                bounds.bump(BOX_MARGIN);
+                let frame_start_y = bounds.getvertical();
+                bounds.loop_stack.push(LoopFrame {
+                    label: String::new(),
+                    kind: ControlKind::Loop,
+                    from: f64::MAX,
+                    to: f64::MIN,
+                    start_y: frame_start_y,
+                    stop_y: 0.0,
+                    sections: Vec::new(),
+                    is_alt: false,
+                });
+            }
+
+            SeqItem::Link { .. } => {}
         }
     }
 
@@ -1011,31 +1080,53 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     // ── Step 5: SVG generation ────────────────────────────────────────────────
     let mut svg_parts: Vec<String> = Vec::new();
 
-    // Style
-    svg_parts.push(format!(
-        "<style>{}</style>",
-        sequence_css(diagram_id, vars.font_family, FONT_SIZE as u32)
-    ));
     svg_parts.push(String::from("<g></g>"));
 
     // Defs (arrow markers)
-    svg_parts.push(defs_svg(diagram_id));
+    // marker_fill: filled arrowheads, crosshead, seqnum circle — git_spine_color matches .marker CSS per theme
+    svg_parts.push(defs_svg(diagram_id, vars.signal_color, vars.signal_color));
 
     // Control structures (loops/alt/opt/par) — collected here, pushed AFTER lifelines
     // so that lifelines are drawn first and the frame borders + badges render on top.
     let control_svgs: Vec<String> = control_models
         .iter()
         .enumerate()
-        .map(|(ci, ctrl)| render_control(ctrl, ci, diagram_id))
+        .map(|(ci, ctrl)| {
+            render_control(
+                ctrl,
+                ci,
+                diagram_id,
+                &vars.primary_color,
+                &vars.sequence_loop_color,
+                vars.signal_color,
+            )
+        })
         .collect();
 
     // Messages and notes are deferred to render AFTER lifelines so that sequence
     // number circles (placed at the actor x position on the lifeline) appear on top.
     let msg_svgs: Vec<String> = msg_models
         .iter()
-        .map(|mm| render_message(mm, diagram_id, auto_number))
+        .map(|mm| {
+            render_message(
+                mm,
+                diagram_id,
+                auto_number,
+                &vars.signal_color,
+                vars.text_color,
+                if matches!(theme, Theme::Dark) {
+                    "black"
+                } else {
+                    "white"
+                },
+                vars.signal_color,
+            )
+        })
         .collect();
-    let note_svgs: Vec<String> = note_models.iter().map(render_note).collect();
+    let note_svgs: Vec<String> = note_models
+        .iter()
+        .map(|n| render_note(n, vars.note_bg, vars.note_border, vars.note_text_color))
+        .collect();
 
     // Activation boxes are rendered AFTER lifelines (below) so they cover the lifelines.
     // Collect them here; push to svg_parts after the lifelines section.
@@ -1055,6 +1146,16 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 act.stop_x - act.start_x,
                 (act.stop_y - act.start_y).max(1.0),
                 &cls,
+                if matches!(theme, Theme::Dark) {
+                    vars.note_bg
+                } else {
+                    "#f4f4f4"
+                },
+                if matches!(theme, Theme::Dark) {
+                    vars.text_color
+                } else {
+                    "#666"
+                },
             )
         })
         .collect();
@@ -1074,6 +1175,9 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 &actor.name,
                 "actor-bottom",
                 ai + actor_order.len(),
+                &vars.primary_color,
+                &vars.sequence_actor_border,
+                vars.text_color,
             ));
         } else {
             let mut g = String::from("<g>");
@@ -1084,11 +1188,14 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.height,
                 &actor.name,
                 "actor-bottom",
+                &vars.primary_color,
+                &vars.sequence_actor_border,
             ));
             g.push_str(&actor_text_svg(
                 actor.cx(),
                 bottom_y + actor.height / 2.0,
                 &actor.name,
+                vars.signal_color,
             ));
             g.push_str("</g>");
             bottom_actor_svgs.push(g);
@@ -1110,6 +1217,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             lifeline_start,
             lifeline_end,
             &esc(&actor.name),
+            &vars.sequence_actor_border,
         ));
         // Top actor box
         if is_actor_man {
@@ -1119,6 +1227,9 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 &actor.name,
                 "actor-top",
                 ai,
+                &vars.primary_color,
+                &vars.sequence_actor_border,
+                vars.text_color,
             ));
         } else {
             g.push_str(&templates::participant_root_group(ai, &esc(&actor.name)));
@@ -1129,11 +1240,14 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.height,
                 &actor.name,
                 "actor-top",
+                &vars.primary_color,
+                &vars.sequence_actor_border,
             ));
             g.push_str(&actor_text_svg(
                 actor.cx(),
                 actor.y + actor.height / 2.0,
                 &actor.name,
+                vars.signal_color,
             ));
             g.push_str("</g>");
         }
@@ -1211,7 +1325,14 @@ fn control_kind_label(k: &ControlKind) -> &'static str {
     }
 }
 
-fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String {
+fn render_control(
+    ctrl: &ControlModel,
+    idx: usize,
+    _diagram_id: &str,
+    pf: &str,
+    pb: &str,
+    tc: &str,
+) -> String {
     let x1 = ctrl.start_x;
     let y1 = ctrl.start_y;
     let x2 = ctrl.stop_x;
@@ -1238,11 +1359,11 @@ fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String 
     let cx_main = (x1 + lb_w + x2) / 2.0;
     let cy_main = y1 + lb_h / 2.0 + 8.0; // align with label, matching reference y offset
 
-    let mut out = templates::control_group_open(idx, x1, y1, x2, y2);
+    let mut out = templates::control_group_open(idx, x1, y1, x2, y2, pb);
 
     // Section dividers
     for sec in &ctrl.sections {
-        out.push_str(&templates::control_section_divider(x1, x2, sec.y));
+        out.push_str(&templates::control_section_divider(x1, x2, sec.y, pb));
     }
 
     // Label box + text — inline fill/stroke so the badge has a solid background
@@ -1257,6 +1378,9 @@ fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String 
         cy_label,
         FONT_SIZE as u32,
         kind_str,
+        pf,
+        pb,
+        tc,
     ));
 
     if !ctrl.label.is_empty() {
@@ -1265,6 +1389,7 @@ fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String 
             cy_main,
             FONT_SIZE as u32,
             &esc(&ctrl.label),
+            tc,
         ));
     }
 
@@ -1278,6 +1403,7 @@ fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String 
                 sec_cy,
                 FONT_SIZE as u32,
                 &esc(&sec.label),
+                tc,
             ));
         }
     }
@@ -1288,7 +1414,15 @@ fn render_control(ctrl: &ControlModel, idx: usize, _diagram_id: &str) -> String 
 
 // ── Render helper: message ──────────────────────────────────────────────────
 
-fn render_message(mm: &MsgModel, diagram_id: &str, auto_number: bool) -> String {
+fn render_message(
+    mm: &MsgModel,
+    diagram_id: &str,
+    auto_number: bool,
+    line_color: &str,
+    text_color: &str,
+    seqnum_text_fill: &str,
+    seqnum_circle_fill: &str,
+) -> String {
     let is_dotted = matches!(mm.line_type, LineType::Dotted | LineType::DottedArrow);
     let is_self = (mm.start_x - mm.stop_x).abs() < 0.5;
 
@@ -1334,6 +1468,7 @@ fn render_message(mm: &MsgModel, diagram_id: &str, auto_number: bool) -> String 
         text_y_actual,
         FONT_SIZE as u32,
         &esc(&mm.text),
+        text_color,
     ));
 
     // Line
@@ -1357,6 +1492,7 @@ fn render_message(mm: &MsgModel, diagram_id: &str, auto_number: bool) -> String 
             &esc(&mm.to),
             &marker,
             dash_style,
+            line_color,
         ));
     } else {
         out.push_str(&templates::message_line(
@@ -1369,6 +1505,7 @@ fn render_message(mm: &MsgModel, diagram_id: &str, auto_number: bool) -> String 
             &esc(&mm.to),
             &marker,
             dash_style,
+            line_color,
         ));
     }
 
@@ -1377,8 +1514,13 @@ fn render_message(mm: &MsgModel, diagram_id: &str, auto_number: bool) -> String 
     if auto_number && mm.show_seq {
         let cx = mm.start_x;
         let cy = mm.line_start_y;
-        out.push_str(&templates::seq_number_circle(cx, cy));
-        out.push_str(&templates::seq_number_text(cx, cy, mm.seq_idx));
+        out.push_str(&templates::seq_number_circle(cx, cy, seqnum_circle_fill));
+        out.push_str(&templates::seq_number_text(
+            cx,
+            cy,
+            mm.seq_idx,
+            seqnum_text_fill,
+        ));
     }
 
     out
@@ -1391,19 +1533,27 @@ fn bounds_start_y_for_text(mm: &MsgModel) -> f64 {
 
 // ── Render helper: note ─────────────────────────────────────────────────────
 
-fn render_note(note: &RenderedNote) -> String {
+fn render_note(
+    note: &RenderedNote,
+    note_bg: &str,
+    note_border: &str,
+    note_text_color: &str,
+) -> String {
     let mut out = String::new();
     out.push_str(&templates::note_rect(
         note.start_x,
         note.start_y,
         note.width,
         note.height,
+        note_bg,
+        note_border,
     ));
     out.push_str(&templates::note_text(
         note.start_x + note.width / 2.0,
         note.start_y + note.height / 2.0,
         FONT_SIZE as u32,
         &esc(&note.text),
+        note_text_color,
     ));
     out
 }

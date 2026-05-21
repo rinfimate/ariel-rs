@@ -62,7 +62,7 @@ pub enum Orientation {
 
 /// Color palette matching Mermaid default theme `plotColorPalette`.
 /// From theme-default.ts xyChart section (default Mermaid theme).
-const PLOT_COLORS: &[&str] = &[
+pub const PLOT_COLORS: &[&str] = &[
     "#ECECFF", "#8493A6", "#3949AB", "#00ACC1", "#43A047", "#FB8C00", "#E53935", "#FD79A8",
     "#636E72", "#FDCB6E",
 ];
@@ -98,6 +98,10 @@ pub fn parse(input: &str) -> crate::error::ParseResult<XyChart> {
             if rest.eq_ignore_ascii_case("horizontal") {
                 orientation = Orientation::Horizontal;
             }
+            continue;
+        }
+
+        if lower.starts_with("acctitle") || lower.starts_with("accdescr") {
             continue;
         }
 

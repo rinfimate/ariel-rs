@@ -225,8 +225,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<GitGraphDiagram> {
             continue;
         }
 
-        // title keyword — skip (not used by renderer)
-        if trimmed.starts_with("title") {
+        // title / accTitle / accDescr — skip
+        if trimmed.starts_with("title")
+            || trimmed.starts_with("accTitle")
+            || trimmed.starts_with("accDescr")
+        {
             continue;
         }
 

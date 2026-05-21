@@ -14,8 +14,15 @@ use super::parser::{
 /// - Arrows connect each commit to its parents using arc paths.
 /// - Branch labels rendered as rectangles with text at left margin.
 /// - Colors cycle through THEME_COLOR_LIMIT (8) css classes.
-#[allow(unused_imports)]
-use super::templates::{self, build_style, esc};
+use super::templates::{
+    self, arrowhead_defs, branch_label_rect_bt, branch_label_rect_lr, branch_label_rect_tb,
+    branch_label_text_bt, branch_label_text_lr, branch_label_text_tb, branch_spine_bt,
+    branch_spine_lr, branch_spine_tb, commit_cherry_circle, commit_cherry_eye, commit_cherry_stem,
+    commit_circle, commit_highlight_inner, commit_highlight_outer, commit_label_bkg,
+    commit_label_bkg_tb, commit_label_group_lr, commit_label_text, commit_label_text_tb,
+    commit_merge_inner, commit_reverse_cross, esc, main_translate_group, svg_root,
+    tag_badge_polygon, tag_badge_rect_tb, tag_hole_circle, tag_text_lr, tag_text_tb,
+};
 use crate::text::measure;
 use crate::theme::Theme;
 use std::collections::HashMap;
@@ -43,6 +50,8 @@ fn color_index(raw: usize) -> usize {
 pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
+    let primary_color = vars.primary_color;
+    let secondary_color = vars.secondary_color;
     let dir = diag.direction;
 
     // Build a commit lookup by id for arrow color resolution
@@ -63,7 +72,8 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             } else {
                 0.0
             };
-            pos += 90.0 + (if ROTATE_COMMIT_LABEL { 40.0 } else { 0.0 }) + tb_extra;
+            // rotateCommitLabel only changes label visual rotation, not branch spacing.
+            pos += 90.0 + tb_extra;
         }
     }
 
@@ -167,24 +177,10 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
     let id = "mermaid-gitgraph";
     let mut out = String::new();
 
-    out += &format!(
-        concat!(
-            r#"<svg id="{id}" xmlns="http://www.w3.org/2000/svg""#,
-            r#" width="100%" height="{h:.1}" viewBox="0 0 {w:.1} {h:.1}""#,
-            r#" style="max-width: {w:.1}px;""#,
-            r#" role="graphics-document document" aria-roledescription="git-graph">"#
-        ),
-        id = id,
-        w = svg_w,
-        h = svg_h
-    );
+    out += &svg_root(id, svg_w, svg_h);
 
-    out += &format!("<style>{}</style>", build_style(id, ff));
-    out += &build_defs(id);
-    out += &format!(
-        r#"<g transform="translate({:.1},{:.1})">"#,
-        x_offset, translate_y
-    );
+    out += &arrowhead_defs(id, vars.git_spine_color);
+    out += &main_translate_group(x_offset, translate_y);
 
     // ── Branch spines & labels ────────────────────────────────────────────────
     out += r#"<g class="branches">"#;
@@ -194,101 +190,51 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             None => continue,
         };
         let ci = color_index(bp.index);
-        let (fill, stroke) = GIT_COLORS[ci];
+        let (fill, stroke) = vars.git_branch_colors[ci % vars.git_branch_colors.len()];
         let label_w = measure(&branch.name, BRANCH_FONT_SIZE).0 * BRANCH_FONT_SCALE;
         let box_w = label_w + BRANCH_LABEL_PADDING * 2.0;
 
-        let text_color = BRANCH_LABEL_TEXT_COLORS[ci % THEME_COLOR_LIMIT];
+        let text_color =
+            vars.git_branch_label_text_colors[ci % vars.git_branch_label_text_colors.len()];
         match dir {
             DiagramDirection::LR => {
                 let y = bp.pos - 2.0;
-                // Branch spine: dark grey line with dash-2 pattern (matches reference .branch CSS)
-                out += &format!(
-                    "<line x1=\"0\" y1=\"{y:.1}\" x2=\"{mx:.1}\" y2=\"{y:.1}\" stroke=\"#333333\" stroke-width=\"1\" stroke-dasharray=\"2\"/>",
-                    y = y, mx = max_pos
-                );
-                // Position box: right edge at x=-35 to match reference spacing
+                out += &branch_spine_lr(y, max_pos, vars.git_spine_color);
                 let bx = -(box_w + 35.0);
                 let by = y - 10.0;
-                // Branch label background: filled with branch color, no stroke
-                out += &format!(
-                    concat!(
-                        r#"<rect x="{bx:.1}" y="{by:.1}" width="{bw:.1}" height="20""#,
-                        r#" rx="4" ry="4" fill="{f}"/>"#
-                    ),
-                    bx = bx,
-                    by = by,
-                    bw = box_w,
-                    f = fill
-                );
-                // Branch label text: color depends on branch index
-                out += &format!(
-                    "<text x=\"{tx:.1}\" y=\"{ty:.1}\" font-size=\"16\" fill=\"{tc}\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
-                    tx = bx + BRANCH_LABEL_PADDING,
-                    ty = y + 5.0,
-                    tc = text_color,
-                    name = esc(&branch.name)
+                out += &branch_label_rect_lr(bx, by, box_w, fill);
+                out += &branch_label_text_lr(
+                    bx + BRANCH_LABEL_PADDING,
+                    y + 5.0,
+                    text_color,
+                    ff,
+                    &esc(&branch.name),
                 );
             }
             DiagramDirection::TB => {
                 let x = bp.pos;
-                out += &format!(
-                    concat!(
-                        r#"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""#,
-                        r#" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"#
-                    ),
-                    x = x,
-                    dp = DEFAULT_POS,
-                    mx = max_pos,
-                    s = stroke
-                );
+                out += &branch_spine_tb(x, DEFAULT_POS, max_pos, stroke);
                 let bx = x - box_w / 2.0;
-                out += &format!(
-                    concat!(
-                        r#"<rect x="{bx:.1}" y="0" width="{bw:.1}" height="20""#,
-                        r#" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"#
-                    ),
-                    bx = bx,
-                    bw = box_w,
-                    f = fill,
-                    s = stroke
-                );
-                out += &format!(
-                    "<text x=\"{tx:.1}\" y=\"14\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
-                    tx = bx + BRANCH_LABEL_PADDING,
-                    name = esc(&branch.name)
+                out += &branch_label_rect_tb(bx, box_w, fill, stroke);
+                out += &branch_label_text_tb(
+                    bx + BRANCH_LABEL_PADDING,
+                    ff,
+                    &esc(&branch.name),
+                    text_color,
                 );
             }
             DiagramDirection::BT => {
                 let x = bp.pos;
                 let my = max_pos + 5.0;
-                out += &format!(
-                    concat!(
-                        r#"<line x1="{x:.1}" y1="{dp:.1}" x2="{x:.1}" y2="{mx:.1}""#,
-                        r#" stroke="{s}" stroke-width="2" stroke-dasharray="4 2"/>"#
-                    ),
-                    x = x,
-                    dp = DEFAULT_POS,
-                    mx = max_pos,
-                    s = stroke
-                );
+                out += &branch_spine_bt(x, DEFAULT_POS, max_pos, stroke);
                 let bx = x - box_w / 2.0;
-                out += &format!(
-                    concat!(
-                        r#"<rect x="{bx:.1}" y="{my:.1}" width="{bw:.1}" height="20""#,
-                        r#" rx="4" fill="{f}" stroke="{s}" stroke-width="1"/>"#
-                    ),
-                    bx = bx,
-                    my = my,
-                    bw = box_w,
-                    f = fill,
-                    s = stroke
-                );
-                out += &format!(
-                    "<text x=\"{tx:.1}\" y=\"{ty:.1}\" font-size=\"14\" fill=\"#333\" font-family=\"{ff}\" text-anchor=\"start\">{name}</text>",
-                    tx = bx + BRANCH_LABEL_PADDING,
-                    ty = my + 14.0,
-                    name = esc(&branch.name)
+                out += &branch_label_rect_bt(bx, my, box_w, fill, stroke);
+                out += &branch_label_text_bt(
+                    bx + BRANCH_LABEL_PADDING,
+                    my + 14.0,
+                    ff,
+                    &esc(&branch.name),
+                    text_color,
                 );
             }
         }
@@ -310,7 +256,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             .map(|b| b.index)
             .unwrap_or(0);
         let ci = color_index(branch_idx);
-        let default_stroke = GIT_COLORS[ci].1;
+        let default_stroke = vars.git_branch_colors[ci % vars.git_branch_colors.len()].1;
 
         for (pidx, parent_id) in commit.parents.iter().enumerate() {
             let p1 = match cpos_map.get(parent_id) {
@@ -323,7 +269,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                 if let Some(pc) = commit_by_id.get(parent_id.as_str()) {
                     let pci =
                         color_index(branch_pos_map.get(&pc.branch).map(|b| b.index).unwrap_or(0));
-                    GIT_COLORS[pci].1
+                    vars.git_branch_colors[pci % vars.git_branch_colors.len()].1
                 } else {
                     default_stroke
                 }
@@ -334,10 +280,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             let d = draw_arrow(p1, p2, dir, commit);
             // Reference uses CSS class .arrow{stroke-width:8;stroke-linecap:round;fill:none;}
             // so arrows are thick rounded lines without arrowhead markers.
-            out += &format!(
-                "<path d=\"{d}\" class=\"arrow arrow{ci}\" fill=\"none\" stroke=\"{s}\" stroke-width=\"8\" stroke-linecap=\"round\"/>",
-                d = d, s = arrow_stroke, ci = branch_idx % THEME_COLOR_LIMIT
-            );
+            out += &templates::commit_arrow(&d, THEME_COLOR_LIMIT, arrow_stroke, branch_idx);
         }
     }
     out += "</g>"; // commit-arrows
@@ -355,9 +298,9 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                 .map(|b| b.index)
                 .unwrap_or(0),
         );
-        let (fill, stroke) = GIT_COLORS[ci];
+        let (fill, stroke) = vars.git_branch_colors[ci % vars.git_branch_colors.len()];
         let sym = commit.custom_type.unwrap_or(commit.commit_type);
-        draw_commit_bullet(&mut out, commit, cp, sym, fill, stroke);
+        draw_commit_bullet(&mut out, commit, cp, sym, fill, stroke, primary_color);
     }
     out += "</g>"; // commit-bullets
 
@@ -369,8 +312,26 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                 Some(p) => *p,
                 None => continue,
             };
-            draw_commit_label(&mut out, commit, cp, dir, ff);
-            draw_commit_tags(&mut out, commit, cp, dir, ff);
+            draw_commit_label(
+                &mut out,
+                commit,
+                cp,
+                dir,
+                ff,
+                secondary_color,
+                vars.text_color,
+            );
+            draw_commit_tags(
+                &mut out,
+                commit,
+                cp,
+                dir,
+                ff,
+                primary_color,
+                vars.git_tag_bkg_stroke,
+                vars.git_tag_hole_color,
+                vars.xychart_axis_color,
+            );
         }
         out += "</g>"; // commit-labels
     }
@@ -556,72 +517,28 @@ fn draw_commit_bullet(
     sym: u8,
     fill: &str,
     stroke: &str,
+    primary_color: &str,
 ) {
     match sym {
         COMMIT_HIGHLIGHT => {
-            *out += &format!(
-                r#"<rect x="{:.1}" y="{:.1}" width="20" height="20" rx="2" fill="{}" stroke="{}" stroke-width="2"/>"#,
-                cp.x - 10.0,
-                cp.y - 10.0,
-                fill,
-                stroke
-            );
-            *out += &format!(
-                r#"<rect x="{:.1}" y="{:.1}" width="12" height="12" rx="1" fill="{}" stroke="{}" stroke-width="1"/>"#,
-                cp.x - 6.0,
-                cp.y - 6.0,
-                fill,
-                stroke
-            );
+            *out += &commit_highlight_outer(cp.x - 10.0, cp.y - 10.0, fill, stroke);
+            *out += &commit_highlight_inner(cp.x - 6.0, cp.y - 6.0, fill, stroke);
         }
         COMMIT_CHERRY_PICK => {
-            *out += &format!(
-                r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2"/>"#,
-                cp.x, cp.y, COMMIT_RADIUS, fill, stroke
-            );
-            *out += &format!(
-                "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"2.75\" fill=\"#fff\"/>",
-                cp.x - 3.0,
-                cp.y + 2.0
-            );
-            *out += &format!(
-                "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"2.75\" fill=\"#fff\"/>",
-                cp.x + 3.0,
-                cp.y + 2.0
-            );
-            *out += &format!(
-                "<line x1=\"{:.1}\" y1=\"{:.1}\" x2=\"{:.1}\" y2=\"{:.1}\" stroke=\"#fff\" stroke-width=\"1.5\"/>",
-                cp.x + 3.0, cp.y + 1.0, cp.x, cp.y - 5.0
-            );
-            *out += &format!(
-                "<line x1=\"{:.1}\" y1=\"{:.1}\" x2=\"{:.1}\" y2=\"{:.1}\" stroke=\"#fff\" stroke-width=\"1.5\"/>",
-                cp.x - 3.0, cp.y + 1.0, cp.x, cp.y - 5.0
-            );
+            *out += &commit_cherry_circle(cp.x, cp.y, COMMIT_RADIUS, fill, stroke);
+            *out += &commit_cherry_eye(cp.x - 3.0, cp.y + 2.0);
+            *out += &commit_cherry_eye(cp.x + 3.0, cp.y + 2.0);
+            *out += &commit_cherry_stem(cp.x + 3.0, cp.y + 1.0, cp.x, cp.y - 5.0);
+            *out += &commit_cherry_stem(cp.x - 3.0, cp.y + 1.0, cp.x, cp.y - 5.0);
         }
         _ => {
             // NORMAL, MERGE, REVERSE
-            *out += &format!(
-                r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="2" class="commit commit-{}"/>"#,
-                cp.x,
-                cp.y,
-                COMMIT_RADIUS,
-                fill,
-                stroke,
-                esc(&commit.id)
-            );
+            *out += &commit_circle(cp.x, cp.y, COMMIT_RADIUS, fill, stroke, &esc(&commit.id));
             if sym == COMMIT_MERGE {
-                *out += &format!(
-                    "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"6\" class=\"commit-merge commit{}\" stroke=\"#ECECFF\" fill=\"#ECECFF\"/>",
-                    cp.x, cp.y, esc(&commit.id)
-                );
+                *out += &commit_merge_inner(cp.x, cp.y, &esc(&commit.id), primary_color);
             }
             if sym == COMMIT_REVERSE {
-                let c = 5.0;
-                *out += &format!(
-                    "<path d=\"M {:.1},{:.1}L{:.1},{:.1}M{:.1},{:.1}L{:.1},{:.1}\" stroke=\"#fff\" stroke-width=\"2\"/>",
-                    cp.x - c, cp.y - c, cp.x + c, cp.y + c,
-                    cp.x - c, cp.y + c, cp.x + c, cp.y - c,
-                );
+                *out += &commit_reverse_cross(cp.x, cp.y, 5.0);
             }
         }
     }
@@ -635,6 +552,8 @@ fn draw_commit_label(
     cp: CommitPos,
     dir: DiagramDirection,
     ff: &str,
+    secondary_color: &str,
+    text_color: &str,
 ) {
     if commit.commit_type == COMMIT_CHERRY_PICK {
         return;
@@ -677,38 +596,16 @@ fn draw_commit_label(
             let inv_sqrt2 = std::f64::consts::FRAC_1_SQRT_2;
             let tx = -(rect_w / 2.0 + 15.7) * inv_sqrt2;
             let ty = (rect_w / 2.0 + 11.27) * inv_sqrt2;
-            *out += &format!(
-                "<g transform=\"translate({tx:.3},{ty:.3}) rotate(-45,{rx:.3},{ry:.3})\">",
-                tx = tx,
-                ty = ty,
-                rx = rx,
-                ry = ry
-            );
-            *out += &format!(
-                "<rect class=\"commit-label-bkg\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"15\"/>",
-                rect_x, rect_y, rect_w
-            );
-            *out += &format!(
-                "<text x=\"{:.3}\" y=\"{:.3}\" class=\"commit-label\">{}</text>",
-                text_x,
-                text_y,
-                esc(label)
-            );
+            *out += &commit_label_group_lr(tx, ty, rx, ry);
+            *out += &commit_label_bkg(rect_x, rect_y, rect_w, secondary_color);
+            *out += &commit_label_text(text_x, text_y, &esc(label), text_color);
             *out += "</g>";
         }
         DiagramDirection::TB | DiagramDirection::BT => {
             let lx = cp.x - COMMIT_RADIUS - label_w - 8.0;
             let ly = cp.y - label_h / 2.0;
-            *out += &format!(
-                "<rect class=\"commit-label-bkg\" x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\"/>",
-                lx, ly, label_w, label_h
-            );
-            *out += &format!(
-                "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#000021\" font-family=\"{ff}\" class=\"commit-label\">{}</text>",
-                lx, ly + label_h - 2.0,
-                esc(label),
-                ff = ff
-            );
+            *out += &commit_label_bkg_tb(lx, ly, label_w, label_h, secondary_color);
+            *out += &commit_label_text_tb(lx, ly + label_h - 2.0, ff, &esc(label), text_color);
         }
     }
 }
@@ -719,6 +616,10 @@ fn draw_commit_tags(
     cp: CommitPos,
     dir: DiagramDirection,
     ff: &str,
+    primary_color: &str,
+    tag_bkg_stroke: &str,
+    tag_hole_color: &str,
+    tag_text_color: &str,
 ) {
     if commit.tags.is_empty() {
         return;
@@ -748,58 +649,35 @@ fn draw_commit_tags(
                 let badge_bottom = cp.y - COMMIT_RADIUS - 1.7 - y_off;
                 let badge_top = badge_bottom - 15.0;
                 let badge_mid = badge_bottom - 7.5;
-                // 6-point polygon: bottom-pointer, top-pointer,
-                //   top-body-left, top-right, bottom-right, bottom-body-left
-                *out += &format!(
-                    "<polygon class=\"tag-label-bkg\" points=\"{x0:.3},{yb:.3} {x0:.3},{yt:.3} {bl:.3},{bt:.3} {br:.3},{bt:.3} {br:.3},{bb:.3} {bl:.3},{bb:.3}\" fill=\"#ECECFF\" stroke=\"hsl(240, 60%, 86.2745098039%)\" stroke-width=\"1\"/>",
-                    x0 = pointer_x,
-                    yb = badge_mid + 2.0,
-                    yt = badge_mid - 2.0,
-                    bl = body_left,
-                    br = body_right,
-                    bt = badge_top,
-                    bb = badge_bottom,
+                *out += &tag_badge_polygon(
+                    pointer_x,
+                    badge_mid + 2.0,
+                    badge_mid - 2.0,
+                    body_left,
+                    body_right,
+                    badge_top,
+                    badge_bottom,
+                    primary_color,
+                    tag_bkg_stroke,
                 );
-                // Hole circle at pointer_x + 4
-                *out += &format!(
-                    "<circle cy=\"{:.3}\" cx=\"{:.3}\" r=\"1.5\" class=\"tag-hole\" fill=\"#333\"/>",
-                    badge_mid,
-                    pointer_x + 4.0,
-                );
-                // Tag text: start at body_left + 4, baseline ≈ badge_mid + 3
-                *out += &format!(
-                    "<text y=\"{:.3}\" class=\"tag-label\" x=\"{:.3}\" font-size=\"10\" fill=\"#131300\" font-family=\"{ff}\">{}</text>",
+                *out += &tag_hole_circle(badge_mid, pointer_x + 4.0, tag_hole_color);
+                *out += &tag_text_lr(
                     badge_mid + 3.2,
                     body_left + 4.0,
-                    esc(tag),
-                    ff = ff
+                    ff,
+                    &esc(tag),
+                    tag_text_color,
                 );
             }
             DiagramDirection::TB | DiagramDirection::BT => {
                 let tx = cp.x + COMMIT_RADIUS + 8.0;
                 let ty = cp.y + y_off;
-                *out += &format!(
-                    "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"14\" rx=\"2\" fill=\"#ffffe0\" stroke=\"#cc9900\" stroke-width=\"1\"/>",
-                    tx - 2.0, ty - 7.0, tw + 4.0
-                );
-                *out += &format!(
-                    "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"10\" fill=\"#333\" font-family=\"{ff}\">{}</text>",
-                    tx, ty + 4.0, esc(tag),
-                    ff = ff
-                );
+                *out += &tag_badge_rect_tb(tx, ty, tw);
+                *out += &tag_text_tb(tx, ty + 4.0, ff, &esc(tag), tag_text_color);
             }
         }
         y_off += 20.0;
     }
-}
-
-// ── SVG helpers ───────────────────────────────────────────────────────────────
-
-fn build_defs(id: &str) -> String {
-    format!(
-        "<defs><marker id=\"{id}-arrowhead\" markerWidth=\"10\" markerHeight=\"7\" refX=\"10\" refY=\"3.5\" orient=\"auto\"><polygon points=\"0 0, 10 3.5, 0 7\" fill=\"#333\"/></marker></defs>",
-        id = id
-    )
 }
 
 #[cfg(test)]

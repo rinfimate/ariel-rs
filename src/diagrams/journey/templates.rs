@@ -1,4 +1,4 @@
-//! SVG template functions for the journey renderer.
+﻿//! SVG template functions for the journey renderer.
 //!
 //! Each function takes typed parameters and returns a `String`.
 //! No rendering logic lives here — only string formatting.
@@ -10,17 +10,6 @@
 pub use crate::diagrams::util::esc;
 
 // ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-pub fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}@keyframes edge-animation-frame{{from{{stroke-dashoffset:0;}}}}@keyframes dash{{to{{stroke-dashoffset:0;}}}}#{id} .mouth{{stroke:#666;}}#{id} line{{stroke:#333;}}#{id} .legend{{fill:#333;font-family:{ff};}}#{id} .label text{{fill:#333;}}#{id} .label{{color:#333;}}#{id} .face{{fill:#FFF8DC;stroke:#999;}}#{id} .task-type-0,#{id} .section-type-0{{fill:#ECECFF;}}#{id} .task-type-1,#{id} .section-type-1{{fill:#ffffde;}}#{id} .task-type-2,#{id} .section-type-2{{fill:hsl(304, 100%, 96.2745098039%);}}#{id} .task-type-3,#{id} .section-type-3{{fill:hsl(124, 100%, 93.5294117647%);}}#{id} .task-type-4,#{id} .section-type-4{{fill:hsl(176, 100%, 96.2745098039%);}}#{id} .task-type-5,#{id} .section-type-5{{fill:hsl(-4, 100%, 93.5294117647%);}}#{id} .task-type-6,#{id} .section-type-6{{fill:hsl(8, 100%, 96.2745098039%);}}#{id} .task-type-7,#{id} .section-type-7{{fill:hsl(188, 100%, 93.5294117647%);}}",
-        id = id, ff = ff,
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
@@ -29,11 +18,6 @@ pub fn svg_root(id: &str, max_w: i64, vw: i64, vh: i64, h: i64) -> String {
     format!(
         "<svg id=\"{id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" style=\"max-width: {max_w}px;\" viewBox=\"0 -25 {vw} {vh}\" preserveAspectRatio=\"xMinYMin meet\" height=\"{h}\" role=\"graphics-document document\" aria-roledescription=\"journey\">",
     )
-}
-
-/// Render the `<style>` block for a journey diagram.
-pub fn style_block(css: &str) -> String {
-    format!("<style>{css}</style>")
 }
 
 /// Render the arrowhead `<defs><marker>` definition.
@@ -55,8 +39,8 @@ pub fn actor_circle(cy: i64, pos: usize, color: &str) -> String {
 }
 
 /// Render an actor legend label (left panel).
-pub fn actor_label(ty: i64, name: &str) -> String {
-    format!("<text x=\"40\" y=\"{ty}\" class=\"legend\"><tspan x=\"50\">{name}</tspan></text>",)
+pub fn actor_label(ty: i64, name: &str, text_color: &str) -> String {
+    format!("<text x=\"40\" y=\"{ty}\" class=\"legend\" fill=\"{text_color}\" font-family=\"trebuchet ms, verdana, arial, sans-serif\"><tspan x=\"50\">{name}</tspan></text>",)
 }
 
 // ---------------------------------------------------------------------------
@@ -70,29 +54,23 @@ pub fn section_rect(x: i64, fill: &str, w: i64, h: i64, si: usize) -> String {
     )
 }
 
-/// Render the section header label with foreignObject + text fallback.
+/// Render the section header label as a native SVG `<text>`.
 #[allow(clippy::too_many_arguments)]
 pub fn section_label(
-    x: i64,
-    w: i64,
-    h: i64,
+    _x: i64,
+    _w: i64,
+    _h: i64,
     si: usize,
     tx: i64,
     ty: i64,
     label: &str,
     ff: &str,
+    text_fill: &str,
 ) -> String {
     format!(
-        "<switch>\
-            <foreignObject x=\"{x}\" y=\"50\" width=\"{w}\" height=\"{h}\" position=\"fixed\">\
-                <div class=\"journey-section section-type-{si}\" xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display: table; height: 100%; width: 100%;\">\
-                    <div class=\"label\" style=\"display: table-cell; text-align: center; vertical-align: middle;\">{label}</div>\
-                </div>\
-            </foreignObject>\
-            <text x=\"{tx}\" y=\"{ty}\" dominant-baseline=\"central\" alignment-baseline=\"central\" class=\"journey-section section-type-{si}\" style=\"text-anchor: middle; font-size: 14px; font-family: {ff};\">\
-                <tspan x=\"{tx}\" dy=\"0\">{label}</tspan>\
-            </text>\
-        </switch></g>",
+        "<text x=\"{tx}\" y=\"{ty}\" dominant-baseline=\"central\" alignment-baseline=\"central\" fill=\"{text_fill}\" class=\"journey-section section-type-{si}\" style=\"text-anchor: middle; font-size: 14px; font-family: {ff};\">\
+            <tspan x=\"{tx}\" dy=\"0\">{label}</tspan>\
+        </text></g>",
     )
 }
 
@@ -110,7 +88,7 @@ pub fn task_line(id: &str, i: usize, cx: i64, top: i64, bottom: i64) -> String {
 /// Render the face circle for a task score.
 pub fn face_circle(cx: i64, cy: i64) -> String {
     format!(
-        "<circle cx=\"{cx}\" cy=\"{cy}\" class=\"face\" r=\"15\" stroke-width=\"2\" overflow=\"visible\"></circle>",
+        "<circle cx=\"{cx}\" cy=\"{cy}\" class=\"face\" r=\"15\" fill=\"#FFF8DC\" stroke=\"#999\" stroke-width=\"2\" overflow=\"visible\"></circle>",
     )
 }
 
@@ -126,7 +104,7 @@ pub fn face_eyes(elx: i64, erx: i64, ey: i64) -> String {
 /// Render a smile mouth path for score >= 4.
 pub fn mouth_smile(tx: i64, ty: i64) -> String {
     format!(
-        "<path class=\"mouth\" d=\"M7.5,0A7.5,7.5,0,1,1,-7.5,0L-6.818,0A6.818,6.818,0,1,0,6.818,0Z\" transform=\"translate({tx},{ty})\"></path>",
+        "<path class=\"mouth\" stroke=\"#666\" fill=\"#666\" d=\"M7.5,0A7.5,7.5,0,1,1,-7.5,0L-6.818,0A6.818,6.818,0,1,0,6.818,0Z\" transform=\"translate({tx},{ty})\"></path>",
     )
 }
 
@@ -140,7 +118,7 @@ pub fn mouth_neutral(x1: i64, x2: i64, my: i64) -> String {
 /// Render a frown mouth path for score <= 2.
 pub fn mouth_frown(tx: i64, ty: i64) -> String {
     format!(
-        "<path class=\"mouth\" d=\"M-7.5,0A7.5,7.5,0,1,1,7.5,0L6.818,0A6.818,6.818,0,1,0,-6.818,0Z\" transform=\"translate({tx},{ty})\"></path>",
+        "<path class=\"mouth\" stroke=\"#666\" fill=\"#666\" d=\"M-7.5,0A7.5,7.5,0,1,1,7.5,0L6.818,0A6.818,6.818,0,1,0,-6.818,0Z\" transform=\"translate({tx},{ty})\"></path>",
     )
 }
 
@@ -158,29 +136,23 @@ pub fn actor_dot(cx: i64, cy: i64, pos: usize, color: &str, name: &str) -> Strin
     )
 }
 
-/// Render a task label with foreignObject + text fallback.
+/// Render a task label as a native SVG `<text>`.
 #[allow(clippy::too_many_arguments)]
 pub fn task_label(
-    x: i64,
-    y: i64,
-    w: i64,
-    h: i64,
+    _x: i64,
+    _y: i64,
+    _w: i64,
+    _h: i64,
     tx: i64,
     ty: i64,
     label: &str,
     ff: &str,
+    text_fill: &str,
 ) -> String {
     format!(
-        "<switch>\
-            <foreignObject x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" position=\"fixed\">\
-                <div class=\"task\" xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display: table; height: 100%; width: 100%;\">\
-                    <div class=\"label\" style=\"display: table-cell; text-align: center; vertical-align: middle;\">{label}</div>\
-                </div>\
-            </foreignObject>\
-            <text x=\"{tx}\" y=\"{ty}\" dominant-baseline=\"central\" alignment-baseline=\"central\" class=\"task\" style=\"text-anchor: middle; font-size: 14px; font-family: {ff};\">\
-                <tspan x=\"{tx}\" dy=\"0\">{label}</tspan>\
-            </text>\
-        </switch>",
+        "<text x=\"{tx}\" y=\"{ty}\" dominant-baseline=\"central\" alignment-baseline=\"central\" fill=\"{text_fill}\" class=\"task\" style=\"text-anchor: middle; font-size: 14px; font-family: {ff};\">\
+            <tspan x=\"{tx}\" dy=\"0\">{label}</tspan>\
+        </text>",
     )
 }
 
@@ -189,9 +161,9 @@ pub fn task_label(
 // ---------------------------------------------------------------------------
 
 /// Render the diagram title `<text>` element.
-pub fn title_text(tx: i64, _ff: &str, title: &str) -> String {
+pub fn title_text(tx: i64, _ff: &str, title: &str, text_fill: &str) -> String {
     format!(
-        r#"<text x="{tx}" font-size="4ex" font-weight="bold" y="25" fill="" font-family="&quot;trebuchet ms&quot;, verdana, arial, sans-serif">{title}</text>"#,
+        r##"<text x="{tx}" font-size="4ex" font-weight="bold" y="25" fill="{text_fill}" font-family="&quot;trebuchet ms&quot;, verdana, arial, sans-serif">{title}</text>"##,
     )
 }
 

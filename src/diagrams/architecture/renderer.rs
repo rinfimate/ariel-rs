@@ -17,7 +17,7 @@ use super::parser::{ArchDiagram, ArchEdge, ArchGroup, ArchJunction, ArchService,
 #[allow(unused_imports)]
 use super::templates::{
     self, edge_arrow, edge_label, edge_path, esc, fmt, group_icon_and_label, group_plain_label,
-    group_rect, service_group, service_icon_svg, service_label, style_block, svg_root,
+    group_rect, service_group, service_icon_svg, service_label, svg_root,
 };
 use crate::theme::Theme;
 use std::collections::HashMap;
@@ -300,7 +300,7 @@ fn icon_inner(name: &str) -> &'static str {
 
 pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
+    let line_color = vars.line_color;
     let layout = Layout::new(&diag.services, &diag.junctions, &diag.edges);
 
     // Compute extents of all node centres
@@ -313,7 +313,7 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
 
     // If no nodes, output a minimal SVG
     if node_ids.is_empty() {
-        return r#"<svg id="mermaid-svg" width="100%" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="graphics-document document" aria-roledescription="architecture"><g></g><g class="architecture-edges"></g><g class="architecture-services"></g><g class="architecture-groups"></g></svg>"#.to_string();
+        return r##"<svg id="mermaid-svg" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" viewBox="0 0 100 100" role="graphics-document document" aria-roledescription="architecture"><g></g><g class="architecture-edges"></g><g class="architecture-services"></g><g class="architecture-groups"></g></svg>"##.to_string();
     }
 
     // Node icon bounding boxes (without labels)
@@ -363,23 +363,20 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
     // SVG header
     out.push_str(&svg_root(vb_w, vb_x, vb_y, vb_w, vb_h));
 
-    // CSS (matches mermaid's architectureRenderer CSS)
-    out.push_str(&style_block(ff));
-
     // mermaid outputs an empty <g> first
     out.push_str("<g></g>");
 
     // Edges layer (BEFORE services in mermaid's output)
     out.push_str("<g class=\"architecture-edges\">");
     for edge in &diag.edges {
-        render_edge(edge, &layout, &mut out);
+        render_edge(edge, &layout, line_color, &mut out);
     }
     out.push_str("</g>");
 
     // Services layer
     out.push_str("<g class=\"architecture-services\">");
     for svc in &diag.services {
-        render_service(svc, &layout, &mut out);
+        render_service(svc, &layout, vars.text_color, &mut out);
     }
     out.push_str("</g>");
 
@@ -393,6 +390,7 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
                 &diag.services,
                 &diag.junctions,
                 &diag.groups,
+                vars.text_color,
                 &mut out,
             );
         }
@@ -411,6 +409,7 @@ fn render_group_recursive(
     services: &[ArchService],
     junctions: &[ArchJunction],
     groups: &[ArchGroup],
+    text_color: &str,
     out: &mut String,
 ) {
     let bb = match group_bbox(&grp.id, layout, services, junctions, groups) {
@@ -435,24 +434,30 @@ fn render_group_recursive(
             label_tx,
             label_ty,
             &esc(label),
+            text_color,
         ));
     } else {
         // No icon: plain label
         let label = grp.title.as_deref().unwrap_or(&grp.id);
-        out.push_str(&group_plain_label(bb.x + 10.0, bb.y + 18.0, &esc(label)));
+        out.push_str(&group_plain_label(
+            bb.x + 10.0,
+            bb.y + 18.0,
+            &esc(label),
+            text_color,
+        ));
     }
 
     // Recurse into child groups
     for child in groups {
         if child.in_group.as_deref() == Some(&grp.id) {
-            render_group_recursive(child, layout, services, junctions, groups, out);
+            render_group_recursive(child, layout, services, junctions, groups, text_color, out);
         }
     }
 }
 
 // ─── Service rendering ─────────────────────────────────────────────────────────
 
-fn render_service(svc: &ArchService, layout: &Layout, out: &mut String) {
+fn render_service(svc: &ArchService, layout: &Layout, text_color: &str, out: &mut String) {
     let centre = match layout.node_centre(&svc.id) {
         Some(c) => c,
         None => return,
@@ -465,7 +470,7 @@ fn render_service(svc: &ArchService, layout: &Layout, out: &mut String) {
     out.push_str(&service_group(&esc(&svc.id), icon_left, icon_top));
 
     // Label group below icon: translate(icon_half, icon_size) = translate(40, 80) in service-local
-    out.push_str(&service_label(&esc(label)));
+    out.push_str(&service_label(&esc(label), text_color));
 
     // Icon SVG (80×80 with blue background and white art)
     out.push_str("<g><g>");
@@ -480,7 +485,7 @@ fn render_service(svc: &ArchService, layout: &Layout, out: &mut String) {
 
 // ─── Edge rendering ────────────────────────────────────────────────────────────
 
-fn render_edge(edge: &ArchEdge, layout: &Layout, out: &mut String) {
+fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, out: &mut String) {
     let lc = match layout.node_centre(&edge.lhs_id) {
         Some(c) => c,
         None => return,
@@ -507,25 +512,30 @@ fn render_edge(edge: &ArchEdge, layout: &Layout, out: &mut String) {
     );
 
     out.push_str("<g>");
-    out.push_str(&edge_path(&path, &esc(&edge.lhs_id), &esc(&edge.rhs_id)));
+    out.push_str(&edge_path(
+        &path,
+        &esc(&edge.lhs_id),
+        &esc(&edge.rhs_id),
+        line_color,
+    ));
 
     // Arrow at rhs (into rhs node)
     if edge.rhs_into {
         let (pts, t) = arrow_at(&rc, &edge.rhs_dir, tx, ty);
-        out.push_str(&edge_arrow(&pts, &t));
+        out.push_str(&edge_arrow(&pts, &t, line_color));
     }
 
     // Arrow at lhs (into lhs node) — for bidirectional edges
     if edge.lhs_into {
         let (pts, t) = arrow_at(&lc, &edge.lhs_dir, sx, sy);
-        out.push_str(&edge_arrow(&pts, &t));
+        out.push_str(&edge_arrow(&pts, &t, line_color));
     }
 
     // Edge label
     if let Some(label) = &edge.title {
         let lx = (sx + tx) / 2.0;
         let ly = (sy + ty) / 2.0 - 6.0;
-        out.push_str(&edge_label(lx, ly, &esc(label)));
+        out.push_str(&edge_label(lx, ly, &esc(label), line_color));
     }
 
     out.push_str("</g>");

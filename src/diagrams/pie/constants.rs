@@ -44,26 +44,24 @@ pub const LEGEND_HORIZONTAL_OFFSET: f64 = 12.0 * LEGEND_RECT_SIZE; // 216.0
 // Colour palette
 // ---------------------------------------------------------------------------
 
-/// The 12-colour Mermaid default-theme pie palette, pre-computed as RGB strings.
-/// HSL values have been converted to their exact browser-rendered RGB equivalents
-/// so the renderer never needs to parse or convert color strings.
+/// The 10 theme-independent pie colors (indices 2–11 in Mermaid's palette).
 ///
-/// Conversion: hsl(h, s%, l%) → rgb(r, g, b) using standard HSL→RGB formula.
-///   pie1  = #ECECFF                       → rgb(236, 236, 255)
-///   pie2  = #ffffde                       → rgb(255, 255, 222)
-///   pie3  = hsl(80, 100%, 56.27%)         → rgb(143, 255, 0)   (approx browser)
-///   pie4  = hsl(240, 100%, 86.27%)        → rgb(184, 184, 255)
-///   pie5  = hsl(60, 100%, 63.53%)         → rgb(255, 255, 70)  (approx browser)
-///   pie6  = hsl(80, 100%, 76.27%)         → rgb(204, 255, 102) (approx browser)
-///   pie7  = hsl(300, 100%, 76.27%)        → rgb(255, 102, 255) (approx browser)
-///   pie8  = hsl(180, 100%, 56.27%)        → rgb(0, 255, 255)   (approx browser)
-///   pie9  = hsl(0, 100%, 56.27%)          → rgb(255, 51, 51)   (approx browser)
-///   pie10 = hsl(300, 100%, 56.27%)        → rgb(235, 28, 235)  (approx browser)
-///   pie11 = hsl(150, 100%, 56.27%)        → rgb(28, 235, 143)  (approx browser)
-///   pie12 = hsl(0, 100%, 66.27%)          → rgb(255, 102, 102) (approx browser)
-pub const PIE_COLORS: [&str; 12] = [
-    "#ECECFF",                        // pie1  — primaryColor
-    "#ffffde",                        // pie2  — secondaryColor
+/// Indices 0 and 1 (pie1/pie2) are theme-dependent: they map to
+/// `vars.primary_color` and `vars.secondary_color` respectively and are
+/// supplied by the renderer at runtime.
+///
+/// HSL values from Mermaid khroma-adjusted default theme (adjusted from #ECECFF):
+///   pie3  = hsl(80, 100%, 56.27%)         → khroma tertiary adjusted
+///   pie4  = hsl(240, 100%, 86.27%)        → primary+l-10
+///   pie5  = hsl(60, 100%, 63.53%)         → secondary+l-30
+///   pie6  = hsl(80, 100%, 76.27%)         → tertiary+l-20
+///   pie7  = hsl(300, 100%, 76.27%)        → primary+h+60+l-20
+///   pie8  = hsl(180, 100%, 56.27%)        → primary+h-60+l-40
+///   pie9  = hsl(0, 100%, 56.27%)          → primary+h+120+l-40
+///   pie10 = hsl(300, 100%, 56.27%)        → primary+h+60+l-40
+///   pie11 = hsl(150, 100%, 56.27%)        → primary+h-90+l-40
+///   pie12 = hsl(0, 100%, 66.27%)          → primary+h+120+l-30
+pub const PIE_COLORS_STATIC: [&str; 10] = [
     "hsl(80, 100%, 56.2745098039%)",  // pie3
     "hsl(240, 100%, 86.2745098039%)", // pie4
     "hsl(60, 100%, 63.5294117647%)",  // pie5

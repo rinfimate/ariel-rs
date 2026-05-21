@@ -20,10 +20,9 @@
 use super::constants::*;
 use super::parser::{Edge, Node, Shape, StateDiagram};
 use super::templates::{
-    composite_cluster, composite_inner_group, css, drop_shadow_filter, edge_label_empty,
-    edge_label_fo, edge_path, esc, fo_composite_label, fo_note_label, fo_state_label, markers,
-    node_choice, node_fork_join, node_note, node_rect, node_state_end, node_state_start,
-    note_cluster, text_composite_label, text_note_label, text_state_label,
+    composite_cluster, composite_inner_group, drop_shadow_filter, edge_label_empty, edge_path,
+    markers, node_choice, node_fork_join, node_note, node_rect, node_state_end, node_state_start,
+    note_cluster, text_composite_label, text_edge_label, text_note_label, text_state_label,
 };
 use crate::svg::curve_basis_path;
 use crate::text::measure;
@@ -33,29 +32,20 @@ use dagre_dgl_rs::layout::layout;
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
-pub fn render(diag: &StateDiagram, theme: Theme, use_foreign_object: bool) -> String {
+pub fn render(diag: &StateDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    render_level(
-        &diag.nodes,
-        &diag.edges,
-        &diag.direction,
-        &vars,
-        use_foreign_object,
-        SVG_ID,
-    )
+    render_level(&diag.nodes, &diag.edges, &diag.direction, &vars, SVG_ID)
 }
 
 // ─── Inner layout for composite states ───────────────────────────────────────
 
 /// Run dagre for the inner content of a composite state.
 /// Returns (inner_width, inner_height, inner_svg_string).
-#[allow(clippy::too_many_arguments)]
 fn run_inner_layout(
     nodes: &[Node],
     edges: &[Edge],
     direction: &str,
     vars: &ThemeVars,
-    use_foreign_object: bool,
     svg_id: &str,
     composite_label: &str,
     composite_dom_id: &str,
@@ -116,16 +106,13 @@ fn run_inner_layout(
     // Build inner SVG content (clusters, edges, nodes) without the <svg> wrapper
     let mut out = String::new();
 
-    let (label_tw, _) = measure(composite_label, FONT_SIZE);
-    let label_tw = label_tw * LABEL_SCALE;
-
     out.push_str("<g class=\"clusters\">");
     out.push_str(&composite_cluster(
         composite_dom_id,
         composite_label,
         graph_w,
         graph_h,
-        label_tw,
+        0.0,
         vars,
     ));
     out.push_str("</g>");
@@ -144,7 +131,7 @@ fn run_inner_layout(
                         1000 + ei,
                         &g,
                         nodes,
-                        vars.line_color,
+                        vars.state_transition_color,
                     ));
                 }
             }
@@ -165,16 +152,7 @@ fn run_inner_layout(
     for node in nodes {
         if let Some(n) = g.node_opt(&node.id) {
             if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                out.push_str(&render_node(
-                    node,
-                    cx,
-                    cy,
-                    n.width,
-                    n.height,
-                    vars,
-                    svg_id,
-                    use_foreign_object,
-                ));
+                out.push_str(&render_node(node, cx, cy, n.width, n.height, vars, svg_id));
             }
         }
     }
@@ -197,7 +175,6 @@ fn render_level(
     edges: &[Edge],
     direction: &str,
     vars: &ThemeVars,
-    use_foreign_object: bool,
     svg_id: &str,
 ) -> String {
     // Pre-compute inner layout for composite (group) nodes so we know their sizes
@@ -232,7 +209,6 @@ fn render_level(
                     &child_edges,
                     &node.dir,
                     vars,
-                    use_foreign_object,
                     svg_id,
                     &node.label,
                     &node.dom_id,
@@ -351,7 +327,9 @@ fn render_level(
             }
         }
     }
-    // Include edge points in bounds
+    // Include edge points and edge label extents in bounds.
+    // Edge labels are centered at the path midpoint; their half-width must be included so
+    // labels that overhang beyond node edges are fully contained in the viewBox.
     for edge in edges {
         let e = dagre_dgl_rs::graph::Edge::new(&edge.start, &edge.end);
         if let Some(lbl) = g.edge(&e) {
@@ -361,6 +339,15 @@ fn render_level(
                     max_x = max_x.max(p.x);
                     min_y = min_y.min(p.y);
                     max_y = max_y.max(p.y);
+                }
+                // If the edge has a visible label, include its horizontal extent.
+                if !edge.label.is_empty() && pts.len() >= 2 {
+                    let mid = midpoint(pts);
+                    let (tw_raw, _) = measure(&edge.label, FONT_SIZE);
+                    let tw = (tw_raw * LABEL_SCALE).max(20.0);
+                    let half_tw = tw / 2.0;
+                    min_x = min_x.min(mid.0 - half_tw);
+                    max_x = max_x.max(mid.0 + half_tw);
                 }
             }
         }
@@ -379,11 +366,8 @@ fn render_level(
     // Build SVG
     let mut out = String::new();
     out.push_str(&super::templates::svg_root(svg_id, vb_x, vb_y, vb_w, vb_h));
-    out.push_str("<style>");
-    out.push_str(&css(svg_id, vars));
-    out.push_str("</style>");
     out.push_str("<g>");
-    out.push_str(&markers(svg_id));
+    out.push_str(&markers(svg_id, vars.state_transition_color));
     out.push_str("</g>");
     out.push_str("<g class=\"root\">");
 
@@ -485,7 +469,7 @@ fn render_level(
                         ei,
                         &g,
                         nodes,
-                        vars.line_color,
+                        vars.state_transition_color,
                     ));
                 }
             }
@@ -504,17 +488,17 @@ fn render_level(
                     let (tw_raw, _) = measure(&edge.label, FONT_SIZE);
                     let tw = (tw_raw * LABEL_SCALE).max(20.0);
                     let edge_id = format!("{}-edge{}", svg_id, ei);
-                    if use_foreign_object {
-                        out.push_str(&edge_label_fo(
-                            mid.0,
-                            mid.1,
-                            -tw / 2.0,
-                            -12.0,
-                            tw,
-                            &edge_id,
-                            &esc(&edge.label),
-                        ));
-                    }
+                    out.push_str(&text_edge_label(
+                        mid.0,
+                        mid.1,
+                        -tw / 2.0,
+                        -12.0,
+                        tw,
+                        &edge_id,
+                        &edge.label,
+                        vars.primary_text,
+                        vars.edge_label_bg,
+                    ));
                 } else {
                     out.push_str(edge_label_empty());
                 }
@@ -531,16 +515,7 @@ fn render_level(
         }
         if let Some(n) = g.node_opt(&node.id) {
             if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                out.push_str(&render_node(
-                    node,
-                    cx,
-                    cy,
-                    n.width,
-                    n.height,
-                    vars,
-                    svg_id,
-                    use_foreign_object,
-                ));
+                out.push_str(&render_node(node, cx, cy, n.width, n.height, vars, svg_id));
             }
         }
     }
@@ -608,47 +583,28 @@ fn render_node(
     h: f64,
     vars: &ThemeVars,
     _svg_id: &str,
-    use_foreign_object: bool,
 ) -> String {
     let dom_id = &node.dom_id;
     match node.shape {
         // stateStart.ts: rc.circle(0,0,14, solidStateFill(lineColor)) → fill=lineColor, r=7
-        Shape::StateStart => node_state_start(dom_id, cx, cy, vars.line_color),
+        Shape::StateStart => node_state_start(dom_id, cx, cy, vars),
         // stateEnd.ts: outer rc.circle(0,0,14, stroke=lineColor,sw=2) fill=primary_color
         //              inner rc.circle(0,0,5, fill=stateBorder/primary_border) r=2.5
         Shape::StateEnd => node_state_end(dom_id, cx, cy, vars),
         Shape::ForkJoin => node_fork_join(dom_id, cx, cy, w, h, vars.line_color),
         Shape::Choice => node_choice(dom_id, cx, cy, vars),
         Shape::Note => {
-            let (tw, _) = measure(&node.label, FONT_SIZE);
-            let tw = tw * LABEL_SCALE;
-            let label_html = if use_foreign_object {
-                fo_note_label(&node.label, tw)
-            } else {
-                text_note_label(&node.label)
-            };
-            node_note(dom_id, cx, cy, w, h, &node.label, &label_html)
+            let label_html = text_note_label(&node.label, vars.note_text_color);
+            node_note(dom_id, cx, cy, w, h, &node.label, &label_html, vars)
         }
         Shape::Rect | Shape::RectWithTitle | Shape::Divider => {
-            let (tw, _) = measure(&node.label, FONT_SIZE);
-            let tw = tw * LABEL_SCALE;
-            let label_html = if use_foreign_object {
-                fo_state_label(&node.label, tw)
-            } else {
-                text_state_label(&node.label, vars.primary_text)
-            };
+            let label_html = text_state_label(&node.label, vars.primary_text);
             node_rect(dom_id, cx, cy, w, h, vars, &label_html)
         }
         Shape::RoundedWithTitle => {
             // Composite state — simplified rect with title
             let hh = h / 2.0;
-            let (tw, _) = measure(&node.label, FONT_SIZE);
-            let tw = tw * LABEL_SCALE;
-            let label_html = if use_foreign_object {
-                fo_composite_label(&node.label, tw, hh)
-            } else {
-                text_composite_label(&node.label, hh)
-            };
+            let label_html = text_composite_label(&node.label, hh);
             node_rect(dom_id, cx, cy, w, h, vars, &label_html)
         }
         Shape::NoteGroup => String::new(), // rendered in clusters
@@ -671,8 +627,10 @@ fn render_edge(
     let edge_id = format!("{}-{}-{}", svg_id, edge.start, edge.end);
     let is_note = edge.classes.contains("note-edge");
     let dasharray = if is_note { "5" } else { "0" };
-    let marker = if is_note || edge.arrowhead == "none" {
+    let marker = if edge.arrowhead == "none" {
         String::new()
+    } else if is_note {
+        format!("url(#{svg_id}_stateDiagram-barbEnd)")
     } else {
         format!("url(#{svg_id}-dependencyEnd)")
     };
@@ -715,7 +673,7 @@ mod tests {
     fn snapshot_default_theme() {
         let input = "stateDiagram-v2\n    Still --> Moving\n    Moving --> Still\n    Moving --> Crash\n    Crash --> [*]";
         let diag = super::super::parser::parse(input);
-        let svg = render(&diag, Theme::Default, true);
+        let svg = render(&diag, Theme::Default);
         insta::assert_snapshot!(svg);
     }
 }

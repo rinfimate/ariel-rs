@@ -20,18 +20,10 @@ pub fn fmt_floor(v: f64) -> String {
 /// Render the outer SVG root element for a venn diagram.
 pub fn svg_root(id: &str, width: &str, height: &str) -> String {
     format!(
-        r#"<svg id="{id}" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="venn">"#,
+        r##"<svg id="{id}" xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="venn">"##,
         id = id,
         w = width,
         h = height,
-    )
-}
-
-/// Render the embedded `<style>` block for a venn diagram (faithful port of vennRenderer styles).
-pub fn style_block_venn(font_family: &str) -> String {
-    format!(
-        "<style>.venn-title{{font-family:{ff};}} .venn-circle text{{font-family:{ff};}} .venn-intersection text{{font-family:{ff};}} .venn-text-node{{font-family:{ff};}}</style>",
-        ff = font_family,
     )
 }
 
@@ -41,13 +33,20 @@ pub fn style_block_venn(font_family: &str) -> String {
 
 /// Render the diagram title `<text>` element matching vennRenderer.ts output.
 /// In the reference: x="50%", y = 32*scale, font-size = "{32*scale}px", style fill.
-pub fn title_text_venn(y: &str, scale: f64, text_color: &str, text: &str) -> String {
+pub fn title_text_venn(
+    y: &str,
+    scale: f64,
+    text_color: &str,
+    text: &str,
+    font_family: &str,
+) -> String {
     let fs = format!("{}px", fmt_f(32.0 * scale));
     format!(
-        r#"<text class="venn-title" font-size="{fs}" text-anchor="middle" dominant-baseline="middle" x="50%" y="{y}" style="fill: {tc};">{text}</text>"#,
+        r##"<text class="venn-title" font-size="{fs}" text-anchor="middle" dominant-baseline="middle" x="50%" y="{y}" style="fill: {tc}; font-family: {ff};">{text}</text>"##,
         fs = fs,
         y = y,
         tc = text_color,
+        ff = font_family,
         text = text,
     )
 }
@@ -58,7 +57,7 @@ pub fn title_text_venn(y: &str, scale: f64, text_color: &str, text: &str) -> Str
 
 /// Render the opening `<g>` element for the main translate group.
 pub fn main_group_open(ty: &str) -> String {
-    format!(r#"<g transform="translate(0, {ty})">"#)
+    format!(r##"<g transform="translate(0, {ty})">"##)
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +66,7 @@ pub fn main_group_open(ty: &str) -> String {
 
 /// Render the opening `<g>` for a venn-circle set group.
 pub fn venn_circle_group_open(set_index: usize, set_id: &str) -> String {
-    format!(r#"<g class="venn-area venn-circle venn-set-{set_index}" data-venn-sets="{set_id}">"#)
+    format!(r##"<g class="venn-area venn-circle venn-set-{set_index}" data-venn-sets="{set_id}">"##)
 }
 
 /// Render the `<path>` element for a venn circle area.
@@ -79,20 +78,26 @@ pub fn venn_circle_path(
     stroke_width: &str,
 ) -> String {
     format!(
-        r#"<path d="{d}" style="fill-opacity: {fill_opacity}; fill: {fill}; stroke: {stroke}; stroke-width: {stroke_width}; stroke-opacity: 0.95;"></path>"#
+        r##"<path d="{d}" style="fill-opacity: {fill_opacity}; fill: {fill}; stroke: {stroke}; stroke-width: {stroke_width}; stroke-opacity: 0.95;"></path>"##
     )
 }
 
 /// Render the `<text>` element for a venn set label.
-pub fn venn_set_label_open(tx: &str, ty: &str, text_color: &str, font_size: &str) -> String {
+pub fn venn_set_label_open(
+    tx: &str,
+    ty: &str,
+    text_color: &str,
+    font_size: &str,
+    font_family: &str,
+) -> String {
     format!(
-        r#"<text class="label" text-anchor="middle" dy=".35em" x="{tx}" y="{ty}" style="fill: {text_color}; font-size: {font_size}px;">"#
+        r##"<text class="label" text-anchor="middle" dy=".35em" x="{tx}" y="{ty}" style="fill: {text_color}; font-size: {font_size}px; font-family: {font_family};">"##
     )
 }
 
 /// Render a `<tspan>` inside a venn label.
 pub fn venn_label_tspan(tx: &str, ty: &str, label: &str) -> String {
-    format!(r#"<tspan x="{tx}" y="{ty}" dy="0.35em">{label}</tspan>"#)
+    format!(r##"<tspan x="{tx}" y="{ty}" dy="0.35em">{label}</tspan>"##)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +106,12 @@ pub fn venn_label_tspan(tx: &str, ty: &str, label: &str) -> String {
 
 /// Render the opening `<g>` for a venn-intersection group.
 pub fn venn_intersection_group_open(data_venn: &str) -> String {
-    format!(r#"<g class="venn-area venn-intersection" data-venn-sets="{data_venn}">"#)
+    format!(r##"<g class="venn-area venn-intersection" data-venn-sets="{data_venn}">"##)
 }
 
 /// Render the `<path>` element for a venn intersection area.
 pub fn venn_intersection_path(d: &str, fill_opacity: &str, fill: &str) -> String {
-    format!(r#"<path d="{d}" style="fill-opacity: {fill_opacity}; fill: {fill};"></path>"#)
+    format!(r##"<path d="{d}" style="fill-opacity: {fill_opacity}; fill: {fill};"></path>"##)
 }
 
 fn fmt_f(v: f64) -> String {

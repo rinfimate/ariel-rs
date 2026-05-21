@@ -16,9 +16,13 @@ pub const SECTION_HEIGHT: f64 = 50.0;
 /// Fixed left margin for the diagram (px). Not expanded for actor label widths.
 pub const LEFT_MARGIN: f64 = 150.0;
 
-/// Font size used in the journey diagram (px).
+/// Font size used in the journey diagram (px). Matches defaultConfig.journey.taskFontSize = 14.
 #[allow(dead_code)]
 pub const FONT_SIZE: f64 = 14.0;
+
+/// Font family for task label text. Matches defaultConfig.journey.taskFontFamily.
+#[allow(dead_code)]
+pub const TASK_FONT_FAMILY: &str = r#""Open Sans", sans-serif"#;
 
 // ---------------------------------------------------------------------------
 // Layout — vertical positions
@@ -46,17 +50,35 @@ pub const ACTOR_LEGEND_START_Y: f64 = 60.0;
 /// Vertical step between consecutive actor entries in the legend (px).
 pub const ACTOR_LEGEND_STEP: f64 = 20.0;
 
-/// Colour palette for actor circles. Matches Mermaid `actorColours` default.
-pub const ACTOR_COLOURS: [&str; 4] = ["#8FBC8F", "#7CFC00", "#FF8C00", "#4169E1"];
+/// Actor legend circle colours. Matches defaultConfig.journey.actorColours exactly.
+pub const ACTOR_COLOURS: [&str; 6] = [
+    "#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0",
+];
 
 // ---------------------------------------------------------------------------
 // Section header colours
 // ---------------------------------------------------------------------------
 
-/// Background fill colours for section header rectangles (dark colours matching reference).
-pub const SECTION_FILLS: [&str; 4] = [
-    "#191970", // midnight blue  (section-type-0)
-    "#8B008B", // dark magenta   (section-type-1)
-    "#4B0082", // indigo         (section-type-2)
-    "#006400", // dark green     (section-type-3)
+/// Section header fill colours. Matches defaultConfig.journey.sectionFills exactly.
+#[allow(dead_code)]
+pub const SECTION_FILLS: [&str; 7] = [
+    "#191970", // midnight blue
+    "#8B008B", // dark magenta
+    "#4B0082", // indigo
+    "#2F4F4F", // dark slate gray
+    "#800000", // maroon
+    "#8B4513", // saddle brown
+    "#00008B", // dark blue
+];
+
+/// Fallback fill colours for task boxes — types 0 and 1 are overridden at render time
+/// with vars.primary_color and vars.secondary_color respectively.
+pub const TASK_FILLS: [&str; 7] = [
+    "#ECECFF",                        // type-0 (overridden by primary_color)
+    "#ffffde",                        // type-1 (overridden by secondary_color)
+    "hsl(304, 100%, 96.2745098039%)", // type-2
+    "hsl(124, 100%, 93.5294117647%)", // type-3
+    "hsl(176, 100%, 96.2745098039%)", // type-4
+    "hsl(-4, 100%, 93.5294117647%)",  // type-5
+    "hsl(8, 100%, 96.2745098039%)",   // type-6
 ];

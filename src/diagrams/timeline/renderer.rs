@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::{TimelineDiagram, TimelineTask};
-use super::templates::{self, build_style, esc, text_tspan};
+use super::templates::{self, esc, node_text_element, text_tspan};
 /// Faithful Rust port of Mermaid's timelineRenderer.ts + svgDraw.js.
 ///
 /// Layout algorithm (mirrors the JS draw() function exactly):
@@ -81,18 +81,82 @@ use crate::theme::Theme;
 //   cScale10 text: black   (180° cyan = light)
 //   cScale11 text: black   (210° blue = medium)
 
-fn section_fill(idx: usize) -> &'static str {
-    SECTION_STYLES[idx % SECTION_STYLES.len()].fill
+const DARK_FILLS: &[&str] = &[
+    "#1f2020", "#0b0000", "#4d1037", "#3f5258", "#4f2f1b", "#6e0a0a", "#3b0048", "#995a01",
+    "#154706", "#161722", "#00296f", "#01629c",
+];
+const DARK_LINES: &[&str] = &[
+    "#e0dfdf", "#f4ffff", "#b2efc8", "#c0ada7", "#b0d0e4", "#91f5f5", "#c4ffb7", "#66a5fe",
+    "#eab8f9", "#e9e8dd", "#ffd690", "#fe9d63",
+];
+
+const FOREST_FILLS: &[&str] = &[
+    "hsl(78.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(98.961038961, 100%, 74.9019607843%)",
+    "hsl(78.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(108.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(138.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(168.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(198.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(228.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(288.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(348.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(18.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(48.1578947368, 58.4615384615%, 64.5098039216%)",
+];
+const FOREST_LINES: &[&str] = &[
+    "hsl(258.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(278.961038961, 100%, 74.9019607843%)",
+    "hsl(258.1578947368, 58.4615384615%, 74.5098039216%)",
+    "hsl(288.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(318.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(348.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(18.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(48.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(108.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(168.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(198.1578947368, 58.4615384615%, 64.5098039216%)",
+    "hsl(228.1578947368, 58.4615384615%, 64.5098039216%)",
+];
+
+const NEUTRAL_FILLS: &[&str] = &[
+    "#555", "#F4F4F4", "#555", "#BBB", "#777", "#999", "#DDD", "#FFF", "#DDD", "#BBB", "#999",
+    "#777",
+];
+const NEUTRAL_LINES: &[&str] = &[
+    "#aaaaaa", "#0b0b0b", "#aaaaaa", "#444444", "#888888", "#666666", "#222222", "#000000",
+    "#222222", "#444444", "#666666", "#888888",
+];
+const NEUTRAL_TEXTS: &[&str] = &[
+    "#F4F4F4", "#333", "#F4F4F4", "#333", "#333", "#333", "#333", "#333", "#333", "#333", "#333",
+    "#333",
+];
+
+fn section_fill(idx: usize, theme: Theme) -> &'static str {
+    match theme {
+        Theme::Dark => DARK_FILLS[idx % DARK_FILLS.len()],
+        Theme::Forest => FOREST_FILLS[idx % FOREST_FILLS.len()],
+        Theme::Neutral => NEUTRAL_FILLS[idx % NEUTRAL_FILLS.len()],
+        _ => SECTION_STYLES[idx % SECTION_STYLES.len()].fill,
+    }
 }
 
-#[allow(dead_code)]
-fn section_line(idx: usize) -> &'static str {
-    SECTION_STYLES[idx % SECTION_STYLES.len()].line
+fn section_line(idx: usize, theme: Theme) -> &'static str {
+    match theme {
+        Theme::Dark => DARK_LINES[idx % DARK_LINES.len()],
+        Theme::Forest => FOREST_LINES[idx % FOREST_LINES.len()],
+        Theme::Neutral => NEUTRAL_LINES[idx % NEUTRAL_LINES.len()],
+        _ => SECTION_STYLES[idx % SECTION_STYLES.len()].line,
+    }
 }
 
-#[allow(dead_code)]
-fn section_text(idx: usize) -> &'static str {
-    SECTION_STYLES[idx % SECTION_STYLES.len()].text
+fn section_text(idx: usize, theme: Theme) -> &'static str {
+    match theme {
+        Theme::Dark => "lightgrey",
+        Theme::Forest => "black",
+        Theme::Neutral => NEUTRAL_TEXTS[idx % NEUTRAL_TEXTS.len()],
+        _ => SECTION_STYLES[idx % SECTION_STYLES.len()].text,
+    }
 }
 
 // ── Node height computation ────────────────────────────────────────────────────
@@ -193,14 +257,16 @@ fn node_bg_path(width: f64, height: f64) -> String {
 /// Returns (svg_string, rendered_height).
 /// Mirrors drawNode() in svgDraw.js.
 ///
-/// Styling: NO inline fill/stroke on path/line — CSS class selectors handle colors,
-/// exactly as Mermaid's reference output does.
+/// Styling: fill/stroke are applied inline; text fill is set explicitly so
+/// it matches regardless of whether a CSS stylesheet is present.
 fn draw_node(
     label: &str,
     section_idx: usize,
     node_id: &mut usize,
     max_height: f64,
     _is_event: bool,
+    theme: Theme,
+    shadow_filter: &str,
 ) -> (String, f64) {
     let width = RENDERED_WIDTH;
     let height = virtual_node_height(label, max_height);
@@ -215,17 +281,25 @@ fn draw_node(
     let text_ty = 10.0;
     let text_tx = width / 2.0;
 
-    let tspans = build_tspans(label, NODE_WIDTH);
+    let text_color = section_text(section_idx, theme);
+    let tspans = build_tspans(label, NODE_WIDTH, text_color);
 
     let mut svg = String::new();
+    let fill = section_fill(section_idx, theme);
+    let line = section_line(section_idx, theme);
     svg.push_str(&templates::node_group_open(section_class));
     svg.push_str("  <g>\n");
-    // No inline style — CSS class `.section-N path` sets fill/stroke
-    svg.push_str(&templates::node_bg_path(id_val, &path_d));
+    svg.push_str(&templates::node_bg_path(
+        id_val,
+        &path_d,
+        fill,
+        shadow_filter,
+    ));
     svg.push_str(&templates::node_separator_line(
         section_class,
         height,
         width,
+        line,
     ));
     svg.push_str("  </g>\n");
     svg.push_str(&templates::node_text_group(text_tx, text_ty, &tspans));
@@ -236,7 +310,8 @@ fn draw_node(
 
 /// Build SVG text element with tspan wrapping for the given text.
 /// Uses 3-space joining to match Mermaid's wrap() whitespace token behaviour.
-fn build_tspans(text: &str, max_width: f64) -> String {
+/// `fill` sets the text fill color on the outer `<text>` element.
+fn build_tspans(text: &str, max_width: f64, fill: &str) -> String {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.is_empty() {
         return String::new();
@@ -267,31 +342,28 @@ fn build_tspans(text: &str, max_width: f64) -> String {
         lines.push(current_words.join(" "));
     }
 
-    let mut out = String::new();
-    out.push_str("<text dy=\"1em\" alignment-baseline=\"middle\" dominant-baseline=\"middle\" text-anchor=\"middle\">");
+    let mut tspans = String::new();
     for (i, line) in lines.iter().enumerate() {
         let dy = if i == 0 {
             "1em".to_string()
         } else {
             format!("{:.1}em", line_height_em)
         };
-        out.push_str(&text_tspan(&dy, &esc(line)));
+        tspans.push_str(&text_tspan(&dy, &esc(line)));
     }
-    out.push_str("</text>");
-    out
+    node_text_element(&tspans, fill)
 }
 
 // ── Arrowhead marker ──────────────────────────────────────────────────────────
 
-fn arrowhead_marker(id: &str) -> String {
-    templates::arrowhead_marker(id)
+fn arrowhead_marker(id: &str, line_color: &str, shadow_color: &str) -> String {
+    templates::arrowhead_marker(id, line_color, shadow_color)
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
 
 pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
     let diagram_id = DIAGRAM_ID;
     let mut node_id: usize = 0;
 
@@ -334,7 +406,13 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
 
     // ── SVG body ─────────────────────────────────────────────────────────────
     let mut parts: Vec<String> = Vec::new();
-    parts.push(arrowhead_marker(diagram_id));
+    let shadow_color = if matches!(theme, Theme::Dark) {
+        "rgba(255,255,255,0.15)"
+    } else {
+        "rgba(185,185,185,1)"
+    };
+    let shadow_filter = format!("url(#{}-dropshadow)", diagram_id);
+    parts.push(arrowhead_marker(diagram_id, vars.line_color, shadow_color));
 
     let mut master_x = MASTER_START_X;
     let mut master_y = MASTER_START_Y;
@@ -357,6 +435,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
                 sec_h,
                 master_x,
                 section_begin_y,
+                theme,
             );
             parts.push(sec_svg);
 
@@ -372,6 +451,9 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
                 diagram_id,
                 &mut node_id,
                 false,
+                vars.line_color,
+                theme,
+                &shadow_filter,
             );
             parts.extend(task_svgs);
 
@@ -391,6 +473,9 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
             diagram_id,
             &mut node_id,
             true,
+            vars.line_color,
+            theme,
+            &shadow_filter,
         );
         parts.extend(task_svgs);
         master_x += 200.0 * tasks.len() as f64;
@@ -419,13 +504,14 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
         depth_y,
         activity_line_x2,
         diagram_id,
+        vars.line_color,
     ));
 
     // ── Title ─────────────────────────────────────────────────────────────────
     // Mirrors JS: title.x = box.width / 2 - LEFT_MARGIN (for non-neo look)
     let title_x = box_width_before_line / 2.0 - LEFT_MARGIN;
     let title_svg = if let Some(title) = &diag.title {
-        templates::title_text(title_x, &esc(title))
+        templates::title_text(title_x, &esc(title), vars.text_color)
     } else {
         String::new()
     };
@@ -453,9 +539,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
     // vb_h = (connector_y2 - svgBounds.y) + 2*padding = (connector_y2 + 10) + 100 = connector_y2 + 110
     let vb_h = connector_y2 + 110.0;
 
-    let style = build_style(diagram_id, ff);
-
-    let mut svg = templates::svg_root(diagram_id, vb_w, vb_x, vb_y, vb_w, vb_h, &style);
+    let mut svg = templates::svg_root(diagram_id, vb_w, vb_x, vb_y, vb_w, vb_h);
 
     for part in &parts {
         svg.push_str(part);
@@ -480,9 +564,10 @@ fn draw_section_box(
     height: f64,
     x: f64,
     y: f64,
+    theme: Theme,
 ) -> String {
-    let color = section_fill(section_idx);
-    let text_color = section_text(section_idx);
+    let color = section_fill(section_idx, theme);
+    let text_color = section_text(section_idx, theme);
     let r = NODE_CORNER_R;
     let rd = NODE_CORNER_R;
     let path = format!(
@@ -499,7 +584,7 @@ fn draw_section_box(
 
     // Bottom line class mirrors the node-line CSS (e.g. node-line--1, node-line-0)
     let line_class_idx = (section_idx % 12) as i64 - 1;
-    let line_color = section_line(section_idx);
+    let line_color = section_line(section_idx, theme);
 
     templates::section_box(
         x,
@@ -531,6 +616,9 @@ fn draw_tasks(
     diagram_id: &str,
     node_id: &mut usize,
     is_without_sections: bool,
+    line_color: &str,
+    theme: Theme,
+    shadow_filter: &str,
 ) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     let mut section_color_idx = section_color_start;
@@ -542,6 +630,8 @@ fn draw_tasks(
             node_id,
             max_task_height,
             false,
+            theme,
+            &shadow_filter,
         );
 
         parts.push(templates::task_wrapper(master_x, master_y, &task_svg));
@@ -555,7 +645,7 @@ fn draw_tasks(
             let line_y2 = master_y + max_task_height + 100.0 + max_event_line_length + 100.0;
 
             parts.push(templates::connector_line(
-                line_x, line_y1, line_y2, diagram_id,
+                line_x, line_y1, line_y2, diagram_id, line_color,
             ));
 
             // Events: JS does masterY += 100, passes to drawEvents, which does another += 100
@@ -568,6 +658,8 @@ fn draw_tasks(
                 event_start_y,
                 node_id,
                 &mut parts,
+                theme,
+                shadow_filter,
             );
         }
 
@@ -591,12 +683,22 @@ fn draw_events_append(
     start_y: f64,
     node_id: &mut usize,
     parts: &mut Vec<String>,
+    theme: Theme,
+    shadow_filter: &str,
 ) {
     // JS drawEvents: masterY = masterY + 100 at start
     let mut current_y = start_y + 100.0;
 
     for event in events {
-        let (event_svg, event_h) = draw_node(event, section_idx, node_id, 50.0, true);
+        let (event_svg, event_h) = draw_node(
+            event,
+            section_idx,
+            node_id,
+            50.0,
+            true,
+            theme,
+            shadow_filter,
+        );
 
         parts.push(templates::event_wrapper(master_x, current_y, &event_svg));
 

@@ -63,15 +63,40 @@ pub enum SeqItem {
     Message(Message),
     Note(NoteItem),
     LoopStart(String),
-    LoopEnd,
     AltStart(String),
     AltElse(String),
     OptStart(String),
     ParStart(String),
     ParAnd(String),
+    CriticalStart(String),
+    CriticalOption(String),
+    BreakStart(String),
+    RectStart(String),
+    BoxStart {
+        label: String,
+        #[allow(dead_code)]
+        color: Option<String>,
+    },
+    /// Generic block-closer for all: loop/alt/opt/par/critical/break/box/rect
+    BlockEnd,
     Activate(String),
     Deactivate(String),
-    AutoNumber,
+    AutoNumber {
+        #[allow(dead_code)]
+        start: Option<u32>,
+        #[allow(dead_code)]
+        step: Option<u32>,
+        #[allow(dead_code)]
+        enabled: bool,
+    },
+    Link {
+        #[allow(dead_code)]
+        actor: String,
+        #[allow(dead_code)]
+        title: String,
+        #[allow(dead_code)]
+        url: String,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -81,10 +106,25 @@ pub struct SequenceDiagram {
 
 pub fn parse(input: &str) -> crate::error::ParseResult<SequenceDiagram> {
     let mut diag = SequenceDiagram::default();
+    let mut in_yaml = false;
 
     for line in input.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("sequenceDiagram") || trimmed.starts_with("%%")
+
+        // YAML frontmatter
+        if trimmed == "---" {
+            in_yaml = !in_yaml;
+            continue;
+        }
+        if in_yaml {
+            continue;
+        }
+
+        if trimmed.is_empty()
+            || trimmed.starts_with("sequenceDiagram")
+            || trimmed.starts_with("%%")
+            || trimmed.starts_with("accTitle")
+            || trimmed.starts_with("accDescr")
         {
             continue;
         }
@@ -114,9 +154,38 @@ fn parse_line(s: &str) -> Option<SeqItem> {
         return Some(SeqItem::Deactivate(rest.trim().to_string()));
     }
 
-    // autonumber
+    // autonumber / autonumber N / autonumber off
     if s == "autonumber" {
-        return Some(SeqItem::AutoNumber);
+        return Some(SeqItem::AutoNumber {
+            start: None,
+            step: None,
+            enabled: true,
+        });
+    }
+    if s == "autonumber off" {
+        return Some(SeqItem::AutoNumber {
+            start: None,
+            step: None,
+            enabled: false,
+        });
+    }
+    if let Some(rest) = s.strip_prefix("autonumber ") {
+        let rest = rest.trim();
+        if rest == "off" {
+            return Some(SeqItem::AutoNumber {
+                start: None,
+                step: None,
+                enabled: false,
+            });
+        }
+        let parts: Vec<&str> = rest.split_whitespace().collect();
+        let start = parts.first().and_then(|s| s.parse().ok());
+        let step = parts.get(1).and_then(|s| s.parse().ok());
+        return Some(SeqItem::AutoNumber {
+            start,
+            step,
+            enabled: true,
+        });
     }
 
     // Note
@@ -128,13 +197,19 @@ fn parse_line(s: &str) -> Option<SeqItem> {
     if let Some(rest) = s.strip_prefix("loop ") {
         return Some(SeqItem::LoopStart(rest.trim().to_string()));
     }
+    if s == "loop" {
+        return Some(SeqItem::LoopStart(String::new()));
+    }
     if s == "end" {
-        return Some(SeqItem::LoopEnd); // overloaded — we post-process
+        return Some(SeqItem::BlockEnd);
     }
 
-    // alt / else / opt / par / and
+    // alt / else / opt / par / and / critical / option / break / rect / box
     if let Some(rest) = s.strip_prefix("alt ") {
         return Some(SeqItem::AltStart(rest.trim().to_string()));
+    }
+    if s == "alt" {
+        return Some(SeqItem::AltStart(String::new()));
     }
     if let Some(rest) = s.strip_prefix("else ") {
         return Some(SeqItem::AltElse(rest.trim().to_string()));
@@ -145,11 +220,68 @@ fn parse_line(s: &str) -> Option<SeqItem> {
     if let Some(rest) = s.strip_prefix("opt ") {
         return Some(SeqItem::OptStart(rest.trim().to_string()));
     }
+    if s == "opt" {
+        return Some(SeqItem::OptStart(String::new()));
+    }
     if let Some(rest) = s.strip_prefix("par ") {
         return Some(SeqItem::ParStart(rest.trim().to_string()));
     }
+    if s == "par" {
+        return Some(SeqItem::ParStart(String::new()));
+    }
     if let Some(rest) = s.strip_prefix("and ") {
         return Some(SeqItem::ParAnd(rest.trim().to_string()));
+    }
+    if s == "and" {
+        return Some(SeqItem::ParAnd(String::new()));
+    }
+    if let Some(rest) = s.strip_prefix("critical ") {
+        return Some(SeqItem::CriticalStart(rest.trim().to_string()));
+    }
+    if s == "critical" {
+        return Some(SeqItem::CriticalStart(String::new()));
+    }
+    if let Some(rest) = s.strip_prefix("option ") {
+        return Some(SeqItem::CriticalOption(rest.trim().to_string()));
+    }
+    if s == "option" {
+        return Some(SeqItem::CriticalOption(String::new()));
+    }
+    if let Some(rest) = s.strip_prefix("break ") {
+        return Some(SeqItem::BreakStart(rest.trim().to_string()));
+    }
+    if s == "break" {
+        return Some(SeqItem::BreakStart(String::new()));
+    }
+    if let Some(rest) = s.strip_prefix("rect ") {
+        return Some(SeqItem::RectStart(rest.trim().to_string()));
+    }
+    if let Some(rest) = s.strip_prefix("box ") {
+        return Some(parse_box(rest.trim()));
+    }
+    if s == "box" {
+        return Some(SeqItem::BoxStart {
+            label: String::new(),
+            color: None,
+        });
+    }
+
+    // link "Actor: Title @ URL"
+    if let Some(rest) = s.strip_prefix("link ") {
+        if let Some(colon) = rest.find(':') {
+            let actor = rest[..colon].trim().to_string();
+            let after = rest[colon + 1..].trim();
+            if let Some(at) = after.find('@') {
+                let title = after[..at].trim().to_string();
+                let url = after[at + 1..].trim().to_string();
+                return Some(SeqItem::Link { actor, title, url });
+            }
+        }
+        return None;
+    }
+    // links "Actor: {...}" — skip (JSON format)
+    if s.starts_with("links ") {
+        return None;
     }
 
     // Try message
@@ -169,6 +301,28 @@ fn parse_participant(s: &str, kind: ParticipantKind) -> SeqItem {
         name,
         kind,
     })
+}
+
+fn parse_box(rest: &str) -> SeqItem {
+    // "box <color> <label>" or "box <label>" where color is rgba/rgb/hex/hsl
+    let rest = rest.trim();
+    let (color, label) = if rest.starts_with("rgba(")
+        || rest.starts_with("rgb(")
+        || rest.starts_with('#')
+        || rest.starts_with("hsl(")
+    {
+        if let Some(space) = rest.find(' ') {
+            (
+                Some(rest[..space].to_string()),
+                rest[space + 1..].trim().to_string(),
+            )
+        } else {
+            (Some(rest.to_string()), String::new())
+        }
+    } else {
+        (None, rest.to_string())
+    };
+    SeqItem::BoxStart { label, color }
 }
 
 fn parse_note(s: &str) -> Option<SeqItem> {
@@ -214,13 +368,18 @@ fn parse_note(s: &str) -> Option<SeqItem> {
 /// Arrow patterns we try (longest first to avoid ambiguity).
 /// Returns (from, to, text, line_type, activate_delta)
 fn parse_message(s: &str) -> Option<SeqItem> {
-    // Patterns: -->> ->> --> -> --) -)
+    // Patterns: longest first to avoid partial matches.
+    // Destroy arrows (-->x, ->>x, ->x, -->>x) treated as dotted/solid arrow to destroyed actor.
     let arrows: &[(&str, LineType)] = &[
+        ("-->>x", LineType::DottedArrow),
+        ("->>x", LineType::SolidArrow),
         ("-->>", LineType::DottedArrow),
         ("->>", LineType::SolidArrow),
+        ("-->x", LineType::Dotted),
+        ("->x", LineType::Solid),
         ("-->", LineType::Dotted),
         ("->", LineType::Solid),
-        ("--)", LineType::DottedArrow), // treat as dotted arrow
+        ("--)", LineType::DottedArrow),
         ("-)", LineType::Point),
     ];
 

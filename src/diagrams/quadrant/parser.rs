@@ -55,6 +55,10 @@ pub fn parse(input: &str) -> crate::error::ParseResult<QuadrantDiagram> {
             continue;
         }
 
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         if let Some(rest) = trimmed.strip_prefix("title") {
             let t = rest.trim();
             if !t.is_empty() {

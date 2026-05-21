@@ -29,6 +29,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<PieDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // The first meaningful line must start with "pie"
         if let Some(stripped) = trimmed.strip_prefix("pie") {
             let rest = stripped.trim();

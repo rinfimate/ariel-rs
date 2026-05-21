@@ -766,8 +766,6 @@ pub fn render(diag: &VennDiagram, theme: Theme) -> String {
         &fmt(SVG_WIDTH),
         &fmt(SVG_HEIGHT),
     ));
-    out.push_str(&templates::style_block_venn(vars.font_family));
-
     // Title
     if let Some(t) = &diag.title {
         let title_y = 32.0 * scale2; // matches Mermaid reference y position
@@ -776,6 +774,7 @@ pub fn render(diag: &VennDiagram, theme: Theme) -> String {
             1.0, // title font is 32px regardless of scale (matches Mermaid reference)
             vars.venn_title_text_color,
             &esc(t),
+            vars.font_family,
         ));
     }
 
@@ -818,7 +817,8 @@ pub fn render(diag: &VennDiagram, theme: Theme) -> String {
             .unwrap_or_else(|| "");
 
         let label_color = if text_color.is_empty() {
-            darken_color(base_color)
+            // Use theme text_color for label readability across all themes
+            default_text_color.to_string()
         } else {
             text_color.to_string()
         };
@@ -865,6 +865,7 @@ pub fn render(diag: &VennDiagram, theme: Theme) -> String {
             &fmt_floor(ty),
             &label_color,
             &fmt(font_size),
+            vars.font_family,
         ));
         out.push_str(&templates::venn_label_tspan(
             &fmt_floor(tx),
@@ -941,6 +942,7 @@ pub fn render(diag: &VennDiagram, theme: Theme) -> String {
                 &fmt_floor(ty),
                 text_color,
                 &fmt(font_size),
+                vars.font_family,
             ));
             out.push_str(&templates::venn_label_tspan(
                 &fmt_floor(tx),

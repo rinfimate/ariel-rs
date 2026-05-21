@@ -10,81 +10,16 @@
 pub use crate::diagrams::util::esc;
 
 // ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-pub fn build_style(id: &str, ff: &str) -> String {
-    use super::constants::{FONT_SIZE, SECTION_STYLES};
-    let mut s = format!(
-        "#{id}{{font-family:{ff};font-size:{fs}px;fill:#333;}}",
-        id = id,
-        ff = ff,
-        fs = FONT_SIZE,
-    );
-
-    for (i, st) in SECTION_STYLES.iter().enumerate() {
-        let idx: i64 = (i as i64) - 1;
-        s.push_str(&format!(
-            "#{id} .section-{idx} rect,#{id} .section-{idx} path,#{id} .section-{idx} circle,#{id} .section-{idx} path{{fill:{fill};}}",
-            id = id, idx = idx, fill = st.fill,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-{idx} text{{fill:{text};}}",
-            id = id,
-            idx = idx,
-            text = st.text,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-edge-{idx}{{stroke:{fill};}}",
-            id = id,
-            idx = idx,
-            fill = st.fill,
-        ));
-        s.push_str(&format!(
-            "#{id} .section-{idx} line{{stroke:{line};stroke-width:3;}}",
-            id = id,
-            idx = idx,
-            line = st.line,
-        ));
-        s.push_str(&format!(
-            "#{id} .node-line-{idx}{{stroke:{line};stroke-width:3;}}",
-            id = id,
-            idx = idx,
-            line = st.line,
-        ));
-    }
-
-    s.push_str(&format!(
-        concat!(
-            "#{id} .edge{{stroke-width:3;}}",
-            "#{id} .timeline-node{{fill:none;}}",
-            "#{id} .node-bkg{{opacity:1;}}",
-            "#{id} p{{margin:0;}}",
-            "#{id} svg{{font-family:{ff};font-size:{fs}px;}}",
-            "#{id} text{{font-family:{ff};fill:#333;}}",
-            "#{id} .section-label{{text-anchor:middle;dominant-baseline:middle;}}",
-            "#{id} .title-text{{font-size:24px;font-weight:bold;fill:#333;text-anchor:middle;}}",
-            "#{id} .activity-line{{stroke:#333;stroke-width:4px;}}",
-            "#{id} .eventWrapper{{filter:brightness(120%);}}",
-            "#{id} .lineWrapper line{{stroke:#ffffff;}}",
-        ),
-        id = id,
-        ff = ff,
-        fs = FONT_SIZE,
-    ));
-
-    s
-}
-
-// ---------------------------------------------------------------------------
 // Arrowhead marker
 // ---------------------------------------------------------------------------
 
-/// Render the arrowhead `<marker>` definition used by the timeline activity line.
-pub fn arrowhead_marker(id: &str) -> String {
+/// Render the arrowhead `<marker>` and drop-shadow `<filter>` definitions.
+pub fn arrowhead_marker(id: &str, line_color: &str, shadow_color: &str) -> String {
     format!(
-        "<defs>\n  <marker id=\"{id}-arrowhead\" refX=\"5\" refY=\"2\" markerWidth=\"6\" markerHeight=\"4\" orient=\"auto\">\n    <path d=\"M 0,0 V 4 L6,2 Z\"></path>\n  </marker>\n</defs>",
+        "<defs>\n  <marker id=\"{id}-arrowhead\" refX=\"5\" refY=\"2\" markerWidth=\"6\" markerHeight=\"4\" orient=\"auto\">\n    <path d=\"M 0,0 V 4 L6,2 Z\" fill=\"{line_color}\"></path>\n  </marker>\n  <filter id=\"{id}-dropshadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"140%\">\n    <feDropShadow dx=\"1\" dy=\"2\" stdDeviation=\"2\" flood-color=\"{shadow_color}\"/>\n  </filter>\n</defs>",
         id = id,
+        line_color = line_color,
+        shadow_color = shadow_color,
     )
 }
 
@@ -93,13 +28,14 @@ pub fn arrowhead_marker(id: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the horizontal activity line (timeline spine) with arrowhead.
-pub fn activity_line(x1: f64, y: f64, x2: f64, diagram_id: &str) -> String {
+pub fn activity_line(x1: f64, y: f64, x2: f64, diagram_id: &str, line_color: &str) -> String {
     format!(
-        "<g class=\"lineWrapper\">\n  <line x1=\"{x1}\" y1=\"{y}\" x2=\"{x2}\" y2=\"{y}\" style=\"stroke:black;stroke-width:4;\" marker-end=\"url(#{id}-arrowhead)\"></line>\n</g>",
+        "<g class=\"lineWrapper\">\n  <line x1=\"{x1}\" y1=\"{y}\" x2=\"{x2}\" y2=\"{y}\" style=\"stroke:{line_color};stroke-width:4;\" marker-end=\"url(#{id}-arrowhead)\"></line>\n</g>",
         x1 = x1,
         y = y,
         x2 = x2,
         id = diagram_id,
+        line_color = line_color,
     )
 }
 
@@ -108,11 +44,12 @@ pub fn activity_line(x1: f64, y: f64, x2: f64, diagram_id: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the diagram title `<text>` element.
-pub fn title_text(x: f64, title: &str) -> String {
+pub fn title_text(x: f64, title: &str, title_color: &str) -> String {
     format!(
-        "<text x=\"{x}\" font-size=\"4ex\" font-weight=\"bold\" y=\"20\">{t}</text>",
+        "<text x=\"{x}\" font-size=\"4ex\" font-weight=\"bold\" y=\"20\" fill=\"{title_color}\">{t}</text>",
         x = x,
         t = title,
+        title_color = title_color,
     )
 }
 
@@ -120,25 +57,16 @@ pub fn title_text(x: f64, title: &str) -> String {
 // Top-level SVG structure
 // ---------------------------------------------------------------------------
 
-/// Render the outer SVG wrapper including embedded style block.
-pub fn svg_root(
-    id: &str,
-    max_w: f64,
-    vb_x: f64,
-    vb_y: f64,
-    vb_w: f64,
-    vb_h: f64,
-    style: &str,
-) -> String {
+/// Render the outer SVG wrapper.
+pub fn svg_root(id: &str, max_w: f64, vb_x: f64, vb_y: f64, vb_w: f64, vb_h: f64) -> String {
     format!(
-        "<svg id=\"{id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" style=\"max-width: {mw}px;\" viewBox=\"{vx} {vy} {vw} {vh}\" role=\"graphics-document document\" aria-roledescription=\"timeline\"><style>{style}</style><g></g><g></g>",
+        "<svg id=\"{id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" font-family=\"Arial, sans-serif\" style=\"max-width: {mw}px;\" viewBox=\"{vx} {vy} {vw} {vh}\" role=\"graphics-document document\" aria-roledescription=\"timeline\"><g></g><g></g>",
         id = id,
         mw = max_w,
         vx = vb_x,
         vy = vb_y,
         vw = vb_w,
         vh = vb_h,
-        style = style,
     )
 }
 
@@ -157,9 +85,10 @@ pub fn task_wrapper(x: f64, y: f64, svg: &str) -> String {
 }
 
 /// Render the wrapper `<g>` that positions an event node.
+/// Applies `filter:brightness(120%)` to match Mermaid's `.eventWrapper{filter:brightness(120%)}` CSS rule.
 pub fn event_wrapper(x: f64, y: f64, svg: &str) -> String {
     format!(
-        "<g class=\"eventWrapper\" transform=\"translate({x}, {y})\">{svg}</g>",
+        "<g class=\"eventWrapper\" style=\"filter:brightness(120%)\" transform=\"translate({x}, {y})\">{svg}</g>",
         x = x,
         y = y,
         svg = svg,
@@ -167,13 +96,14 @@ pub fn event_wrapper(x: f64, y: f64, svg: &str) -> String {
 }
 
 /// Render the connector (dashed vertical) line between a task and its events.
-pub fn connector_line(x: f64, y1: f64, y2: f64, diagram_id: &str) -> String {
+pub fn connector_line(x: f64, y1: f64, y2: f64, diagram_id: &str, line_color: &str) -> String {
     format!(
-        "<g class=\"lineWrapper\"><line x1=\"{x}\" y1=\"{y1}\" x2=\"{x}\" y2=\"{y2}\" style=\"stroke:black;stroke-width:2;stroke-dasharray:5,5;\" marker-end=\"url(#{id}-arrowhead)\"></line></g>",
+        "<g class=\"lineWrapper\"><line x1=\"{x}\" y1=\"{y1}\" x2=\"{x}\" y2=\"{y2}\" style=\"stroke:{line_color};stroke-width:2;stroke-dasharray:5,5;\" marker-end=\"url(#{id}-arrowhead)\"></line></g>",
         x = x,
         y1 = y1,
         y2 = y2,
         id = diagram_id,
+        line_color = line_color,
     )
 }
 
@@ -190,21 +120,24 @@ pub fn node_group_open(section_class: i64) -> String {
 }
 
 /// Render the background path for a timeline node.
-pub fn node_bg_path(id_val: usize, path_d: &str) -> String {
+pub fn node_bg_path(id_val: usize, path_d: &str, fill: &str, shadow_filter: &str) -> String {
     format!(
-        "    <path id=\"node-{id}\" class=\"node-bkg node-undefined\" d=\"{path}\"></path>\n",
+        "    <path id=\"node-{id}\" class=\"node-bkg node-undefined\" fill=\"{fill}\" filter=\"{shadow_filter}\" d=\"{path}\"></path>\n",
         id = id_val,
+        fill = fill,
+        shadow_filter = shadow_filter,
         path = path_d,
     )
 }
 
 /// Render the bottom separator line for a timeline node.
-pub fn node_separator_line(section_class: i64, height: f64, width: f64) -> String {
+pub fn node_separator_line(section_class: i64, height: f64, width: f64, stroke: &str) -> String {
     format!(
-        "    <line class=\"node-line-{sc}\" x1=\"0\" y1=\"{h}\" x2=\"{w}\" y2=\"{h}\"></line>\n",
+        "    <line class=\"node-line-{sc}\" x1=\"0\" y1=\"{h}\" x2=\"{w}\" y2=\"{h}\" stroke=\"{stroke}\" stroke-width=\"3\"></line>\n",
         sc = section_class,
         h = height,
         w = width,
+        stroke = stroke,
     )
 }
 
@@ -224,6 +157,17 @@ pub fn text_tspan(dy: &str, text: &str) -> String {
         "<tspan x=\"0\" dy=\"{dy}\">{text}</tspan>",
         dy = dy,
         text = text,
+    )
+}
+
+/// Render a `<text>` element wrapping pre-built `<tspan>` strings.
+/// Used by `build_tspans` to produce the outer text element for timeline nodes.
+/// `fill` sets the text color (e.g. `"#ffffff"` for white sections, `"black"` for light sections).
+pub fn node_text_element(tspans: &str, fill: &str) -> String {
+    format!(
+        r##"<text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="{fill}">{tspans}</text>"##,
+        tspans = tspans,
+        fill = fill,
     )
 }
 

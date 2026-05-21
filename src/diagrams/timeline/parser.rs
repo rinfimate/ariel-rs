@@ -84,6 +84,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<TimelineDiagram> {
             continue;
         }
 
+        // accTitle / accDescr — skip
+        if trimmed.starts_with("accTitle") || trimmed.starts_with("accDescr") {
+            continue;
+        }
+
         // title <text>  — jison: 'title'\s[^\n]+
         if trimmed.len() > 5 && trimmed[..5].eq_ignore_ascii_case("title") {
             let ch = trimmed.as_bytes()[5];

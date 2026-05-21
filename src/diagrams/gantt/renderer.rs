@@ -29,7 +29,7 @@ use super::parser::{GanttDiagram, Task, TaskStatus};
 ///   .titleText                   — diagram title
 #[allow(unused_imports)]
 use super::templates::{
-    self, build_style, esc, escape_id, exclude_rect, grid_domain_path, grid_group_open, grid_tick,
+    self, esc, escape_id, exclude_rect, grid_domain_path, grid_group_open, grid_tick,
     milestone_rect, section_band_rect, section_title, svg_root, task_bar_rect, task_text,
     title_text, today_line,
 };
@@ -148,6 +148,19 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     }
 
     let vars = theme.resolve();
+    let text_color = vars.text_color;
+    let title_color = vars.title_color;
+    let background = vars.background;
+    // Per-theme contrast colour for done/active task label text (CSS: doneText, activeCritText, etc.)
+    let contrast_color = match theme {
+        Theme::Dark => "#2c2c2c",
+        Theme::Neutral => "#333",
+        _ => "black",
+    };
+    // Gantt section band fills — from ThemeVars
+    let section_color = vars.gantt_section_fill0;
+    let section_color2 = vars.gantt_section_fill1;
+    let exclude_fill = vars.gantt_exclude_fill;
 
     // Compute time range
     let t_min = diag
@@ -233,11 +246,6 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     // SVG root
     out.push_str(&svg_root(id, SVG_WIDTH, height as i64));
 
-    // Style
-    out.push_str("<style>");
-    out.push_str(&build_style(id, &vars));
-    out.push_str("</style>");
-
     // Empty first group (Mermaid always emits this)
     out.push_str("<g></g>");
 
@@ -274,6 +282,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 excl_height as i64,
                 (ex as f64 + ew as f64 / 2.0).round() as i64,
                 (excl_y + excl_height / 2.0).round() as i64,
+                exclude_fill,
             ));
             sat += 7; // next Saturday
         }
@@ -309,6 +318,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             -(grid_height as i64),
             AXIS_FONT_SIZE as i64,
             &label,
+            text_color,
         ));
     }
 
@@ -332,6 +342,9 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 band_width,
                 ROW_HEIGHT as i64,
                 class_idx,
+                section_color,
+                section_color2,
+                background,
             ));
         }
     }
@@ -366,6 +379,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 mx,
                 my,
                 &tc,
+                theme,
             ));
         } else {
             // Normal task bar
@@ -379,6 +393,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 bar_cx.round() as i64,
                 bar_cy.round() as i64,
                 &tc,
+                theme,
             ));
         }
 
@@ -403,6 +418,8 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 BAR_HEIGHT as i64,
                 text_cls.trim(),
                 &esc(&text),
+                vars.text_color,
+                contrast_color,
             ));
         } else if bar_w < LEFT_PAD {
             // Text outside to the right
@@ -416,6 +433,8 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 BAR_HEIGHT as i64,
                 outside_cls.trim(),
                 &esc(&text),
+                vars.text_color,
+                contrast_color,
             ));
         } else {
             // Text inside but truncated — show centered anyway (matches Mermaid)
@@ -428,6 +447,8 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 BAR_HEIGHT as i64,
                 text_cls.trim(),
                 &esc(&text),
+                vars.text_color,
+                contrast_color,
             ));
         }
     }
@@ -446,6 +467,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             SECTION_FONT_SIZE as i64,
             class_idx,
             &esc(sec_name),
+            title_color,
         ));
     }
 
@@ -469,6 +491,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             (SVG_WIDTH / 2.0) as i64,
             TITLE_TOP as i64,
             &esc(title),
+            title_color,
         ));
     }
 

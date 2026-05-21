@@ -1,52 +1,52 @@
+// Faithful Rust port of mermaid/src/diagrams/packet/renderer.ts
+//
+// draw():
+//   svgWidth  = bitWidth * bitsPerRow + 2                  = 1026
+//   svgHeight = totalRowHeight * (words.length + 1) - (title ? 0 : rowHeight)
+//   svg.attr("viewBox", `0 0 ${svgWidth} ${svgHeight}`)
+//   configureSvgSize(svg, svgHeight, svgWidth, useMaxWidth=true)
+//     → width="100%", style="max-width: {svgWidth}px;"
+//
+// drawWord(svg, word, rowNumber, config):
+//   wordY      = rowNumber * (rowHeight + paddingY) + paddingY
+//   blockX     = block.start % bitsPerRow * bitWidth + 1
+//   width      = (block.end - block.start + 1) * bitWidth - paddingX
+//   rect:  x=blockX, y=wordY, width, height=rowHeight, class="packetBlock"
+//   label: x=blockX+width/2, y=wordY+rowHeight/2, class="packetLabel",
+//          dominant-baseline="middle", text-anchor="middle"
+//   if showBits:
+//     isSingle = (end === start)
+//     bitNumberY = wordY - 2
+//     start-bit: x=blockX+(isSingle?width/2:0), text-anchor=(isSingle?"middle":"start")
+//     end-bit (if !isSingle): x=blockX+width, text-anchor="end"
+//
+// title (always emitted, may be empty):
+//   x=svgWidth/2, y=svgHeight - totalRowHeight/2,
+//   dominant-baseline="middle", text-anchor="middle", class="packetTitle"
+//
+// Styling: Mermaid injects CSS for the class names. We use inline CSS-independent
+// attributes with per-theme colors from ThemeVars.
+
 use super::constants::*;
-use super::parser::{PacketDiagram, PacketField};
-use super::templates::{self, build_style, esc, fmt};
-/// Faithful Rust port of Mermaid's packetRenderer.ts.
-///
-/// Layout algorithm (matches packetRenderer.ts / drawWord):
-///
-/// Constants (from mermaid defaultConfig.packet, with showBits=true):
-///   bitWidth   = 32  px per bit cell
-///   bitsPerRow = 32
-///   rowHeight  = 32  px tall field boxes
-///   paddingX   = 5   px gap at right of each block (separates adjacent blocks)
-///   paddingY   = 15  px (base 5 + 10 for showBits) above each row for bit numbers
-///
-/// Derived:
-///   totalRowHeight = rowHeight + paddingY = 47
-///   svgWidth       = bitWidth * bitsPerRow + 2 = 1026
-///   svgHeight      = totalRowHeight * (numRows + 1) - (hasTitle ? 0 : rowHeight)
-///
-/// Per row N (0-indexed):
-///   wordY = N * totalRowHeight + paddingY
-///
-/// Per block within a row:
-///   blockX = (block.start % bitsPerRow) * bitWidth + 1
-///   width  = (block.end - block.start + 1) * bitWidth - paddingX
-///   rect   at (blockX, wordY, width, rowHeight)
-///   label  at (blockX + width/2, wordY + rowHeight/2)  dominant-baseline=middle
-///   bitNumberY = wordY - 2
-///   start-bit label: x=blockX, text-anchor=start  (middle if single bit)
-///   end-bit   label: x=blockX+width, text-anchor=end  (omitted if single bit)
-///
-/// Title (if present):
-///   (svgWidth/2, svgHeight - totalRowHeight/2)
+use super::parser::PacketDiagram;
+use super::templates::{self, esc, fmt};
 use crate::theme::Theme;
 
-pub fn render(diag: &PacketDiagram, theme: Theme, _use_foreign_object: bool) -> String {
+pub fn render(diag: &PacketDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    let ff = vars.font_family;
+    let block_fill = vars.packet_block_fill;
+    let block_stroke = vars.packet_block_stroke;
+    let text_color = vars.packet_text_color;
     let svg_id = "mermaid-packet";
 
-    if diag.fields.is_empty() {
-        return templates::empty_svg(svg_id, ff);
-    }
+    let words = &diag.words;
 
-    // ── Pre-process fields into rows ──────────────────────────────────────────
-    let words = build_words(&diag.fields);
-
-    let total_row_height = ROW_HEIGHT + PADDING_Y; // 47
-    let has_title = diag.title.is_some();
+    let total_row_height = ROW_HEIGHT + PADDING_Y;
+    let has_title = diag
+        .title
+        .as_deref()
+        .map(|t| !t.is_empty())
+        .unwrap_or(false);
     let svg_h =
         total_row_height * (words.len() as f64 + 1.0) - if has_title { 0.0 } else { ROW_HEIGHT };
 
@@ -57,19 +57,15 @@ pub fn render(diag: &PacketDiagram, theme: Theme, _use_foreign_object: bool) -> 
         &fmt(SVG_WIDTH),
         &fmt(svg_h),
         &fmt(SVG_WIDTH),
+        vars.font_family,
     ));
 
-    out.push_str("<style>");
-    out.push_str(&build_style(svg_id, ff));
-    out.push_str("</style>");
-
-    // Empty first group (mermaid emits <g></g> before the content group)
+    // Empty first group (Mermaid emits `<g></g>` before content groups)
     out.push_str("<g></g>");
 
-    // Render rows
-    for (row_idx, word) in words.iter().enumerate() {
-        let word_y = row_idx as f64 * total_row_height + PADDING_Y;
-
+    // Render words (rows)
+    for (row_number, word) in words.iter().enumerate() {
+        let word_y = row_number as f64 * total_row_height + PADDING_Y;
         out.push_str("<g>");
 
         for block in word {
@@ -78,39 +74,43 @@ pub fn render(diag: &PacketDiagram, theme: Theme, _use_foreign_object: bool) -> 
             let is_single = block.start == block.end;
             let bit_number_y = word_y - BIT_NUMBER_Y_OFFSET;
 
-            // Field rectangle
-            out.push_str(&templates::field_rect(
-                &fmt(block_x),
-                &fmt(word_y),
-                &fmt(width),
-                &fmt(ROW_HEIGHT),
+            // rect
+            out.push_str(&templates::block_rect(
+                block_x,
+                word_y,
+                width,
+                ROW_HEIGHT,
+                block_fill,
+                block_stroke,
             ));
 
-            // Field label centered in box
-            out.push_str(&templates::field_label(
-                &fmt(block_x + width / 2.0),
-                &fmt(word_y + ROW_HEIGHT / 2.0),
+            // label
+            out.push_str(&templates::block_label(
+                block_x + width / 2.0,
+                word_y + ROW_HEIGHT / 2.0,
                 &esc(&block.label),
+                text_color,
             ));
 
-            // Bit number labels
-            if is_single {
-                out.push_str(&templates::bit_number_single(
-                    &fmt(block_x + width / 2.0),
-                    &fmt(bit_number_y),
-                    block.start,
-                ));
-            } else {
-                out.push_str(&templates::bit_number_start(
-                    &fmt(block_x),
-                    &fmt(bit_number_y),
-                    block.start,
-                ));
-                // End bit (only when not single-bit)
-                out.push_str(&templates::bit_number_end(
-                    &fmt(block_x + width),
-                    &fmt(bit_number_y),
+            // bit numbers (showBits = true by default)
+            let start_x = block_x + if is_single { width / 2.0 } else { 0.0 };
+            let start_anchor = if is_single { "middle" } else { "start" };
+            out.push_str(&templates::bit_label(
+                start_x,
+                bit_number_y,
+                block.start,
+                "start",
+                start_anchor,
+                text_color,
+            ));
+            if !is_single {
+                out.push_str(&templates::bit_label(
+                    block_x + width,
+                    bit_number_y,
                     block.end,
+                    "end",
+                    "end",
+                    text_color,
                 ));
             }
         }
@@ -118,75 +118,20 @@ pub fn render(diag: &PacketDiagram, theme: Theme, _use_foreign_object: bool) -> 
         out.push_str("</g>");
     }
 
-    // Title
-    out.push_str(&templates::title(
-        &fmt(SVG_WIDTH / 2.0),
-        &fmt(svg_h - total_row_height / 2.0),
-        &esc(diag.title.as_deref().unwrap_or("")),
+    // Title (always emitted; empty when no title, matching Mermaid)
+    let title_text = esc(diag.title.as_deref().unwrap_or(""));
+    out.push_str(&templates::diagram_title(
+        SVG_WIDTH / 2.0,
+        svg_h - total_row_height / 2.0,
+        &title_text,
+        text_color,
     ));
 
     out.push_str("</svg>");
     out
 }
 
-/// Split fields into rows, replicating mermaid's getNextFittingBlock logic.
-/// Returns a Vec of rows, each row is a Vec of PacketField segments.
-fn build_words(fields: &[PacketField]) -> Vec<Vec<PacketField>> {
-    let mut words: Vec<Vec<PacketField>> = Vec::new();
-    let mut current_word: Vec<PacketField> = Vec::new();
-    let mut row = 1u32; // mermaid uses 1-indexed rows
-
-    for field in fields {
-        let mut start = field.start;
-        let end = field.end;
-        let label = field.label.clone();
-
-        // Advance row to the one containing `start` (handles gaps in bit ranges)
-        while row * BITS_PER_ROW <= start {
-            if !current_word.is_empty() {
-                words.push(std::mem::take(&mut current_word));
-            }
-            row += 1;
-        }
-
-        loop {
-            // Does this segment fit within the current row?
-            let row_end_bit = row * BITS_PER_ROW - 1; // last bit of current row (inclusive)
-            if end <= row_end_bit {
-                // Fits entirely in this row
-                current_word.push(PacketField {
-                    start,
-                    end,
-                    label: label.clone(),
-                });
-                // If this block fills the row exactly, push the word
-                if end + 1 == row * BITS_PER_ROW {
-                    words.push(std::mem::take(&mut current_word));
-                    row += 1;
-                }
-                break;
-            } else {
-                // Split: put [start..row_end_bit] in current row, remainder in next row
-                current_word.push(PacketField {
-                    start,
-                    end: row_end_bit,
-                    label: label.clone(),
-                });
-                words.push(std::mem::take(&mut current_word));
-                row += 1;
-                start = row_end_bit + 1;
-                // continue loop with remainder
-            }
-        }
-    }
-
-    // Push any remaining partial word
-    if !current_word.is_empty() {
-        words.push(current_word);
-    }
-
-    words
-}
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -197,8 +142,8 @@ mod tests {
     fn basic_render_produces_svg() {
         let input = "packet-beta\n    0-15: \"Source Port\"\n    16-31: \"Destination Port\"\n    32-63: \"Sequence Number\"\n    64-95: \"Acknowledgment Number\"";
         let diag = parser::parse(input).diagram;
-        let svg = render(&diag, Theme::Default, false);
-        assert!(svg.contains("<svg"), "no <svg element");
+        let svg = render(&diag, Theme::Default);
+        assert!(svg.contains("<svg"), "no <svg");
         assert!(svg.contains("Source Port"), "no field label");
         assert!(svg.contains("packetBlock"), "no packet fields");
     }
@@ -207,30 +152,24 @@ mod tests {
     fn renders_bit_numbers() {
         let input = "packet-beta\n    0-7: \"Byte\"\n    8-15: \"Second\"";
         let diag = parser::parse(input).diagram;
-        let svg = render(&diag, Theme::Default, false);
+        let svg = render(&diag, Theme::Default);
         assert!(svg.contains(">0<"), "no bit 0");
     }
 
     #[test]
     fn multi_row_packet() {
-        // More than 32 bits → 2 rows
         let input = "packet-beta\n    0-15: \"Source Port\"\n    16-31: \"Destination Port\"\n    32-63: \"Sequence Number\"";
         let diag = parser::parse(input).diagram;
-        let svg = render(&diag, Theme::Default, false);
-        // Both rows should be rendered (2 <g> groups in the content)
-        assert!(
-            svg.contains("packet-row") || svg.contains("<g>"),
-            "no row groups"
-        );
+        let svg = render(&diag, Theme::Default);
         assert!(svg.contains("Sequence Number"), "no second row field");
     }
 
     #[test]
     fn viewbox_matches_reference_basic() {
-        // packet_basic: 3 fields (0-7 Source, 8-15 Dest, 16-31 Data), no title → 1026×62
+        // 1 row, no title → svgH = totalRowHeight * 2 - rowHeight = 47*2 - 32 = 62
         let input = "packet-beta\n    0-7: \"Source\"\n    8-15: \"Dest\"\n    16-31: \"Data\"";
         let diag = parser::parse(input).diagram;
-        let svg = render(&diag, Theme::Default, false);
+        let svg = render(&diag, Theme::Default);
         assert!(
             svg.contains("viewBox=\"0 0 1026 62\""),
             "wrong viewBox: {}",
@@ -239,11 +178,19 @@ mod tests {
     }
 
     #[test]
+    fn dark_theme() {
+        let input = "packet-beta\n  0-15: \"A\"\n  16-31: \"B\"";
+        let diag = parser::parse(input).diagram;
+        let svg = render(&diag, Theme::Dark);
+        assert!(svg.contains("#333"), "dark theme block fill missing");
+    }
+
+    #[test]
     fn snapshot_default_theme() {
         let input =
-            "packet-beta\n accTitle: Packet\n 0-7: \"Source\"\n 8-15: \"Dest\"\n 16-31: \"Data\"";
+            "packet-beta\n title TCP\n 0-15: \"Source Port\"\n 16-31: \"Destination Port\"\n 32-63: \"Sequence Number\"";
         let diag = parser::parse(input).diagram;
-        let svg = render(&diag, crate::theme::Theme::Default, false);
+        let svg = render(&diag, crate::theme::Theme::Default);
         insta::assert_snapshot!(crate::svg::normalize_floats(&svg));
     }
 }

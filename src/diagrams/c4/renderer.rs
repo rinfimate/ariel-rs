@@ -6,10 +6,10 @@
 use super::constants::*;
 use super::parser::{C4Diagram, C4Element, C4ElementType, C4Rel, C4RelType};
 use super::templates::{
-    all_markers, boundary_label_text, boundary_rect, boundary_type_text, build_style, esc, fmt_int,
-    rel_curve, rel_label, rel_line, rel_techn_label, shape_db_path, shape_descr_text,
-    shape_label_text, shape_person_image, shape_rect, shape_stereo_text, svg_root, symbol_clock,
-    symbol_computer, symbol_database, title_text,
+    all_markers, boundary_label_text, boundary_rect, boundary_type_text, esc, fmt_int, rel_curve,
+    rel_label, rel_line, rel_techn_label, shape_db_path, shape_descr_text, shape_label_text,
+    shape_person_image, shape_rect, shape_stereo_text, svg_root, symbol_clock, symbol_computer,
+    symbol_database, title_text,
 };
 use crate::theme::Theme;
 use std::collections::HashMap;
@@ -454,7 +454,7 @@ fn draw_inside_boundary(
 }
 
 pub fn render(diag: &C4Diagram, theme: Theme, _use_foreign_object: bool) -> String {
-    let _vars = theme.resolve();
+    let vars = theme.resolve();
     // C4 uses specific fonts per element type (from defaultConfig.c4):
     //   personFontFamily / systemFontFamily: "Open Sans", sans-serif
     //   messageFontFamily: "trebuchet ms", verdana, arial, sans-serif
@@ -475,9 +475,6 @@ pub fn render(diag: &C4Diagram, theme: Theme, _use_foreign_object: bool) -> Stri
 
     let mut out = String::new();
     out.push_str(&svg_root(svg_id, svg_w, vb_y, vb_h));
-    out.push_str("<style>");
-    out.push_str(&build_style(svg_id, ff));
-    out.push_str("</style>");
     out.push_str("<g></g>");
     out.push_str(&symbol_computer(svg_id));
     out.push_str(&symbol_database(svg_id));
@@ -511,7 +508,7 @@ pub fn render(diag: &C4Diagram, theme: Theme, _use_foreign_object: bool) -> Stri
     }
 
     if let Some(ref title) = diag.title {
-        out.push_str(&title_text(title_x, &esc(title)));
+        out.push_str(&title_text(title_x, &esc(title), vars.text_color));
     }
     out.push_str("</svg>");
     out

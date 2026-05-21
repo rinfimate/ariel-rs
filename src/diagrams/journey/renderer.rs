@@ -1,6 +1,6 @@
 use super::constants::*;
 use super::parser::JourneyDiagram;
-use super::templates::{self, build_style, esc};
+use super::templates::{self, esc};
 /// Faithful Rust port of Mermaid's journeyRenderer.ts + svgDraw.js (user journey).
 ///
 /// Layout algorithm mirrors journeyRenderer.ts draw() exactly:
@@ -35,11 +35,55 @@ use crate::theme::Theme;
 pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
     let ff = vars.font_family;
+    let line_color = vars.line_color;
     let id = "mermaid-journey";
 
     if diag.tasks.is_empty() {
         return templates::empty_svg(id);
     }
+
+    // Build per-theme section/task fill palette.
+    // For dark theme, Mermaid CSS defines specific HSL fills per type; other themes use
+    // primary/secondary/cScale fallbacks.
+    let task_fills_owned: Vec<String> = match theme {
+        crate::theme::Theme::Dark => vec![
+            vars.primary_color.to_string(),
+            vars.cluster_bg.to_string(),
+            "hsl(244, 1.5873015873%, 12.3529411765%)".to_string(),
+            "hsl(244, 1.5873015873%, 28.3529411765%)".to_string(),
+            "hsl(116, 1.5873015873%, 12.3529411765%)".to_string(),
+            "hsl(116, 1.5873015873%, 28.3529411765%)".to_string(),
+            "hsl(308, 1.5873015873%, 12.3529411765%)".to_string(),
+            "hsl(308, 1.5873015873%, 28.3529411765%)".to_string(),
+        ],
+        crate::theme::Theme::Forest => vec![
+            vars.primary_color.to_string(),
+            vars.secondary_color.to_string(),
+            "hsl(142.1578947368, 58.4615384615%, 74.5098039216%)".to_string(),
+            "hsl(162.961038961, 100%, 84.9019607843%)".to_string(),
+            "hsl(14.1578947368, 58.4615384615%, 74.5098039216%)".to_string(),
+            "hsl(34.961038961, 100%, 84.9019607843%)".to_string(),
+            "hsl(206.1578947368, 58.4615384615%, 74.5098039216%)".to_string(),
+            "hsl(226.961038961, 100%, 84.9019607843%)".to_string(),
+        ],
+        crate::theme::Theme::Neutral => vec![
+            vars.primary_color.to_string(),
+            "hsl(0, 0%, 98.9215686275%)".to_string(),
+            "hsl(64, 0%, 93.3333333333%)".to_string(),
+            "hsl(64, 0%, 98.9215686275%)".to_string(),
+            "hsl(-64, 0%, 93.3333333333%)".to_string(),
+            "hsl(-64, 0%, 98.9215686275%)".to_string(),
+            "hsl(128, 0%, 93.3333333333%)".to_string(),
+            "hsl(128, 0%, 98.9215686275%)".to_string(),
+        ],
+        _ => {
+            let mut v: Vec<String> = TASK_FILLS.iter().map(|s| s.to_string()).collect();
+            v[0] = vars.primary_color.to_string();
+            v[1] = vars.secondary_color.to_string();
+            v
+        }
+    };
+    let task_fills: Vec<&str> = task_fills_owned.iter().map(String::as_str).collect();
 
     // Assign actors their positions and colours
     struct ActorInfo {
@@ -75,9 +119,6 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
         (VIEW_HEIGHT + 25.0) as i64,
     ));
 
-    // Style block
-    out.push_str(&templates::style_block(&build_style(id, ff)));
-
     // Empty g (matches reference)
     out.push_str("<g></g>");
 
@@ -95,6 +136,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
         out.push_str(&templates::actor_label(
             (legend_y + 7.0) as i64,
             &esc(&actor.name),
+            line_color,
         ));
         legend_y += ACTOR_LEGEND_STEP;
     }
@@ -106,13 +148,13 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
 
         let flush_section =
             |out: &mut String, name: &str, sec_idx: usize, task_start: usize, task_end: usize| {
-                let fill = SECTION_FILLS[sec_idx % SECTION_FILLS.len()];
+                let fill = task_fills[sec_idx % task_fills.len()];
                 let count = task_end - task_start;
                 let sec_x = (task_start as f64) * task_step + LEFT_MARGIN;
                 let sec_w = (count as f64) * task_step - TASK_MARGIN;
                 let tx = (sec_x + sec_w / 2.0) as i64;
                 let ty = (50.0 + SECTION_HEIGHT / 2.0) as i64; // 75
-                let si = sec_idx % SECTION_FILLS.len();
+                let si = sec_idx % task_fills.len();
                 out.push_str(&templates::section_rect(
                     sec_x as i64,
                     fill,
@@ -129,6 +171,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
                     ty,
                     &esc(name),
                     ff,
+                    vars.text_color,
                 ));
             };
 
@@ -156,8 +199,8 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
     for (i, task) in diag.tasks.iter().enumerate() {
         let task_x = (i as f64) * task_step + LEFT_MARGIN;
         let task_cx = task_x + TASK_WIDTH / 2.0; // centre x of task
-        let fill = SECTION_FILLS[task.section_index % SECTION_FILLS.len()];
-        let si = task.section_index % SECTION_FILLS.len();
+        let fill = task_fills[task.section_index % task_fills.len()];
+        let si = task.section_index % task_fills.len();
 
         // Score-to-face-y: score 5→300, score 3→360, score 1→420
         let face_cy = TASK_LINE_BOTTOM - (task.score as f64) * 30.0;
@@ -242,6 +285,7 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
             text_cy,
             &esc(&task.task),
             ff,
+            vars.text_color,
         ));
 
         out.push_str("</g>"); // close task g
@@ -249,7 +293,12 @@ pub fn render(diag: &JourneyDiagram, theme: Theme) -> String {
 
     // ── Title ────────────────────────────────────────────────────────────────
     if let Some(ref title) = diag.title {
-        out.push_str(&templates::title_text(LEFT_MARGIN as i64, ff, &esc(title)));
+        out.push_str(&templates::title_text(
+            LEFT_MARGIN as i64,
+            ff,
+            &esc(title),
+            vars.text_color,
+        ));
     }
 
     // ── Activity line ────────────────────────────────────────────────────────

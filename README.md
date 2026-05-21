@@ -13,14 +13,14 @@ A faithful Rust port of [Mermaid JS](https://mermaid.js.org/) — renders diagra
 - **28 diagram types** — all Mermaid built-ins
 - **Headless** — pure Rust, no DOM, no JS runtime
 - **Fast** — renders diagrams in microseconds
-- **Accurate** — pixel-tested against Mermaid JS reference output (98-diagram visual regression suite)
+- **Accurate** — pixel-tested against Mermaid JS reference output (100-diagram visual regression suite)
 - **Themes** — Default, Dark, Forest, Neutral
 
 ## Usage
 
 ```toml
 [dependencies]
-ariel-rs = "0.2.0"
+ariel-rs = "0.3.0"
 ```
 
 ```rust
@@ -99,9 +99,8 @@ Requires Node.js.
 ```sh
 cd visual-regression
 npm install                                   # first time only
-cargo run --bin render_corpus --release        # generate Rust SVGs
-node svg_to_png.mjs rust                      # convert to PNG
-node compare.mjs                              # compare vs reference
+cargo run --bin render_corpus --release        # generate Rust SVGs for all themes
+node run_regression_all.mjs                   # PNG conversion + compare + HTML report
 ```
 
 ## Architecture

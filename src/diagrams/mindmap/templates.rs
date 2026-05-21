@@ -62,6 +62,19 @@ pub fn edge(px: f64, py: f64, mid_x: f64, cx: f64, cy: f64, color: &str) -> Stri
 }
 
 // ---------------------------------------------------------------------------
+// Node group
+// ---------------------------------------------------------------------------
+
+/// Render the opening `<g>` tag for a mindmap node (section class + id).
+pub fn node_group_open(section_class: &str, node_id: usize) -> String {
+    format!(
+        r##"<g class="mindmap-node {section_class}" id="node_{node_id}">"##,
+        section_class = section_class,
+        node_id = node_id,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------
 

@@ -37,11 +37,12 @@ pub fn marker_arrowend(id: &str) -> String {
 }
 
 /// Render the diagram title `<text>`.
-pub fn title_text(title_x: f64, text: &str) -> String {
+pub fn title_text(title_x: f64, text: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{title_x}\" y=\"20\">{text}</text>",
+        "<text x=\"{title_x}\" y=\"20\" font-family=\"Arial, sans-serif\" fill=\"{text_color}\">{text}</text>",
         title_x = title_x,
         text = text,
+        text_color = text_color,
     )
 }
 
@@ -296,21 +297,5 @@ pub fn all_markers(id: &str) -> String {
          <defs><marker id=\"{id}-crosshead\" markerWidth=\"15\" markerHeight=\"8\" orient=\"auto\" refX=\"16\" refY=\"4\"><path fill=\"black\" stroke=\"#000000\" stroke-width=\"1px\" d=\"M 9,2 V 6 L16,4 Z\" style=\"stroke-dasharray: 0, 0;\"></path><path fill=\"none\" stroke=\"#000000\" stroke-width=\"1px\" d=\"M 0,1 L 6,7 M 6,1 L 0,7\" style=\"stroke-dasharray: 0, 0;\"></path></marker></defs>\
          <defs><marker id=\"{id}-filled-head\" refX=\"18\" refY=\"7\" markerWidth=\"20\" markerHeight=\"28\" orient=\"auto\"><path d=\"M 18,7 L9,13 L14,7 L9,1 Z\"></path></marker></defs>",
         id = id,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-/// Render the C4 diagram CSS block.
-pub fn build_style(id: &str, ff: &str) -> String {
-    format!(
-        "#{id}{{font-family:{ff};font-size:16px;fill:#333;}}\
-         #{id} p{{margin:0;}}\
-         #{id} .person{{stroke:hsl(240, 60%, 86.2745098039%);fill:#ECECFF;}}\
-         #{id} :root{{--mermaid-font-family:{ff};}}",
-        id = id,
-        ff = ff,
     )
 }

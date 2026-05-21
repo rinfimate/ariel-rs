@@ -10,9 +10,9 @@ pub(crate) fn validate(_diagram: &parser::PacketDiagram) -> Vec<ParseError> {
     vec![]
 }
 
-/// Render a packet diagram from Mermaid syntax to SVG with foreignObject HTML labels.
+/// Render a Mermaid packet diagram to SVG.
 pub fn render_html(input: &str, theme: Theme) -> String {
     let mut result = parser::parse(input);
     result.errors.extend(validate(&result.diagram));
-    renderer::render(&result.diagram, theme, true)
+    renderer::render(&result.diagram, theme)
 }

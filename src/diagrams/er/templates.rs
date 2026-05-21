@@ -8,25 +8,6 @@ use crate::theme::ThemeVars;
 
 pub use crate::diagrams::util::esc;
 
-// ── CSS ───────────────────────────────────────────────────────────────────────
-
-pub fn build_css(svg_id: &str, ff: &str, vars: &ThemeVars) -> String {
-    let pc = vars.primary_color;
-    let pb = vars.primary_border;
-    let lc = vars.line_color;
-    let tc = vars.primary_text;
-    format!(
-        "#{svg_id}{{font-family:{ff};font-size:{FONT_SIZE}px;fill:{tc};}}\
-         #{svg_id} .er.entityBox{{fill:{pc};stroke:{pb};}}\
-         #{svg_id} .er.entityLabel{{fill:{tc};}}\
-         #{svg_id} .er.attributeBoxOdd{{fill:white;stroke:{pb};}}\
-         #{svg_id} .er.attributeBoxEven{{fill:{pc};stroke:{pb};}}\
-         #{svg_id} .er.relationshipLine{{stroke:{lc};fill:none;}}\
-         #{svg_id} .er.relationshipLabel{{fill:{tc};}}\
-         #{svg_id} .er.relationshipLabelBox{{fill:white;opacity:0.85;}}",
-    )
-}
-
 // ── Markers ───────────────────────────────────────────────────────────────────
 
 pub fn render_markers(svg_id: &str, vars: &ThemeVars) -> String {
@@ -79,18 +60,28 @@ pub fn marker_end(rel: &ErRelationship, svg_id: &str) -> String {
     format!("url(#{svg_id}-{name})")
 }
 
-// ── Entity label (foreignObject) ─────────────────────────────────────────────
+// ── Entity label (native SVG text) ───────────────────────────────────────────
 
-pub fn fo_label(x: f64, y: f64, w: f64, h: f64, text: &str, style: &str) -> String {
+pub fn fo_label(x: f64, y: f64, _w: f64, h: f64, text: &str, style: &str, pt: &str) -> String {
+    // Vertical center within the label box: y offset = h/2
+    let text_y = y + h / 2.0;
+    // italic style means attribute_comment column
+    let font_style = if style.contains("italic") {
+        " font-style=\"italic\""
+    } else {
+        ""
+    };
     format!(
-        "<g class=\"label\" transform=\"translate({x:.3},{y:.3})\">\
-         <foreignObject width=\"{w:.3}\" height=\"{h:.3}\">\
-         <div xmlns=\"http://www.w3.org/1999/xhtml\" \
-         style=\"display:table-cell;white-space:nowrap;line-height:1.5;\
-         max-width:200px;text-align:center;{style}\">\
-         <span class=\"nodeLabel\">{text}</span>\
-         </div></foreignObject></g>",
-        text = esc(text)
+        "<g class=\"label\" transform=\"translate({x:.3},0)\">\
+         <text font-family=\"Arial, sans-serif\" \
+         font-size=\"{FONT_SIZE}\"{font_style} fill=\"{pt}\" \
+         text-anchor=\"start\" dominant-baseline=\"middle\" \
+         x=\"0\" y=\"{text_y:.3}\">{escaped}</text></g>",
+        x = x,
+        text_y = text_y,
+        font_style = font_style,
+        pt = pt,
+        escaped = esc(text),
     )
 }
 
@@ -122,24 +113,17 @@ pub fn render_relationship(
          marker-start=\"{ms}\" marker-end=\"{me}\"/>"
     ));
 
-    // Edge label as foreignObject (matches reference erRenderer-unified edgeLabel structure)
+    // Edge label with background rect
     if !rel.role_a.is_empty() && points.len() >= 2 {
         let (lx, ly) = midpoint(points);
-        let lbl_w = crate::text::measure(&rel.role_a, REL_FONT_SIZE).0 * TEXT_SCALE;
-        let fo_h = REL_FONT_SIZE * 1.5; // 14 * 1.5 = 21
-        s.push_str(&format!(
-            "<g class=\"edgeLabel\" transform=\"translate({:.3},{:.3})\">\
-             <g class=\"label\" transform=\"translate({:.3},{:.3})\">\
-             <foreignObject width=\"{:.3}\" height=\"{:.3}\" style=\"font-size:{REL_FONT_SIZE}px;\">\
-             <div xmlns=\"http://www.w3.org/1999/xhtml\" \
-             class=\"labelBkg\" style=\"display:table-cell;white-space:nowrap;\
-             line-height:1.5;text-align:center;\">\
-             <span class=\"edgeLabel\">{}</span>\
-             </div></foreignObject></g></g>",
-            lx, ly,
-            -lbl_w / 2.0, -fo_h / 2.0,
-            lbl_w, fo_h,
-            esc(&rel.role_a)
+        let lbl_w = crate::text_browser_metrics::measure_browser(&rel.role_a, REL_FONT_SIZE).0;
+        s.push_str(&edge_label_text(
+            lx,
+            ly,
+            &esc(&rel.role_a),
+            vars.primary_text,
+            vars.er_relation_label_bg,
+            lbl_w,
         ));
     }
 
@@ -229,33 +213,27 @@ pub fn self_loop_path_mid(d: &str, lc: &str, dasharray: &str) -> String {
     )
 }
 
-/// Render the self-loop edge label.
+/// Render the self-loop edge label as a native SVG `<text>`.
 #[allow(clippy::too_many_arguments)]
 pub fn self_loop_edge_label(
     lx: f64,
     ly: f64,
-    ox: f64,
-    oy: f64,
-    lbl_w: f64,
-    fo_h: f64,
+    _ox: f64,
+    _oy: f64,
+    _lbl_w: f64,
+    _fo_h: f64,
     rel_font_size: f64,
     text: &str,
+    pt: &str,
 ) -> String {
     format!(
-        "<g class=\"edgeLabel\" transform=\"translate({lx:.3},{ly:.3})\">\
-         <g class=\"label\" transform=\"translate({ox:.3},{oy:.3})\">\
-         <foreignObject width=\"{lbl_w:.3}\" height=\"{fo_h:.3}\" style=\"font-size:{rel_font_size}px;\">\
-         <div xmlns=\"http://www.w3.org/1999/xhtml\" class=\"labelBkg\" \
-         style=\"display:table-cell;white-space:nowrap;line-height:1.5;text-align:center;\">\
-         <span class=\"edgeLabel\">{text}</span>\
-         </div></foreignObject></g></g>",
+        "<text class=\"edgeLabel\" font-family=\"Arial, sans-serif\" \
+         font-size=\"{rel_font_size}\" fill=\"{pt}\" text-anchor=\"middle\" \
+         dominant-baseline=\"middle\" x=\"{lx:.3}\" y=\"{ly:.3}\">{text}</text>",
         lx = lx,
         ly = ly,
-        ox = ox,
-        oy = oy,
-        lbl_w = lbl_w,
-        fo_h = fo_h,
         rel_font_size = rel_font_size,
+        pt = pt,
         text = text,
     )
 }
@@ -269,6 +247,54 @@ pub fn self_loop_path_end(d: &str, lc: &str, dasharray: &str, me: &str) -> Strin
         lc = lc,
         dasharray = dasharray,
         me = me,
+    )
+}
+
+// ── Top-level SVG wrapper ─────────────────────────────────────────────────────
+
+/// Render the outer `<svg>` element with markers, relationships and entities.
+#[allow(clippy::too_many_arguments)]
+pub fn svg_root(
+    svg_id: &str,
+    vb_x: f64,
+    vb_y: f64,
+    vb_w: f64,
+    vb_h: f64,
+    markers: &str,
+    rels_svg: &str,
+    entities_svg: &str,
+) -> String {
+    format!(
+        "<svg id=\"{svg_id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" \
+         class=\"erDiagram\" style=\"max-width:{vb_w:.3}px;\" \
+         viewBox=\"{vb_x:.3} {vb_y:.3} {vb_w:.3} {vb_h:.3}\">\
+         {markers}\
+         {rels_svg}\
+         {entities_svg}\
+         </svg>",
+    )
+}
+
+// ── Edge label helper ─────────────────────────────────────────────────────────
+
+/// Render a relationship edge label as a native SVG `<text>`.
+pub fn edge_label_text(x: f64, y: f64, text: &str, pt: &str, bg: &str, text_w: f64) -> String {
+    // Height = REL_FONT_SIZE × 1.5 (line-height), matching Mermaid's foreignObject height.
+    // No extra padding — the foreignObject background fills exactly text_w × line_h.
+    let rw = text_w;
+    let rh = REL_FONT_SIZE * 1.5;
+    let rx = x - rw / 2.0;
+    let ry = y - rh / 2.0;
+    format!(
+        "<rect class=\"relationshipLabelBox\" x=\"{rx:.3}\" y=\"{ry:.3}\" width=\"{rw:.3}\" height=\"{rh:.3}\" \
+         fill=\"{bg}\"/>\
+         <text class=\"edgeLabel er relationshipLabel\" \
+         font-family=\"Arial, sans-serif\" \
+         font-size=\"{REL_FONT_SIZE}\" fill=\"{pt}\" \
+         text-anchor=\"middle\" dominant-baseline=\"middle\" \
+         x=\"{x:.3}\" y=\"{y:.3}\">{text}</text>",
+        rx = rx, ry = ry, rw = rw, rh = rh,
+        bg = bg, x = x, y = y, pt = pt, text = text,
     )
 }
 
