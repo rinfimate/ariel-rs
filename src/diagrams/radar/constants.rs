@@ -38,10 +38,12 @@ pub const SVG_HEIGHT: f64 = CHART_HEIGHT + MARGIN_TOP + MARGIN_BOTTOM; // 700
 
 /// Factor applied to radius for the end of the axis spoke.
 /// axisScaleFactor = 1 (default). Can be overridden per-diagram.
+#[allow(dead_code)]
 pub const AXIS_SCALE_FACTOR: f64 = 1.0;
 
 /// Factor applied to radius for axis label placement.
 /// axisLabelFactor = 1.05 (default).
+#[allow(dead_code)]
 pub const AXIS_LABEL_FACTOR: f64 = 1.05;
 
 // ---------------------------------------------------------------------------

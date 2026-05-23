@@ -639,6 +639,7 @@ fn arrow_angled(tip_x: f64, tip_y: f64, from_x: f64, from_y: f64) -> (String, St
 /// The transform positions the tip 2px inside the icon boundary.
 ///
 /// `dir` is the port direction on the node (e.g. L = arrow enters from left → rightward arrow).
+#[allow(dead_code)]
 fn arrow_at(centre: &Pos, dir: &Direction, _anchor_x: f64, _anchor_y: f64) -> (String, String) {
     let a = 40.0_f64 / 3.0; // 13.333...
     let ha = a / 2.0; //  6.666...

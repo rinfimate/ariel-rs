@@ -297,7 +297,7 @@ pub fn control_badge(
     kind: &str,
     pf: &str,
     pb: &str,
-    tc: &str,
+    _tc: &str,
 ) -> String {
     format!(
         r##"<polygon points="{p1} {p2} {p3} {p4} {p5}" class="labelBox" fill="{pf}" stroke="{pb}"></polygon><text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;">{kind}</text>"##,
@@ -316,7 +316,7 @@ pub fn control_badge(
 }
 
 /// Render the main condition label for a control structure.
-pub fn control_label_text(cx: f64, cy: f64, font_size: u32, label: &str, tc: &str) -> String {
+pub fn control_label_text(cx: f64, cy: f64, font_size: u32, label: &str, _tc: &str) -> String {
     format!(
         r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">[{label}]</tspan></text>"##,
         cx = cx,

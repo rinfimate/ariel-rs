@@ -280,13 +280,12 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 SeqItem::BlockEnd => {
                     in_box = None;
                 }
-                SeqItem::Participant(p) => {
-                    if in_box.is_some() {
-                        if let Some(bg) = box_groups.last_mut() {
-                            bg.actors.push(p.name.clone());
-                        }
+                SeqItem::Participant(p) if in_box.is_some() => {
+                    if let Some(bg) = box_groups.last_mut() {
+                        bg.actors.push(p.name.clone());
                     }
                 }
+                SeqItem::Participant(_) => {}
                 _ => {}
             }
             let _ = in_box.as_ref(); // suppress unused warning
@@ -484,7 +483,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 .map(|_| FONT_SIZE)
                 .next()
                 .unwrap_or(0.0);
-            BOX_MARGIN as f64 + max_label_h
+            BOX_MARGIN + max_label_h
         } else {
             0.0
         };
@@ -657,7 +656,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     .map(|_| FONT_SIZE)
                     .next()
                     .unwrap_or(0.0);
-                BOX_MARGIN as f64 + max_label_h
+                BOX_MARGIN + max_label_h
             } else {
                 0.0
             };
@@ -1222,7 +1221,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 .map(|_| FONT_SIZE)
                 .next()
                 .unwrap_or(0.0);
-            BOX_MARGIN as f64 + max_label_h
+            BOX_MARGIN + max_label_h
         } else {
             0.0
         };
@@ -1549,7 +1548,7 @@ fn render_control(
     if !ctrl.label.is_empty() {
         let box_w = x2 - x1;
         let label_text = format!("[{}]", ctrl.label);
-        let label_w = crate::text_browser_metrics::measure_browser(&label_text, FONT_SIZE as f64).0;
+        let label_w = crate::text_browser_metrics::measure_browser(&label_text, FONT_SIZE).0;
         if label_w > box_w - 10.0 {
             // Wrap: split on space into two tspans
             let words: Vec<&str> = ctrl.label.split_whitespace().collect();

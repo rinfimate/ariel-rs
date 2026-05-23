@@ -187,7 +187,7 @@ pub fn section_box(
     width: f64,
     line_color: &str,
     text_x: f64,
-    text_y: f64,
+    _text_y: f64,
     text_color: &str,
     label: &str,
 ) -> String {

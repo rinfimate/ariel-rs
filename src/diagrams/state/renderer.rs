@@ -243,6 +243,7 @@ fn find_non_cluster_child(id: &str, g: &Graph) -> Option<String> {
 //     (keeps dividers in same rank → side-by-side in TB or LR)
 //   - otherwise → flip TB↔LR
 
+#[allow(clippy::only_used_in_recursion)]
 fn extractor(
     g: &mut Graph,
     parent_dir: &str,
@@ -922,6 +923,7 @@ fn render_sub_graph(
 // divider: rect at full node.x-w/2, node.y-h/2 (no inset, no title)
 // roundedWithTitle: outer rect + title text + inner content rect
 
+#[allow(clippy::too_many_arguments)]
 fn render_cluster(
     dom_id: &str,
     cx: f64,
@@ -1091,7 +1093,7 @@ fn label_w(label: &str) -> f64 {
 fn viewbox(
     g: &Graph,
     pedges: &[PEdge],
-    pnodes: &[PNode],
+    _pnodes: &[PNode],
     sub_graphs: &HashMap<String, SubGraph>,
 ) -> (f64, f64, f64, f64) {
     let mut min_x = f64::MAX;

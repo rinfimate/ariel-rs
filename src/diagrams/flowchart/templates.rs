@@ -216,6 +216,7 @@ pub fn edge_path_with_start(
 /// `stroke`: the edge stroke colour (from `vars.line_color`).
 /// `stroke_width`: e.g. `"1px"` (normal) or `"3.5px"` (thick).
 /// `stroke_dasharray`: e.g. `"0"` (solid), `"3"` (dashed), `"2"` (dotted).
+#[allow(dead_code)]
 pub fn edge_path(
     path_d: &str,
     edge_id: &str,

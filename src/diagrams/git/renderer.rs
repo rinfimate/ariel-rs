@@ -520,6 +520,7 @@ fn draw_arrow(p1: CommitPos, p2: CommitPos, dir: DiagramDirection, commit_b: &Co
 
 // ── Commit bullet rendering ───────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn draw_commit_bullet(
     out: &mut String,
     commit: &Commit,

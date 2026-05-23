@@ -18,6 +18,7 @@ pub const NOTE_HEIGHT: f64 = 54.0;
 pub const NOTE_MIN_WIDTH: f64 = 100.0;
 pub const CLUSTER_LABEL_H: f64 = 34.0; // used for apply_title_offset on main-graph compounds
 pub const CLUSTER_TITLE_AREA: f64 = 26.0; // ref: label_height(24) + 2 = inner_rect offset from outer rect
+#[allow(dead_code)]
 pub const CLUSTER_PAD: f64 = 8.0;
 // dagre/index.js recursiveRender: node.graph.ranksep = parent_ranksep + 25
 // Main=50 → LR concurrent sub-graph=75 → TB divider sub-sub-graph=100

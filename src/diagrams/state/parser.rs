@@ -22,12 +22,14 @@ pub struct Node {
     pub is_group: bool,
     pub parent_id: Option<String>,
     pub dir: String, // explicit direction (e.g. "LR"), empty if none
+    #[allow(dead_code)]
     pub padding: f64,
     pub explicit_dir: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct Edge {
+    #[allow(dead_code)]
     pub id: String,
     pub start: String,
     pub end: String,
@@ -518,7 +520,7 @@ fn parse_raw(input: &str) -> (Vec<ParsedItem>, String) {
     (items, direction)
 }
 
-fn push(items: &mut Vec<ParsedItem>, stack: &mut Vec<(String, Vec<ParsedItem>)>, item: ParsedItem) {
+fn push(items: &mut Vec<ParsedItem>, stack: &mut [(String, Vec<ParsedItem>)], item: ParsedItem) {
     if let Some((_, ch)) = stack.last_mut() {
         ch.push(item);
     } else {
@@ -544,16 +546,15 @@ fn parse_note_pos(s: &str) -> Option<(String, String)> {
     let s = s.trim();
     if let Some(r) = s.strip_prefix("right of ") {
         Some(("right of".into(), r.trim().to_string()))
-    } else if let Some(r) = s.strip_prefix("left of ") {
-        Some(("left of".into(), r.trim().to_string()))
     } else {
-        None
+        s.strip_prefix("left of ")
+            .map(|r| ("left of".into(), r.trim().to_string()))
     }
 }
 fn parse_state_id(s: &str) -> String {
-    if s.starts_with('"') {
-        if let Some(eq) = s[1..].find('"') {
-            let after = s[eq + 2..].trim();
+    if let Some(inner) = s.strip_prefix('"') {
+        if let Some(eq) = inner.find('"') {
+            let after = inner[eq + 1..].trim();
             if let Some(id) = after.strip_prefix("as ") {
                 return id.trim().to_string();
             }

@@ -453,7 +453,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
                 false,
                 vars.line_color,
                 theme,
-                &shadow_filter,
+                shadow_filter,
             );
             parts.extend(task_svgs);
 
@@ -475,7 +475,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
             true,
             vars.line_color,
             theme,
-            &shadow_filter,
+            shadow_filter,
         );
         parts.extend(task_svgs);
         master_x += 200.0 * tasks.len() as f64;
