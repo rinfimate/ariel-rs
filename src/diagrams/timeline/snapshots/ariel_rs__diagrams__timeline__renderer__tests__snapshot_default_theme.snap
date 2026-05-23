@@ -18,9 +18,9 @@ expression: "crate::svg::normalize_floats(&svg)"
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="#ffffff"><tspan x="0" dy="1em">2002</tspan></text></g>
 </g></g>
 <g class="lineWrapper"><line x1="295" y1="115.816" x2="295" y2="361.631" style="stroke:#333333;stroke-width:2;stroke-dasharray:5,5;" marker-end="url(#mermaid-timeline-arrowhead)"></line></g>
-<g class="eventWrapper" style="filter:brightness(120%)" transform="translate(200, 250)"><g class="timeline-node section--1">
+<g class="eventWrapper" transform="translate(200, 250)"><g class="timeline-node section--1">
   <g>
-    <path id="node-1" class="node-bkg node-undefined" fill="hsl(240, 100%, 76.275%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
+    <path id="node-1" class="node-bkg node-undefined" fill="hsl(240, 100%, 91.529%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
     <line class="node-line--1" x1="0" y1="50" x2="190" y2="50" stroke="hsl(60, 100%, 86.275%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="#ffffff"><tspan x="0" dy="1em">LinkedIn</tspan></text></g>
@@ -33,9 +33,9 @@ expression: "crate::svg::normalize_floats(&svg)"
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="black"><tspan x="0" dy="1em">2004</tspan></text></g>
 </g></g>
 <g class="lineWrapper"><line x1="495" y1="115.816" x2="495" y2="361.631" style="stroke:#333333;stroke-width:2;stroke-dasharray:5,5;" marker-end="url(#mermaid-timeline-arrowhead)"></line></g>
-<g class="eventWrapper" style="filter:brightness(120%)" transform="translate(400, 250)"><g class="timeline-node section-0">
+<g class="eventWrapper" transform="translate(400, 250)"><g class="timeline-node section-0">
   <g>
-    <path id="node-3" class="node-bkg node-undefined" fill="hsl(60, 100%, 73.529%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
+    <path id="node-3" class="node-bkg node-undefined" fill="hsl(60, 100%, 88.235%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
     <line class="node-line-0" x1="0" y1="50" x2="190" y2="50" stroke="hsl(240, 100%, 83.529%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="black"><tspan x="0" dy="1em">Facebook</tspan></text></g>

@@ -1,6 +1,44 @@
 use super::constants::*;
 use super::parser::{TimelineDiagram, TimelineTask};
 use super::templates::{self, esc, node_text_element, text_tspan};
+
+/// Brighten a color by 20% (replaces `filter:brightness(120%)`).
+/// Handles `hsl(h, s%, l%)` and `#RRGGBB` / `#RGB` hex formats.
+fn brighten_color(color: &str) -> String {
+    let c = color.trim();
+    if let Some(inner) = c.strip_prefix("hsl(").and_then(|s| s.strip_suffix(')')) {
+        let parts: Vec<&str> = inner.split(',').collect();
+        if parts.len() == 3 {
+            let l_str = parts[2].trim().trim_end_matches('%');
+            if let Ok(l) = l_str.parse::<f64>() {
+                let l2 = (l * 1.2).min(100.0);
+                return format!("hsl({}, {}, {:.4}%)", parts[0].trim(), parts[1].trim(), l2);
+            }
+        }
+    }
+    if let Some(hex) = c.strip_prefix('#') {
+        let (r, g, b) = if hex.len() == 6 {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok();
+            let g = u8::from_str_radix(&hex[2..4], 16).ok();
+            let b = u8::from_str_radix(&hex[4..6], 16).ok();
+            (r, g, b)
+        } else if hex.len() == 3 {
+            let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).ok();
+            let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).ok();
+            let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).ok();
+            (r, g, b)
+        } else {
+            (None, None, None)
+        };
+        if let (Some(r), Some(g), Some(b)) = (r, g, b) {
+            let r2 = ((r as f64 * 1.2).round() as u32).min(255) as u8;
+            let g2 = ((g as f64 * 1.2).round() as u32).min(255) as u8;
+            let b2 = ((b as f64 * 1.2).round() as u32).min(255) as u8;
+            return format!("#{:02x}{:02x}{:02x}", r2, g2, b2);
+        }
+    }
+    c.to_string()
+}
 /// Faithful Rust port of Mermaid's timelineRenderer.ts + svgDraw.js.
 ///
 /// Layout algorithm (mirrors the JS draw() function exactly):
@@ -264,7 +302,7 @@ fn draw_node(
     section_idx: usize,
     node_id: &mut usize,
     max_height: f64,
-    _is_event: bool,
+    is_event: bool,
     theme: Theme,
     shadow_filter: &str,
 ) -> (String, f64) {
@@ -285,7 +323,14 @@ fn draw_node(
     let tspans = build_tspans(label, NODE_WIDTH, text_color);
 
     let mut svg = String::new();
-    let fill = section_fill(section_idx, theme);
+    let base_fill = section_fill(section_idx, theme);
+    let brightened;
+    let fill = if is_event {
+        brightened = brighten_color(base_fill);
+        &brightened
+    } else {
+        base_fill
+    };
     let line = section_line(section_idx, theme);
     svg.push_str(&templates::node_group_open(section_class));
     svg.push_str("  <g>\n");

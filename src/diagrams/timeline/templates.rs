@@ -85,10 +85,9 @@ pub fn task_wrapper(x: f64, y: f64, svg: &str) -> String {
 }
 
 /// Render the wrapper `<g>` that positions an event node.
-/// Applies `filter:brightness(120%)` to match Mermaid's `.eventWrapper{filter:brightness(120%)}` CSS rule.
 pub fn event_wrapper(x: f64, y: f64, svg: &str) -> String {
     format!(
-        "<g class=\"eventWrapper\" style=\"filter:brightness(120%)\" transform=\"translate({x}, {y})\">{svg}</g>",
+        "<g class=\"eventWrapper\" transform=\"translate({x}, {y})\">{svg}</g>",
         x = x,
         y = y,
         svg = svg,
