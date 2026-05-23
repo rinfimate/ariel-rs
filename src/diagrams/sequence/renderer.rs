@@ -27,8 +27,8 @@ fn actor_visual_height(kind: &ParticipantKind) -> f64 {
 // ─── Internal actor model ───────────────────────────────────────────────────
 #[derive(Debug, Clone)]
 struct Actor {
-    name: String,
-    _alias: String,
+    name: String,  // ID used for message lookups
+    alias: String, // display label (same as name when no alias declared)
     kind: ParticipantKind,
     x: f64,
     y: f64,
@@ -93,6 +93,8 @@ enum ControlKind {
     Alt,
     Opt,
     Par,
+    Critical,
+    Break,
 }
 
 #[derive(Debug, Clone)]
@@ -256,6 +258,41 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     let mut actor_order: Vec<String> = Vec::new();
     let mut actor_map: std::collections::HashMap<String, Actor> = std::collections::HashMap::new();
 
+    // Collect box groups: (label, color, actor_names)
+    struct BoxGroup {
+        label: String,
+        color: Option<String>,
+        actors: Vec<String>,
+    }
+    let mut box_groups: Vec<BoxGroup> = Vec::new();
+    {
+        let mut in_box: Option<(String, Option<String>)> = None;
+        for item in &diag.items {
+            match item {
+                SeqItem::BoxStart { label, color } => {
+                    in_box = Some((label.clone(), color.clone()));
+                    box_groups.push(BoxGroup {
+                        label: label.clone(),
+                        color: color.clone(),
+                        actors: Vec::new(),
+                    });
+                }
+                SeqItem::BlockEnd => {
+                    in_box = None;
+                }
+                SeqItem::Participant(p) => {
+                    if in_box.is_some() {
+                        if let Some(bg) = box_groups.last_mut() {
+                            bg.actors.push(p.name.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+            let _ = in_box.as_ref(); // suppress unused warning
+        }
+    }
+
     // First pass: explicit participants
     for item in &diag.items {
         if let SeqItem::Participant(p) = item {
@@ -268,7 +305,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     p.name.clone(),
                     Actor {
                         name: p.name.clone(),
-                        _alias: p.alias.clone(),
+                        alias: p.alias.clone(),
                         kind: p.kind.clone(),
                         x: 0.0,
                         y: 0.0,
@@ -294,7 +331,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                             (*name).clone(),
                             Actor {
                                 name: (*name).clone(),
-                                _alias: (*name).clone(),
+                                alias: (*name).clone(),
                                 kind: ParticipantKind::Participant,
                                 x: 0.0,
                                 y: 0.0,
@@ -316,7 +353,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                             name.clone(),
                             Actor {
                                 name: name.clone(),
-                                _alias: name.clone(),
+                                alias: name.clone(),
                                 kind: ParticipantKind::Participant,
                                 x: 0.0,
                                 y: 0.0,
@@ -438,9 +475,22 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
         // now mutate
         let actor = actor_map.get_mut(name).unwrap();
         actor.x = prev_x;
-        actor.y = 0.0;
-        actor.start_y = actor.height; // lifeline starts at actor height
-        actor.stop_y = actor.height; // will be updated during vertical layout
+        // Mermaid: if hasBoxes, bumpVerticalPos(boxMargin) + bumpVerticalPos(textMaxHeight)
+        // before drawing actors, so all actors start lower to leave space for box labels.
+        let actor_y = if !box_groups.is_empty() {
+            let max_label_h = box_groups
+                .iter()
+                .filter(|bg| !bg.label.is_empty())
+                .map(|_| FONT_SIZE)
+                .next()
+                .unwrap_or(0.0);
+            BOX_MARGIN as f64 + max_label_h
+        } else {
+            0.0
+        };
+        actor.y = actor_y;
+        actor.start_y = actor.y + actor.height; // lifeline starts below actor box
+        actor.stop_y = actor.y + actor.height; // will be updated during vertical layout
         actor.margin = margin_rounded;
         prev_x += actor_width + margin_rounded;
     }
@@ -465,8 +515,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 | SeqItem::ParStart(_)
                 | SeqItem::CriticalStart(_)
                 | SeqItem::BreakStart(_)
-                | SeqItem::RectStart(_)
-                | SeqItem::BoxStart { .. } => {
+                | SeqItem::RectStart(_) => {
                     stack.push((
                         item_idx,
                         LoopBound {
@@ -474,6 +523,9 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                             to: f64::MIN,
                         },
                     ));
+                }
+                SeqItem::BoxStart { .. } => {
+                    // Participant group box — no loop frame for label sizing
                 }
                 SeqItem::AltElse(_) | SeqItem::ParAnd(_) | SeqItem::CriticalOption(_) => {
                     // section dividers don't pop the frame
@@ -594,7 +646,23 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             .fold(0.0f64, f64::max),
         start_y: 0.0,
         stop_y: 0.0,
-        vertical_pos: ACTOR_HEIGHT, // always 65 for layout (Mermaid conf.height)
+        // Mermaid: after addActorRenderingData, vp = actor.starty + maxHeight
+        // actor.starty = boxMargin + textMaxHeight (when boxes exist), else 0
+        // maxHeight = ACTOR_HEIGHT
+        vertical_pos: {
+            let actor_start_y = if !box_groups.is_empty() {
+                let max_label_h = box_groups
+                    .iter()
+                    .filter(|bg| !bg.label.is_empty())
+                    .map(|_| FONT_SIZE)
+                    .next()
+                    .unwrap_or(0.0);
+                BOX_MARGIN as f64 + max_label_h
+            } else {
+                0.0
+            };
+            actor_start_y + ACTOR_HEIGHT
+        },
         loop_stack: Vec::new(),
         activations: Vec::new(),
     };
@@ -677,7 +745,13 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     // Trim the endpoint so the arrowhead tip lands on the lifeline.
                     // Lines with no marker (Solid/Dotted) need no trim — go to cx - 1.
                     // Lines with a marker need trim equal to the arrowhead overhang.
-                    let has_marker = !matches!(m.line_type, LineType::Solid | LineType::Dotted);
+                    let has_marker = !matches!(
+                        m.line_type,
+                        LineType::Solid
+                            | LineType::Dotted
+                            | LineType::SolidCross
+                            | LineType::DottedCross
+                    );
                     let trim = if has_marker { 4.0 } else { 1.0 };
                     let trim_sign = if from_actor.cx() <= to_actor.cx() {
                         -1.0
@@ -799,9 +873,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 }
                 bounds.insert(from_bounds, start_y, to_bounds, line_start_y);
 
-                if auto_number {
-                    seq_idx += 1;
-                }
+                seq_idx += 1;
             }
 
             SeqItem::Note(n) => {
@@ -1007,8 +1079,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
 
             SeqItem::Participant(_) => {} // handled in step 1
 
-            // New grammar variants — treat as loop-like blocks or skip
-            SeqItem::CriticalStart(label) | SeqItem::BreakStart(label) => {
+            SeqItem::CriticalStart(label) => {
                 let label_h = loop_label_heights.get(&item_idx).copied().unwrap_or(0.0);
                 let height_adjust = BOX_MARGIN + BOX_TEXT_MARGIN + label_h.max(LABEL_BOX_HEIGHT);
                 bounds.bump(BOX_MARGIN);
@@ -1016,7 +1087,24 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 bounds.bump(height_adjust);
                 bounds.loop_stack.push(LoopFrame {
                     label: label.clone(),
-                    kind: ControlKind::Loop,
+                    kind: ControlKind::Critical,
+                    from: f64::MAX,
+                    to: f64::MIN,
+                    start_y: frame_start_y,
+                    stop_y: 0.0,
+                    sections: Vec::new(),
+                    is_alt: false,
+                });
+            }
+            SeqItem::BreakStart(label) => {
+                let label_h = loop_label_heights.get(&item_idx).copied().unwrap_or(0.0);
+                let height_adjust = BOX_MARGIN + BOX_TEXT_MARGIN + label_h.max(LABEL_BOX_HEIGHT);
+                bounds.bump(BOX_MARGIN);
+                let frame_start_y = bounds.getvertical();
+                bounds.bump(height_adjust);
+                bounds.loop_stack.push(LoopFrame {
+                    label: label.clone(),
+                    kind: ControlKind::Break,
                     from: f64::MAX,
                     to: f64::MIN,
                     start_y: frame_start_y,
@@ -1039,8 +1127,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 }
             }
 
-            SeqItem::RectStart(_) | SeqItem::BoxStart { .. } => {
-                // Rect/box — bump for the block header
+            SeqItem::RectStart(_) => {
+                // Rect is a message-flow box (like loop) — bump and push frame
                 bounds.bump(BOX_MARGIN);
                 let frame_start_y = bounds.getvertical();
                 bounds.loop_stack.push(LoopFrame {
@@ -1053,6 +1141,10 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     sections: Vec::new(),
                     is_alt: false,
                 });
+            }
+            SeqItem::BoxStart { .. } => {
+                // Box is a participant GROUP box — rendered as a background rect behind
+                // the actor columns, not as a message-flow box. No loop frame needed.
             }
 
             SeqItem::Link { .. } => {}
@@ -1083,6 +1175,71 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     let mut svg_parts: Vec<String> = Vec::new();
 
     svg_parts.push(String::from("<g></g>"));
+
+    // ── Box group backgrounds (participant groups) ────────────────────────────
+    // Rendered first so they appear behind everything else.
+    for bg in &box_groups {
+        let actor_xs: Vec<f64> = bg
+            .actors
+            .iter()
+            .filter_map(|n| actor_map.get(n))
+            .map(|a| a.x)
+            .collect();
+        let actor_rights: Vec<f64> = bg
+            .actors
+            .iter()
+            .filter_map(|n| actor_map.get(n))
+            .map(|a| a.x + a.width)
+            .collect();
+        if actor_xs.is_empty() {
+            continue;
+        }
+        // Faithful port of Mermaid drawBox:
+        //   boxPadding = boxMargin*2 = 20
+        //   startx = box.x - boxPadding         (20px left of actors)
+        //   starty = box.y - boxPadding*0.25    (5px above actors, actors at y=0)
+        //   stopx  = startx + width + 2*boxPadding  (20px right of actors)
+        //   stopy  = starty + height + boxPadding*0.75 (15px below bottom actors)
+        //   text y = starty + boxTextMargin (5px from top of box)
+        const BOX_PADDING: f64 = 20.0; // boxMargin(10) * 2
+                                       // box.y = verticalPos when box starts = 0 (before actor_y bump in Mermaid)
+                                       // starty = box.y - boxPadding*0.25 = 0 - 5 = -5
+                                       // stopy  = starty + height + boxPadding*0.75 = -5 + height + 15
+        let actor_x_min = actor_xs.iter().cloned().fold(f64::MAX, f64::min);
+        let actor_x_max = actor_rights.iter().cloned().fold(f64::MIN, f64::max);
+        let actor_span = actor_x_max - actor_x_min;
+        let bx = actor_x_min - BOX_PADDING;
+        let box_y = -BOX_PADDING * 0.25; // = -5 (Mermaid: box.y - boxPadding*0.25)
+        let bw = actor_span + 2.0 * BOX_PADDING;
+        let box_h = final_stopy - box_y + BOX_PADDING * 0.75;
+        let fill_color = bg.color.as_deref().unwrap_or("transparent");
+        // Center label vertically in the padding area above the actors.
+        // box top = box_y = -5, actor top = actor_y. Center = (box_y + actor_y) / 2.
+        let actor_top_y = if !box_groups.is_empty() {
+            let max_label_h = box_groups
+                .iter()
+                .filter(|bg2| !bg2.label.is_empty())
+                .map(|_| FONT_SIZE)
+                .next()
+                .unwrap_or(0.0);
+            BOX_MARGIN as f64 + max_label_h
+        } else {
+            0.0
+        };
+        let text_y = (box_y + actor_top_y) / 2.0;
+        let label_html = if bg.label.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<text x=\"{:.1}\" y=\"{:.1}\" dominant-baseline=\"central\" alignment-baseline=\"central\" class=\"text\" style=\"text-anchor: middle; font-size: 14px; font-weight: 400; font-family: Arial, sans-serif;\"><tspan x=\"{:.1}\" dy=\"0\">{}</tspan></text>",
+                bx + bw / 2.0, text_y, bx + bw / 2.0, esc(&bg.label)
+            )
+        };
+        svg_parts.push(format!(
+            "<rect x=\"{:.1}\" y=\"{:.1}\" fill=\"{}\" stroke=\"{}\" width=\"{:.0}\" height=\"{:.0}\" class=\"rect\" style=\"filter:drop-shadow(1px 2px 2px rgba(185,185,185,1))\"/>{}",
+            bx, box_y, fill_color, vars.primary_border, bw, box_h, label_html
+        ));
+    }
 
     // Defs (arrow markers)
     // marker_fill: filled arrowheads, crosshead, seqnum circle — git_spine_color matches .marker CSS per theme
@@ -1174,7 +1331,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             bottom_actor_svgs.push(actor_man_svg(
                 actor.cx(),
                 bottom_y,
-                &actor.name,
+                &actor.alias,
                 "actor-bottom",
                 ai + actor_order.len(),
                 vars.primary_color,
@@ -1188,7 +1345,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 bottom_y,
                 actor.width,
                 actor.height,
-                &actor.name,
+                &actor.alias,
                 "actor-bottom",
                 vars.primary_color,
                 vars.sequence_actor_border,
@@ -1196,7 +1353,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             g.push_str(&actor_text_svg(
                 actor.cx(),
                 bottom_y + actor.height / 2.0,
-                &actor.name,
+                &actor.alias,
                 vars.signal_color,
             ));
             g.push_str("</g>");
@@ -1226,7 +1383,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             g.push_str(&actor_man_svg(
                 actor.cx(),
                 actor.y,
-                &actor.name,
+                &actor.alias,
                 "actor-top",
                 ai,
                 vars.primary_color,
@@ -1240,7 +1397,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.y,
                 actor.width,
                 actor.height,
-                &actor.name,
+                &actor.alias,
                 "actor-top",
                 vars.primary_color,
                 vars.sequence_actor_border,
@@ -1248,7 +1405,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
             g.push_str(&actor_text_svg(
                 actor.cx(),
                 actor.y + actor.height / 2.0,
-                &actor.name,
+                &actor.alias,
                 vars.signal_color,
             ));
             g.push_str("</g>");
@@ -1291,7 +1448,9 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     let vb_y = -(DIAGRAM_MARGIN_Y as i64);
     let vb_w = box_width + 2.0 * DIAGRAM_MARGIN_X;
     // final_stopy = vp + 2*boxM + actorH + boxM; height = stopy + 2*DM_Y - boxM + 1
-    let vb_h = final_stopy + 2.0 * DIAGRAM_MARGIN_Y - BOX_MARGIN + 1.0;
+    // Extend viewBox height to include box group bottom (box extends boxPadding*0.75 below final_stopy)
+    let box_bottom_extra = if !box_groups.is_empty() { 20.0 } else { 0.0 };
+    let vb_h = final_stopy + 2.0 * DIAGRAM_MARGIN_Y - BOX_MARGIN + 1.0 + box_bottom_extra;
     let max_w = vb_w;
 
     let body = svg_parts.join("\n");
@@ -1324,6 +1483,8 @@ fn control_kind_label(k: &ControlKind) -> &'static str {
         ControlKind::Alt => "alt",
         ControlKind::Opt => "opt",
         ControlKind::Par => "par",
+        ControlKind::Critical => "critical",
+        ControlKind::Break => "break",
     }
 }
 
@@ -1386,13 +1547,32 @@ fn render_control(
     ));
 
     if !ctrl.label.is_empty() {
-        out.push_str(&templates::control_label_text(
-            cx_main,
-            cy_main,
-            FONT_SIZE as u32,
-            &esc(&ctrl.label),
-            tc,
-        ));
+        let box_w = x2 - x1;
+        let label_text = format!("[{}]", ctrl.label);
+        let label_w = crate::text_browser_metrics::measure_browser(&label_text, FONT_SIZE as f64).0;
+        if label_w > box_w - 10.0 {
+            // Wrap: split on space into two tspans
+            let words: Vec<&str> = ctrl.label.split_whitespace().collect();
+            let mid = words.len() / 2;
+            let line1 = format!("[{}", words[..mid].join(" "));
+            let line2 = format!("{}]", words[mid..].join(" "));
+            out.push_str(&templates::control_label_text_wrapped(
+                cx_main,
+                cy_main,
+                FONT_SIZE as u32,
+                &esc(&line1),
+                &esc(&line2),
+                tc,
+            ));
+        } else {
+            out.push_str(&templates::control_label_text(
+                cx_main,
+                cy_main,
+                FONT_SIZE as u32,
+                &esc(&ctrl.label),
+                tc,
+            ));
+        }
     }
 
     // Section title labels
@@ -1425,7 +1605,10 @@ fn render_message(
     seqnum_text_fill: &str,
     seqnum_circle_fill: &str,
 ) -> String {
-    let is_dotted = matches!(mm.line_type, LineType::Dotted | LineType::DottedArrow);
+    let is_dotted = matches!(
+        mm.line_type,
+        LineType::Dotted | LineType::DottedArrow | LineType::DottedCross
+    );
     let is_self = (mm.start_x - mm.stop_x).abs() < 0.5;
 
     let line_class = if is_dotted {
@@ -1443,6 +1626,9 @@ fn render_message(
     let marker = match mm.line_type {
         LineType::SolidArrow | LineType::DottedArrow => {
             format!(r#" marker-end="url(#{}-arrowhead)""#, diagram_id)
+        }
+        LineType::SolidCross | LineType::DottedCross => {
+            format!(r#" marker-end="url(#{}-crosshead)""#, diagram_id)
         }
         LineType::Point => {
             format!(r#" marker-end="url(#{}-filled-head)""#, diagram_id)

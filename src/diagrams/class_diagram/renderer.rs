@@ -21,7 +21,8 @@ pub fn render(diag: &ClassDiagram, theme: Theme, _use_foreign_object: bool) -> S
 }
 
 fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
-    let mut g = Graph::with_options(false, true, true);
+    let has_namespaces = !diag.namespaces.is_empty();
+    let mut g = Graph::with_options(has_namespaces, true, true);
     g.set_graph(GraphLabel {
         rankdir: Some(diag.direction.clone()),
         nodesep: Some(50.0),
@@ -31,7 +32,15 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
         ..Default::default()
     });
 
-    // Compute node sizes and add to graph
+    // Build a lookup: class_id -> namespace_name
+    let mut class_ns: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (ns_name, ns_classes) in &diag.namespaces {
+        for cls_id in ns_classes {
+            class_ns.insert(cls_id.clone(), ns_name.clone());
+        }
+    }
+
+    // Compute node sizes and add to graph (class nodes first, matching Mermaid's insertion order)
     let node_sizes: Vec<(String, f64, f64)> = diag
         .class_order
         .iter()
@@ -50,6 +59,33 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
                 height: *h,
                 ..Default::default()
             },
+        );
+    }
+
+    // Add note nodes after class nodes
+    for (ni, note) in diag.notes.iter().enumerate() {
+        let note_id = format!("__note_{}", ni);
+        let (tw, _) = measure(&note.text, FONT_SIZE);
+        let note_w = (tw * CONTENT_SCALE + 20.0).max(60.0);
+        let note_h = 30.0_f64;
+        g.set_node(
+            &note_id,
+            NodeLabel {
+                width: note_w,
+                height: note_h,
+                ..Default::default()
+            },
+        );
+        // Dashed edge from note to its class
+        g.set_edge(
+            &note_id,
+            &note.class_id,
+            EdgeLabel {
+                minlen: Some(1),
+                weight: Some(1.0),
+                ..Default::default()
+            },
+            Some(&format!("note_edge_{}", ni)),
         );
     }
 
@@ -77,6 +113,24 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
             },
             key.as_deref(),
         );
+    }
+
+    // Add namespace cluster nodes last (after all class nodes and edges)
+    // and set parent relationships — matches Mermaid's insertion order
+    for (ns_name, _) in &diag.namespaces {
+        g.set_node(
+            ns_name,
+            NodeLabel {
+                width: 0.0,
+                height: 0.0,
+                ..Default::default()
+            },
+        );
+    }
+    for (id, _, _) in &node_sizes {
+        if let Some(ns) = class_ns.get(id) {
+            g.set_parent(id, Some(ns));
+        }
     }
 
     layout(&mut g);
@@ -109,8 +163,56 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
 
     out.push_str(r#"<g class="root">"#);
 
-    // clusters (none for basic class diagrams)
-    out.push_str(r#"<g class="clusters"></g>"#);
+    // Namespace clusters
+    // From reference SVG: rect x=8,y=8,w=160,h=196; Cat center=(88,106), Cat half_h=63
+    // → left/right pad = 8px, top/bottom total = 35px (label sits at y+8 inside box)
+    const CLUSTER_H_PAD: f64 = 35.0;
+    const CLUSTER_V_PAD: f64 = 35.0;
+    out.push_str(r#"<g class="clusters">"#);
+    for (ns_name, ns_classes) in &diag.namespaces {
+        if let Some(nl) = g.node_opt(ns_name) {
+            let cx = nl.x.unwrap_or(0.0);
+            // Compute cluster bounds from actual child node positions
+            let mut min_x = cx;
+            let mut max_x = cx;
+            let mut min_y = nl.y.unwrap_or(0.0);
+            let mut max_y = min_y;
+            for child_id in ns_classes {
+                if let Some(cn) = g.node_opt(child_id) {
+                    let ccx = cn.x.unwrap_or(0.0);
+                    let ccy = cn.y.unwrap_or(0.0);
+                    min_x = min_x.min(ccx - cn.width / 2.0);
+                    max_x = max_x.max(ccx + cn.width / 2.0);
+                    min_y = min_y.min(ccy - cn.height / 2.0);
+                    max_y = max_y.max(ccy + cn.height / 2.0);
+                }
+            }
+            let nw = (max_x - min_x) + CLUSTER_H_PAD * 2.0;
+            let nh = (max_y - min_y) + CLUSTER_V_PAD * 2.0;
+            let x = min_x - CLUSTER_H_PAD;
+            let y = min_y - CLUSTER_V_PAD;
+            out.push_str(&format!(
+                r#"<g class="cluster" id="mermaid-svg-{ns}" data-look="classic">"#,
+                ns = esc(ns_name)
+            ));
+            out.push_str(&format!(
+                r#"<rect style="fill:#ffffde;stroke:#aaaa33;stroke-width:1px;" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"#,
+                x=fmt(x), y=fmt(y), w=fmt(nw), h=fmt(nh)
+            ));
+            // Label: 8px from box top, centered (matches ref translate(_, 8) + 16px text)
+            let label_cx = x + nw / 2.0;
+            out.push_str(&format!(
+                r#"<text font-family="Arial,sans-serif" font-size="{fs}" fill="{fc}" text-anchor="middle" x="{lx}" y="{ly}">{label}</text>"#,
+                fs = FONT_SIZE as u32,
+                fc = vars.primary_text,
+                lx = fmt(label_cx),
+                ly = fmt(y + FONT_SIZE),
+                label = esc(ns_name)
+            ));
+            out.push_str("</g>");
+        }
+    }
+    out.push_str("</g>");
 
     // edgePaths
     out.push_str(r#"<g class="edgePaths">"#);
@@ -143,6 +245,23 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
                     dasharray,
                     &marker_start,
                     &marker_end,
+                ));
+            }
+        }
+    }
+    // Note edges — dashed lines from note node to its class
+    for (ni, note) in diag.notes.iter().enumerate() {
+        let note_id = format!("__note_{}", ni);
+        let edge_key = format!("note_edge_{}", ni);
+        let e = dagre_dgl_rs::graph::Edge::named(&note_id, &note.class_id, &edge_key);
+        if let Some(lbl) = g.edge(&e) {
+            let pts = lbl.points.clone().unwrap_or_default();
+            if pts.len() >= 2 {
+                let path_d = edge_path(&pts);
+                out.push_str(&format!(
+                    r#"<path d="{path_d}" class="edge-thickness-normal edge-pattern-dashed relation" fill="none" stroke="{color}" style="stroke-width:1px;stroke-dasharray:3;"></path>"#,
+                    path_d = path_d,
+                    color = vars.line_color,
                 ));
             }
         }
@@ -228,6 +347,36 @@ fn render_inner(diag: &ClassDiagram, vars: &ThemeVars) -> String {
                 let dom_id = format!("{}-classId-{}-{}", svg_id, id, class_idx);
                 out.push_str(&render_class_node(cls, cx, cy, w, h, vars, &dom_id));
             }
+        }
+    }
+    // Note nodes — yellow sticky-note boxes
+    for (ni, note) in diag.notes.iter().enumerate() {
+        let note_id = format!("__note_{}", ni);
+        if let Some(n) = g.node_opt(&note_id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            let nw = n.width;
+            let nh = n.height;
+            let x = cx - nw / 2.0;
+            let y = cy - nh / 2.0;
+            out.push_str(&format!(
+                r#"<g class="node note" transform="translate({cx},{cy})">"#,
+                cx = fmt(cx),
+                cy = fmt(cy)
+            ));
+            out.push_str(&format!(
+                r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" style="fill:#fff5ad;stroke:#aaaa33;stroke-width:1.3px;"></rect>"#,
+                x=fmt(-nw/2.0), y=fmt(-nh/2.0), w=fmt(nw), h=fmt(nh)
+            ));
+            out.push_str(&format!(
+                r#"<text font-family="Arial,sans-serif" font-size="{fs}" fill="{fc}" text-anchor="middle" dominant-baseline="middle" x="0" y="0">{text}</text>"#,
+                fs = FONT_SIZE as u32,
+                fc = vars.primary_text,
+                text = esc(&note.text)
+            ));
+            out.push_str("</g>");
+            let _ = x;
+            let _ = y;
         }
     }
     out.push_str("</g>");
@@ -411,7 +560,7 @@ fn render_class_node(
     };
     s.push_str(&tmpl::annotation_group(&fmt(ann_group_y)));
     for (i, ann) in cls.annotations.iter().enumerate() {
-        let ann_text = format!("&laquo;{}&raquo;", esc(ann));
+        let ann_text = format!("\u{00AB}{}\u{00BB}", esc(ann));
         let row_centre_rel = i as f64 * ANNOTATION_H + ANNOTATION_H / 2.0;
         s.push_str(&tmpl::annotation_text(
             &fmt(row_centre_rel),

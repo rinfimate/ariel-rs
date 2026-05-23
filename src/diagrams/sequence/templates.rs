@@ -300,7 +300,7 @@ pub fn control_badge(
     tc: &str,
 ) -> String {
     format!(
-        r##"<polygon points="{p1} {p2} {p3} {p4} {p5}" class="labelBox" fill="{pf}" stroke="{pb}"></polygon><text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400; fill: {tc};">{kind}</text>"##,
+        r##"<polygon points="{p1} {p2} {p3} {p4} {p5}" class="labelBox" fill="{pf}" stroke="{pb}"></polygon><text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;">{kind}</text>"##,
         p1 = p1,
         p2 = p2,
         p3 = p3,
@@ -312,19 +312,38 @@ pub fn control_badge(
         kind = kind,
         pf = pf,
         pb = pb,
-        tc = tc,
     )
 }
 
 /// Render the main condition label for a control structure.
 pub fn control_label_text(cx: f64, cy: f64, font_size: u32, label: &str, tc: &str) -> String {
     format!(
-        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400; fill: {tc};"><tspan x="{cx}">[{label}]</tspan></text>"##,
+        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">[{label}]</tspan></text>"##,
         cx = cx,
         cy = cy,
         fs = font_size,
         label = label,
-        tc = tc,
+    )
+}
+
+/// Render a wrapped (two-line) condition label for a control structure.
+pub fn control_label_text_wrapped(
+    cx: f64,
+    cy: f64,
+    font_size: u32,
+    line1: &str,
+    line2: &str,
+    _tc: &str,
+) -> String {
+    let line_h = font_size as f64 + 2.0;
+    format!(
+        r##"<text x="{cx}" y="{y1}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line1}</tspan></text><text x="{cx}" y="{y2}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line2}</tspan></text>"##,
+        cx = cx,
+        y1 = cy - line_h / 2.0,
+        y2 = cy + line_h / 2.0,
+        fs = font_size,
+        line1 = line1,
+        line2 = line2,
     )
 }
 

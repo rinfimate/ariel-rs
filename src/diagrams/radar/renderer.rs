@@ -96,17 +96,17 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
     for (i, axis) in diag.axes.iter().enumerate() {
         let angle = axis_angle(i, n_axes);
         // Spoke end at axisScaleFactor * radius
-        let spoke_x = AXIS_SCALE_FACTOR * radius * angle.cos();
-        let spoke_y = AXIS_SCALE_FACTOR * radius * angle.sin();
+        let spoke_x = diag.options.axis_scale_factor * radius * angle.cos();
+        let spoke_y = diag.options.axis_scale_factor * radius * angle.sin();
         out.push_str(&templates::axis_line(
             &fmt(spoke_x),
             &fmt(spoke_y),
-            graticule_color,
+            AXIS_LINE_COLOR,
         ));
 
         // Label at axisLabelFactor * radius
-        let label_x = AXIS_LABEL_FACTOR * radius * angle.cos();
-        let label_y = AXIS_LABEL_FACTOR * radius * angle.sin();
+        let label_x = diag.options.axis_label_factor * radius * angle.cos();
+        let label_y = diag.options.axis_label_factor * radius * angle.sin();
         out.push_str(&templates::axis_label(
             &fmt(label_x),
             &fmt(label_y),

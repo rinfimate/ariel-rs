@@ -312,7 +312,7 @@ fn render_entity_svg(
                     comm_w,
                     FO_H,
                     &attr.attribute_comment,
-                    "font-style:italic;",
+                    "",
                     vars.primary_text,
                 ));
             }

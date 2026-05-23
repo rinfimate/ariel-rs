@@ -562,11 +562,12 @@ fn render_shape(el: &C4Element, shape: &ShapeLayout, ff: &str) -> String {
         &esc(&stereo_text),
     ));
     if let Some(img_y_off) = shape.image_y {
-        s.push_str(&shape_person_image(
-            cx,
-            shape.rect.y + img_y_off,
-            PERSON_PNG,
-        ));
+        let png = if matches!(el.el_type, C4ElementType::PersonExt) {
+            PERSON_EXT_PNG
+        } else {
+            PERSON_PNG
+        };
+        s.push_str(&shape_person_image(cx, shape.rect.y + img_y_off, png));
     }
     let label_y_abs = shape.rect.y + shape.label_y;
     s.push_str(&shape_label_text(
@@ -678,7 +679,7 @@ fn render_rel(
         let max_w = label_w.max(techn_w);
         let tx = geom_mid_x + max_w / 2.0;
         let ty = geom_mid_y + MSG_FONT_SIZE + 5.0;
-        s.push_str(&rel_techn_label(tx, ty, FF_TECHN_LABEL, &rel.techn));
+        s.push_str(&rel_techn_label(tx, ty, FF_TECHN_LABEL, &esc(&techn_text)));
     }
     s
 }

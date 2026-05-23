@@ -98,7 +98,7 @@ pub fn relation_path(
     marker_end: &str,
 ) -> String {
     format!(
-        "<path d=\"{d}\" class=\"relationshipLine\" stroke=\"{rel_color}\" stroke-width=\"1.5\" fill=\"none\" stroke-dasharray=\"{dash}\"{marker_start}{marker_end}/>",
+        "<path d=\"{d}\" class=\"relationshipLine\" stroke=\"{rel_color}\" stroke-width=\"1\" fill=\"none\" stroke-dasharray=\"{dash}\"{marker_start}{marker_end}/>",
     )
 }
 

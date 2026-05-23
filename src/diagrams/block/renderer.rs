@@ -14,7 +14,7 @@ use super::parser::{BlockDiagram, BlockEdge, BlockNode, BlockShape, RowItem};
 use super::templates::{
     self, build_markers, edge_label_text, edge_path, esc, fmt, fmt_px, node_circle,
     node_cylinder_ellipse, node_cylinder_rect, node_diamond, node_group, node_hexagon,
-    node_label_fo, node_rect_rounded, node_rect_square, svg_root,
+    node_label_text, node_rect_rounded, node_rect_square, svg_root, svg_style,
 };
 use crate::text::measure;
 use crate::theme::Theme;
@@ -56,6 +56,7 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
     // ── Pass 1: compute widths bottom-up (Mermaid setBlockSizes algorithm) ──────
     // For each group node, compute its width from children's max text width.
     // Then col_w for top-level = max width of all top-level items (including groups).
+    // BlockArrow nodes have a wider natural width: text + 2*H_PAD + 2*m (m=20 arrow head).
     fn group_width(node_id: &str, nodes: &indexmap::IndexMap<String, BlockNode>) -> f64 {
         let node = match nodes.get(node_id) {
             Some(n) => n,
@@ -71,7 +72,13 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
             let n = node.group_children.len();
             n as f64 * (max_child_w + H_GAP) + H_GAP
         } else {
-            text_width(&node.label) + H_PAD * 2.0
+            let base_w = text_width(&node.label) + H_PAD * 2.0;
+            // Block arrow head extends 20px beyond the body on each side.
+            if matches!(node.shape, BlockShape::BlockArrow) {
+                base_w + 40.0
+            } else {
+                base_w
+            }
         }
     }
 
@@ -137,20 +144,13 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 }
                 RowItem::Node(id, span) => {
                     if let Some(node) = diag.nodes.get(id.as_str()) {
-                        // Mermaid setBlockSizes: within a group, all children get the SAME width
-                        // (the max of the siblings' text widths). Group width = n*(maxChild+padding)+padding.
+                        // Mermaid setBlockSizes: groups use top-down allocation — group always
+                        // gets col_w, and children split that space evenly.
                         let (w, group_child_w) = if node.is_group && !node.group_children.is_empty()
                         {
-                            let max_child_w = node
-                                .group_children
-                                .iter()
-                                .filter_map(|cid| diag.nodes.get(cid.as_str()))
-                                .map(|cn| text_width(&cn.label) + H_PAD * 2.0)
-                                .fold(0.0_f64, f64::max);
-                            let n = node.group_children.len();
-                            let total = n as f64 * (max_child_w + H_GAP) + H_GAP;
-                            (total, max_child_w)
-                            // height is row_h (set by the layout loop above)
+                            let n = node.group_children.len() as f64;
+                            let child_w = (col_w - (n + 1.0) * H_GAP) / n;
+                            (col_w, child_w.max(0.0))
                         } else if *span <= 1 {
                             (col_w, col_w)
                         } else {
@@ -273,6 +273,13 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
         &fmt(vb_w),
         &fmt(vb_h),
     ));
+    out.push_str(&svg_style(
+        svg_id,
+        primary_color,
+        primary_border,
+        primary_text,
+        line_color,
+    ));
 
     // Empty <g> for compatibility
     out.push_str("<g></g>");
@@ -361,12 +368,23 @@ fn render_node(
         &fmt(cy),
     ));
 
-    // Group/container nodes use cluster fill+border (`.cluster rect` CSS in Mermaid).
+    // Group/container nodes — cluster rect + empty foreignObject label.
     if node.is_group {
+        let cluster_style = match node.style {
+            Some(ref s) => s.clone(),
+            None => format!(
+                "fill:{fill};stroke:{stroke};stroke-width:1px;",
+                fill = cluster_bg,
+                stroke = cluster_border
+            ),
+        };
         s.push_str(&format!(
-            r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" style="fill:{cluster_bg};stroke:{cluster_border};stroke-width:1px;" rx="0" ry="0"></rect>"##,
-            x = fmt(-hw), y = fmt(-hh), w = fmt(w), h = fmt(h),
-            cluster_bg = cluster_bg, cluster_border = cluster_border,
+            r##"<rect class="basic cluster composite label-container" style="{cluster_style}" rx="0" ry="0" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"##,
+            cluster_style = cluster_style,
+            x = fmt(-hw),
+            y = fmt(-hh),
+            w = fmt(w),
+            h = fmt(h),
         ));
         s.push_str("</g>");
         return s;
@@ -391,6 +409,19 @@ fn render_node(
                 &node_style,
             ));
         }
+        BlockShape::Stadium => {
+            // Natural size: width = text_w + 2*FONT_SIZE/2*2 (padding=8 per side),
+            // height = FONT_SIZE*2=32. rx = natural_h/2 = 16 (pill shape).
+            let label_w = text_width(&node.label);
+            let natural_w = label_w + FONT_SIZE; // text_w + 16
+            let natural_h = FONT_SIZE * 2.0; // 32
+            let nhw = natural_w / 2.0;
+            let nhh = natural_h / 2.0; // = 16 = rx
+            s.push_str(&format!(
+                r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" ry="{r}" class="label-container" style="{style}"></rect>"##,
+                x = fmt(-nhw), y = fmt(-nhh), w = fmt(natural_w), h = fmt(natural_h), r = fmt(nhh), style = node_style,
+            ));
+        }
         BlockShape::Diamond => {
             let pts = format!(
                 "{},{} {},{} {},{} {},{}",
@@ -413,64 +444,127 @@ fn render_node(
             s.push_str(&node_circle(&fmt(r), &node_style));
         }
         BlockShape::Cylinder => {
-            let ry_val = 7.0_f64;
-            let body_h = h - ry_val;
-            s.push_str(&node_cylinder_rect(
-                &fmt(-hw),
-                &fmt(-hh + ry_val),
-                &fmt(w),
-                &fmt(body_h),
-                fill,
-                stroke,
-            ));
-            s.push_str(&node_cylinder_ellipse(
-                "0",
-                &fmt(-hh + ry_val),
-                &fmt(hw),
-                &fmt(ry_val),
-                fill,
-                stroke,
-            ));
-            s.push_str(&node_cylinder_ellipse(
-                "0",
-                &fmt(-hh + ry_val + body_h),
-                &fmt(hw),
-                &fmt(ry_val),
-                fill,
-                stroke,
+            // Natural dimensions from label width (matches Mermaid block cylinder).
+            // rx = text_w/2 + halfPadding (halfPadding=H_PAD=4).
+            // ry from self-consistent formula: body_h = FONT_SIZE*1.5 + 2*H_PAD + ry_val.
+            // Empirically ry_val≈4.87; use 5.0 for a clean self-consistent result.
+            let label_w = text_width(&node.label);
+            let rx_val = label_w / 2.0 + H_PAD;
+            let ry_val = 5.0_f64;
+            let text_h = FONT_SIZE * 1.5; // FO height
+            let body_h = text_h + 2.0 * H_PAD + ry_val;
+            let tx = -rx_val;
+            let ty = -(body_h / 2.0 + ry_val);
+            let dx = 2.0 * rx_val;
+            let d = format!(
+                "M 0,{ry} a {rx},{ry} 0,0,0 {dx} 0 a {rx},{ry} 0,0,0 -{dx} 0 l 0,{bh} a {rx},{ry} 0,0,0 {dx} 0 l 0,-{bh}",
+                ry = fmt(ry_val), rx = fmt(rx_val), dx = fmt(dx), bh = fmt(body_h),
+            );
+            s.push_str(&format!(
+                r##"<path style="{style}" d="{d}" transform="translate({tx},{ty})"></path>"##,
+                style = node_style,
+                d = d,
+                tx = fmt(tx),
+                ty = fmt(ty),
             ));
         }
         BlockShape::BlockArrow => {
-            // Mermaid's block_arrow "down" direction polygon (faithful port of blockArrowHelper.ts).
-            // padding = 8, h = fo_h + 2*padding = 24 + 16 = 40
-            // m = h/2 = 20 (midpoint), p2 = padding/2 = 4
-            // w = label_width + 2*m + padding = label_width + 48
+            // Faithful port of Mermaid's blockArrowHelper.ts.
+            // m=20 (arrowhead depth), p2=4 (wing extension beyond body).
+            // Vertical arrows: ahh=(NODE_H+p2)/2=18, body top=-ahh, wings at ahh-p2=14, tip at ahh=18.
+            // Horizontal arrows: ahh=NODE_H/2+p2=20, body sides at ±(ahh-p2)=±16, wings at ±ahh=±20, tip at ±ahw.
+            let m = 20.0_f64;
+            let p2 = 4.0_f64;
+            // All directions use label-based width: ahw = (label_w + 2*m + pad) / 2.
             let label_w = text_width(&node.label);
-            let pad = 8.0_f64;
-            let arrow_h = FONT_SIZE * 1.5 + 2.0 * pad; // 40
-            let m = arrow_h / 2.0; // 20
-            let arrow_w = label_w + 2.0 * m + pad; // label_w + 48
-            let arrow_hw = arrow_w / 2.0;
-            let arrow_hh = arrow_h / 2.0; // 20
-            let p2 = pad / 2.0; // 4
-                                // 7-point "down" polygon in local coords (centered at 0,0, y-down positive):
-            let pts = format!(
-                "{},{} {},{} {},{} {},{} {},{} {},{} {},{}",
-                fmt(0.0),
-                fmt(arrow_hh), // bottom tip
-                fmt(-arrow_hw),
-                fmt(arrow_hh - p2), // left outer wing
-                fmt(-arrow_hw + m),
-                fmt(arrow_hh - p2), // left inner body bottom
-                fmt(-arrow_hw + m),
-                fmt(-arrow_hh + p2), // left inner body top
-                fmt(arrow_hw - m),
-                fmt(-arrow_hh + p2), // right inner body top
-                fmt(arrow_hw - m),
-                fmt(arrow_hh - p2), // right inner body bottom
-                fmt(arrow_hw),
-                fmt(arrow_hh - p2), // right outer wing
-            );
+            let pts = match node.direction.as_str() {
+                "right" => {
+                    let ahw = (label_w + 2.0 * m + 8.0) / 2.0;
+                    let ahh = NODE_H / 2.0 + p2; // = 20
+                    format!(
+                        "{},{} {},{} {},{} {},{} {},{} {},{} {},{}",
+                        fmt(-ahw),
+                        fmt(ahh - p2), // left body bottom
+                        fmt(ahw - m),
+                        fmt(ahh - p2), // right body bottom
+                        fmt(ahw - m),
+                        fmt(ahh), // right wing bottom
+                        fmt(ahw),
+                        fmt(0.0), // tip
+                        fmt(ahw - m),
+                        fmt(-ahh), // right wing top
+                        fmt(ahw - m),
+                        fmt(-(ahh - p2)), // right body top
+                        fmt(-ahw),
+                        fmt(-(ahh - p2)), // left body top
+                    )
+                }
+                "left" => {
+                    let ahw = (label_w + 2.0 * m + 8.0) / 2.0;
+                    let ahh = NODE_H / 2.0 + p2; // = 20
+                    format!(
+                        "{},{} {},{} {},{} {},{} {},{} {},{} {},{}",
+                        fmt(ahw),
+                        fmt(ahh - p2), // right body bottom
+                        fmt(-ahw + m),
+                        fmt(ahh - p2), // left body bottom
+                        fmt(-ahw + m),
+                        fmt(ahh), // left wing bottom
+                        fmt(-ahw),
+                        fmt(0.0), // tip
+                        fmt(-ahw + m),
+                        fmt(-ahh), // left wing top
+                        fmt(-ahw + m),
+                        fmt(-(ahh - p2)), // left body top
+                        fmt(ahw),
+                        fmt(-(ahh - p2)), // right body top
+                    )
+                }
+                "up" => {
+                    // ahh = NODE_H/2 + p2 = 20; body ends at ±(ahh-p2) = ±16.
+                    let ahw = (label_w + 2.0 * m + 8.0) / 2.0;
+                    let ahh = NODE_H / 2.0 + p2; // = 20
+                    format!(
+                        "{},{} {},{} {},{} {},{} {},{} {},{} {},{}",
+                        fmt(0.0),
+                        fmt(-ahh), // tip (top)
+                        fmt(-ahw),
+                        fmt(-(ahh - p2)), // left wing
+                        fmt(-ahw + m),
+                        fmt(-(ahh - p2)), // left body top
+                        fmt(-ahw + m),
+                        fmt(ahh - p2), // left body bottom
+                        fmt(ahw - m),
+                        fmt(ahh - p2), // right body bottom
+                        fmt(ahw - m),
+                        fmt(-(ahh - p2)), // right body top
+                        fmt(ahw),
+                        fmt(-(ahh - p2)), // right wing
+                    )
+                }
+                _ => {
+                    // "down": ahh = NODE_H/2 + p2 = 20; body ends at ±(ahh-p2) = ±16.
+                    let ahw = (label_w + 2.0 * m + 8.0) / 2.0;
+                    let ahh = NODE_H / 2.0 + p2; // = 20
+                    format!(
+                        "{},{} {},{} {},{} {},{} {},{} {},{} {},{}",
+                        fmt(0.0),
+                        fmt(ahh), // tip (bottom)
+                        fmt(-ahw),
+                        fmt(ahh - p2), // left wing
+                        fmt(-ahw + m),
+                        fmt(ahh - p2), // left body bottom
+                        fmt(-ahw + m),
+                        fmt(-(ahh - p2)), // left body top
+                        fmt(ahw - m),
+                        fmt(-(ahh - p2)), // right body top
+                        fmt(ahw - m),
+                        fmt(ahh - p2), // right body bottom
+                        fmt(ahw),
+                        fmt(ahh - p2), // right wing
+                    )
+                }
+            };
             s.push_str(&format!(
                 r##"<polygon points="{pts}" class="label-container" style="{node_style}"></polygon>"##,
                 pts = pts, node_style = node_style,
@@ -497,21 +591,9 @@ fn render_node(
         }
     }
 
-    // Label — decode HTML entities before escaping for SVG
+    // Label — plain SVG text centered at node origin
     let decoded_label = decode_entities(&node.label);
-    let tw = text_width(&node.label);
-    let fo_h = (FONT_SIZE * 1.5).round(); // 24.0
-    let pad_v = (h - fo_h) / 2.0;
-    let label_ty = -(hh - pad_v);
-
-    s.push_str(&node_label_fo(
-        "0",
-        &fmt(label_ty),
-        &fmt(tw),
-        &fmt(fo_h),
-        &esc(&decoded_label),
-        text_color,
-    ));
+    s.push_str(&node_label_text(&esc(&decoded_label), text_color));
 
     s.push_str("</g>");
     s

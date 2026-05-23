@@ -31,7 +31,14 @@ let failed = 0;
 for (const file of svgFiles) {
   const svgPath = join(dir, file);
   const pngPath = join(dir, file.replace(/\.svg$/, '.png'));
-  const svg = readFileSync(svgPath);
+  // Replace HTML entities not valid in XML (resvg parses SVG as XML)
+  const svgRaw = readFileSync(svgPath, 'utf8')
+    .replace(/&nbsp;/g, '&#160;')
+    .replace(/&mdash;/g, '&#8212;')
+    .replace(/&ndash;/g, '&#8211;')
+    .replace(/&hellip;/g, '&#8230;')
+    .replace(/&amp;nbsp;/g, '&#160;');
+  const svg = Buffer.from(svgRaw, 'utf8');
 
   try {
     const resvg = new Resvg(svg, {

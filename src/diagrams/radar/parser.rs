@@ -31,6 +31,8 @@ pub struct RadarOptions {
     pub max: Option<f64>,
     pub min: f64,
     pub graticule: GraticuleType,
+    pub axis_scale_factor: f64,
+    pub axis_label_factor: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +49,8 @@ impl Default for RadarOptions {
             max: None,
             min: 0.0,
             graticule: GraticuleType::Circle,
+            axis_scale_factor: 1.0,
+            axis_label_factor: 1.05,
         }
     }
 }
@@ -67,6 +71,13 @@ pub fn parse(input: &str) -> crate::error::ParseResult<RadarDiagram> {
     let mut axes: Vec<RadarAxis> = Vec::new();
     let mut curves: Vec<RadarCurve> = Vec::new();
     let mut options = RadarOptions::default();
+    let (fm_axis_scale, fm_axis_label) = extract_frontmatter_radar_config(input);
+    if let Some(v) = fm_axis_scale {
+        options.axis_scale_factor = v;
+    }
+    if let Some(v) = fm_axis_label {
+        options.axis_label_factor = v;
+    }
 
     let mut in_header = true;
     let mut in_options = false;
@@ -318,4 +329,30 @@ fn extract_frontmatter_title(input: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract radar config values from YAML frontmatter (config.radar.* keys).
+pub fn extract_frontmatter_radar_config(input: &str) -> (Option<f64>, Option<f64>) {
+    let trimmed = input.trim_start();
+    if !trimmed.starts_with("---") {
+        return (None, None);
+    }
+    let after = &trimmed[3..];
+    let end = match after.find("\n---") {
+        Some(e) => e,
+        None => return (None, None),
+    };
+    let frontmatter = &after[..end];
+    let mut axis_scale: Option<f64> = None;
+    let mut axis_label: Option<f64> = None;
+    for line in frontmatter.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("axisScaleFactor:") {
+            axis_scale = rest.trim().parse().ok();
+        }
+        if let Some(rest) = line.strip_prefix("axisLabelFactor:") {
+            axis_label = rest.trim().parse().ok();
+        }
+    }
+    (axis_scale, axis_label)
 }

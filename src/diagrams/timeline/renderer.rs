@@ -411,7 +411,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
     } else {
         "rgba(185,185,185,1)"
     };
-    let shadow_filter = format!("url(#{}-dropshadow)", diagram_id);
+    let shadow_filter = "";
     parts.push(arrowhead_marker(diagram_id, vars.line_color, shadow_color));
 
     let mut master_x = MASTER_START_X;

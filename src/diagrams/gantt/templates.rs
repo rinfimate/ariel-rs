@@ -246,7 +246,7 @@ pub fn milestone_rect(
 ) -> String {
     let bar_style = task_bar_style(tc, theme);
     format!(
-        r##"<rect id="{id}-{tid}" rx="0" ry="0" x="{rx}" y="{ry}" width="{size}" height="{size}" transform-origin="{ox}px {oy}px" transform="rotate(45)" style="{bar_style}" class="task {tc} milestone"></rect>"##,
+        r##"<rect id="{id}-{tid}" rx="3" ry="3" x="{rx}" y="{ry}" width="{size}" height="{size}" transform-origin="{ox}px {oy}px" transform="rotate(45)" style="{bar_style}" class="task {tc} milestone"></rect>"##,
         id = id,
         tid = tid,
         rx = rx,

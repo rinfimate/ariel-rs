@@ -210,7 +210,8 @@ fn parse_attribute(s: &str) -> Option<Attribute> {
                 break;
             }
         } else {
-            match token.to_uppercase().as_str() {
+            let tok = token.trim_matches(',');
+            match tok.to_uppercase().as_str() {
                 "PK" => key_types.push(AttributeKeyType::PK),
                 "FK" => key_types.push(AttributeKeyType::FK),
                 "UK" => key_types.push(AttributeKeyType::UK),

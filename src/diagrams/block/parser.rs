@@ -18,6 +18,7 @@
 pub enum BlockShape {
     Square,      // A["label"] or A["label"]:N  rect
     RoundedRect, // A("label")  rx/ry
+    Stadium,     // A(["label"])  pill shape
     Cylinder,    // A[("label")]  cylinder
     Diamond,     // A{"label"}  diamond/rhombus
     Circle,      // A(("label"))
@@ -31,11 +32,12 @@ pub struct BlockNode {
     pub id: String,
     pub label: String,
     pub shape: BlockShape,
+    pub direction: String, // for BlockArrow: "down", "right", "up", "left"
     #[allow(dead_code)]
     pub col_span: usize, // how many columns this occupies
-    pub is_group: bool,              // true for nested block:id nodes
+    pub is_group: bool,    // true for nested block:id nodes
     pub group_children: Vec<String>, // ordered child node IDs (for nested blocks)
-    pub style: Option<String>,       // user inline style from `style X fill:...,stroke:...`
+    pub style: Option<String>, // user inline style from `style X fill:...,stroke:...`
 }
 
 #[derive(Debug, Clone)]
@@ -129,25 +131,29 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
         if line.starts_with("block:") || (line.starts_with("block") && line.contains(':')) {
             let rest = &line[5..]; // skip "block"
             let rest = rest.trim_start_matches(':').trim();
-            let (id, label, shape) = parse_node_token_str(rest);
-            if !current_row_items.is_empty() {
-                diag.rows.push(BlockRow {
-                    items: std::mem::take(&mut current_row_items),
-                });
-            }
+            let (id, label, shape, direction) = parse_node_token_str(rest);
             diag.nodes.insert(
                 id.clone(),
                 BlockNode {
                     id: id.clone(),
                     label,
                     shape,
+                    direction,
                     col_span: 1,
                     is_group: true,
                     group_children: Vec::new(),
                     style: None,
                 },
             );
+            // Add the group to the current row (same as a regular node), then auto-flush
+            // if the row is full. Do NOT flush early — the group occupies the next column.
             current_row_items.push(RowItem::Node(id.clone(), 1));
+            let total: usize = current_row_items.iter().map(item_span).sum();
+            if total >= current_columns {
+                diag.rows.push(BlockRow {
+                    items: std::mem::take(&mut current_row_items),
+                });
+            }
             in_block_stack.push(id);
             // Inside a nested block, items are added as group_children, not diag.rows
             current_columns = usize::MAX;
@@ -174,13 +180,9 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
         }
 
         // Edge: A --> B, A -- "label" --> B, A -->|label| B
+        // Edges do NOT flush current_row_items — layout and edges are collected independently.
         if is_edge_line(&line) {
             if let Some(edge) = parse_edge(&line) {
-                if !current_row_items.is_empty() {
-                    diag.rows.push(BlockRow {
-                        items: std::mem::take(&mut current_row_items),
-                    });
-                }
                 // Ensure both nodes exist as default
                 for id in [&edge.from, &edge.to] {
                     if !diag.nodes.contains_key(id.as_str()) {
@@ -190,6 +192,7 @@ pub fn parse(input: &str) -> crate::error::ParseResult<BlockDiagram> {
                                 id: id.clone(),
                                 label: id.clone(),
                                 shape: BlockShape::Default,
+                                direction: String::new(),
                                 col_span: 1,
                                 is_group: false,
                                 group_children: Vec::new(),
@@ -344,7 +347,7 @@ fn parse_row_items(line: &str, nodes: &mut indexmap::IndexMap<String, BlockNode>
             continue;
         }
         // node token id["label"]:span or id["label"] or id
-        let (id, label, shape) = parse_node_token_str(tok);
+        let (id, label, shape, direction) = parse_node_token_str(tok);
         if id.is_empty() {
             continue;
         }
@@ -358,6 +361,7 @@ fn parse_row_items(line: &str, nodes: &mut indexmap::IndexMap<String, BlockNode>
                     id: node_id.clone(),
                     label,
                     shape,
+                    direction,
                     col_span: span,
                     is_group: false,
                     group_children: Vec::new(),
@@ -419,8 +423,8 @@ fn tokenize_row(line: &str) -> Vec<String> {
     tokens
 }
 
-/// Parse a single node token string into (id, label, shape).
-pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape) {
+/// Parse a single node token string into (id, label, shape, direction).
+pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape, String) {
     // Patterns:
     //   A               → id="A", label="A", shape=Default
     //   A["Label"]      → id="A", label="Label", shape=Square
@@ -435,22 +439,41 @@ pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape) {
     if let Some(lt_pos) = tok.find('<') {
         let id_part = tok[..lt_pos].trim().to_string();
         let rest = &tok[lt_pos..];
-        // Extract label from <["..."]> and direction from (...)
+        // Extract direction from trailing (dir)
+        let dir = if rest.ends_with("(down)") {
+            "down"
+        } else if rest.ends_with("(right)") {
+            "right"
+        } else if rest.ends_with("(up)") {
+            "up"
+        } else if rest.ends_with("(left)") {
+            "left"
+        } else {
+            "down"
+        };
         if let Some(lb) = rest.find("[\"").or_else(|| rest.find("['")) {
             let rb = rest.rfind(']').unwrap_or(rest.len());
             let inner = &rest[lb + 2..rb.min(rest.len()).saturating_sub(1)];
-            return (id_part, inner.to_string(), BlockShape::BlockArrow);
+            return (
+                id_part,
+                inner.to_string(),
+                BlockShape::BlockArrow,
+                dir.to_string(),
+            );
         }
-        // Simple <["label"]> without quotes
         if rest.starts_with("<[") {
             let inner = rest
                 .trim_start_matches("<[")
-                .trim_end_matches("]>")
-                .trim_end_matches("](down)")
-                .trim_end_matches("](up)")
-                .trim_end_matches("](left)")
-                .trim_end_matches("](right)");
-            return (id_part, inner.to_string(), BlockShape::BlockArrow);
+                .trim_end_matches(']')
+                .trim_end_matches('>')
+                .trim_matches('"')
+                .trim_matches('\'');
+            return (
+                id_part,
+                inner.to_string(),
+                BlockShape::BlockArrow,
+                dir.to_string(),
+            );
         }
     }
 
@@ -477,6 +500,9 @@ pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape) {
         } else if shape_part.starts_with("((") {
             let inner = extract_inner_multi(shape_part, "((", "))");
             (BlockShape::Circle, unquote(inner))
+        } else if shape_part.starts_with("([") {
+            let inner = extract_inner_multi(shape_part, "([", "])");
+            (BlockShape::Stadium, unquote(inner))
         } else if shape_part.starts_with('(') {
             let inner = extract_inner(shape_part, '(', ')');
             (BlockShape::RoundedRect, unquote(inner))
@@ -500,10 +526,15 @@ pub fn parse_node_token_str(tok: &str) -> (String, String, BlockShape) {
             id_part
         };
 
-        (id, label, shape)
+        (id, label, shape, String::new())
     } else {
         // Bare identifier
-        (tok.to_string(), tok.to_string(), BlockShape::Default)
+        (
+            tok.to_string(),
+            tok.to_string(),
+            BlockShape::Default,
+            String::new(),
+        )
     }
 }
 
@@ -561,7 +592,7 @@ mod tests {
 
     #[test]
     fn parse_node_token_square() {
-        let (id, label, shape) = parse_node_token_str(r#"A["Label A"]"#);
+        let (id, label, shape, _dir) = parse_node_token_str(r#"A["Label A"]"#);
         assert_eq!(id, "A");
         assert_eq!(label, "Label A");
         assert_eq!(shape, BlockShape::Square);

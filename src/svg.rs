@@ -402,10 +402,12 @@ pub(crate) fn normalize_floats(svg: &str) -> String {
             i += 1;
             continue;
         }
-        // Outside tags: pass text content through unchanged
+        // Outside tags: pass text content through unchanged.
+        // Multi-byte UTF-8 sequences must be copied as whole char, not byte-by-byte.
         if !in_tag {
-            out.push(bytes[i] as char);
-            i += 1;
+            let ch = svg[i..].chars().next().unwrap_or('\0');
+            out.push(ch);
+            i += ch.len_utf8();
             continue;
         }
         // Detect optional leading minus

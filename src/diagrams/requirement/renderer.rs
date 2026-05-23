@@ -50,7 +50,7 @@ fn elem_geom(elem: &Element) -> NodeGeom {
         tw.push(tmw(&format!("Type: {}", elem.elem_type)));
     }
     if !elem.doc_ref.is_empty() {
-        tw.push(tmw(&format!("DocRef: {}", elem.doc_ref)));
+        tw.push(tmw(&format!("Doc Ref: {}", elem.doc_ref)));
     }
     let max_w = tw.iter().cloned().fold(0.0_f64, f64::max);
     let body_rows = tw.len().saturating_sub(2);
@@ -133,7 +133,7 @@ fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColor
         body.push(format!("Type: {}", elem.elem_type));
     }
     if !elem.doc_ref.is_empty() {
-        body.push(format!("DocRef: {}", elem.doc_ref));
+        body.push(format!("Doc Ref: {}", elem.doc_ref));
     }
     let mut row_cy = sep_y + PAD_Y + ROW_H / 2.0;
     for item in &body {
@@ -148,11 +148,7 @@ fn pts_path(pts: &[(f64, f64)]) -> String {
     if pts.is_empty() {
         return String::new();
     }
-    let mut d = format!("M{:.1},{:.1}", pts[0].0, pts[0].1);
-    for p in &pts[1..] {
-        d += &format!("L{:.1},{:.1}", p.0, p.1);
-    }
-    d
+    crate::svg::curve_basis_path(pts)
 }
 
 fn midpt(pts: &[(f64, f64)]) -> (f64, f64) {
@@ -196,6 +192,7 @@ fn fallback_pts(g: &Graph, v: &str, w: &str) -> Vec<(f64, f64)> {
 fn render_relation(
     rel: &super::parser::Relation,
     pts: &[(f64, f64)],
+    label_pos: Option<(f64, f64)>,
     sid: &str,
     line_color: &str,
     font_color: &str,
@@ -218,7 +215,8 @@ fn render_relation(
     };
     let path = templates::relation_path(&d, line_color, dash, &marker_start, &marker_end);
     let lhtml = format!("&lt;&lt;{}&gt;&gt;", rel.rel_type.display());
-    let (mx, my) = midpt(pts);
+    // Use dagre's labelpos:"c" computed position; fall back to geometric midpoint
+    let (mx, my) = label_pos.unwrap_or_else(|| midpt(pts));
     let (lw, _) = measure_browser(&format!("<<{}>>", rel.rel_type.display()), FONT_SIZE);
     let lbl = templates::edge_label_text(mx, my, lw, FONT_SIZE, font_color, label_bg, &lhtml);
     format!("{path}{lbl}")
@@ -304,26 +302,27 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
     svg += "<g class=\"req-root\"><g class=\"req-relationships\">";
     for (i, rel) in diag.relations.iter().enumerate() {
         let ename = format!("rel{i}");
-        let pts: Vec<(f64, f64)> = {
-            let lab = g.edge_label_named(&rel.src, &rel.dst, &ename);
-            if let Some(l) = lab {
-                l.points
-                    .as_ref()
-                    .map(|p| p.iter().map(|q| (q.x, q.y)).collect())
-                    .unwrap_or_else(|| fallback_pts(&g, &rel.src, &rel.dst))
-            } else {
-                g.edge_vw(&rel.src, &rel.dst)
-                    .and_then(|l| {
-                        l.points
-                            .as_ref()
-                            .map(|p| p.iter().map(|q| (q.x, q.y)).collect())
-                    })
-                    .unwrap_or_else(|| fallback_pts(&g, &rel.src, &rel.dst))
-            }
+        let lab = g.edge_label_named(&rel.src, &rel.dst, &ename);
+        let pts: Vec<(f64, f64)> = if let Some(l) = lab.as_ref() {
+            l.points
+                .as_ref()
+                .map(|p| p.iter().map(|q| (q.x, q.y)).collect())
+                .unwrap_or_else(|| fallback_pts(&g, &rel.src, &rel.dst))
+        } else {
+            g.edge_vw(&rel.src, &rel.dst)
+                .and_then(|l| {
+                    l.points
+                        .as_ref()
+                        .map(|p| p.iter().map(|q| (q.x, q.y)).collect())
+                })
+                .unwrap_or_else(|| fallback_pts(&g, &rel.src, &rel.dst))
         };
+        // Use dagre's computed label position (labelpos:"c") when available
+        let label_pos = lab.as_ref().and_then(|l| l.x.zip(l.y));
         svg += &render_relation(
             rel,
             &pts,
+            label_pos,
             sid,
             line_color,
             col.font_color,

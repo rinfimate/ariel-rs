@@ -15,8 +15,10 @@
 pub enum LineType {
     Solid,       // ->   (open, no arrowhead)
     SolidArrow,  // ->>  (filled arrowhead)
+    SolidCross,  // -x   (cross/X arrowhead)
     Dotted,      // -->  (dotted, open)
     DottedArrow, // -->> (dotted, filled arrowhead)
+    DottedCross, // --x  (dotted, cross/X arrowhead)
     Point,       // -)   (async / point arrowhead)
 }
 
@@ -369,14 +371,15 @@ fn parse_note(s: &str) -> Option<SeqItem> {
 /// Returns (from, to, text, line_type, activate_delta)
 fn parse_message(s: &str) -> Option<SeqItem> {
     // Patterns: longest first to avoid partial matches.
-    // Destroy arrows (-->x, ->>x, ->x, -->>x) treated as dotted/solid arrow to destroyed actor.
     let arrows: &[(&str, LineType)] = &[
         ("-->>x", LineType::DottedArrow),
         ("->>x", LineType::SolidArrow),
         ("-->>", LineType::DottedArrow),
         ("->>", LineType::SolidArrow),
-        ("-->x", LineType::Dotted),
-        ("->x", LineType::Solid),
+        ("-->x", LineType::DottedCross),
+        ("--x", LineType::DottedCross), // dotted cross (no arrowhead before X)
+        ("->x", LineType::SolidCross),
+        ("-x", LineType::SolidCross), // solid cross (no arrowhead before X)
         ("-->", LineType::Dotted),
         ("->", LineType::Solid),
         ("--)", LineType::DottedArrow),

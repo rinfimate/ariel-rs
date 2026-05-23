@@ -263,7 +263,7 @@ pub fn ticket_link(url: &str, tx: f64, ty: f64, label: &str, primary_text: &str)
 /// Render an assignee label as a native SVG `<text>`.
 pub fn assignee_label(tx: f64, ty: f64, _fw: f64, label: &str, primary_text: &str) -> String {
     format!(
-        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="12">{label}</text></g>"##,
+        r##"<g class="label" style="text-align:right !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="end" dominant-baseline="middle" x="0" y="12">{label}</text></g>"##,
         tx = tx,
         ty = ty,
         label = label,

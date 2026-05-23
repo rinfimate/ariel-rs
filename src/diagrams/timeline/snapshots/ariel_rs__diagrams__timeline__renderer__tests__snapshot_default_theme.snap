@@ -1,6 +1,5 @@
 ---
 source: src/diagrams/timeline/renderer.rs
-assertion_line: 799
 expression: "crate::svg::normalize_floats(&svg)"
 ---
 <svg id="mermaid-timeline" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: 790px;" viewBox="100 -60 790 471.631" role="graphics-document document" aria-roledescription="timeline"><g></g><g></g><defs>
@@ -13,7 +12,7 @@ expression: "crate::svg::normalize_floats(&svg)"
 </defs>
 <g class="taskWrapper" transform="translate(200, 50)"><g class="timeline-node section--1">
   <g>
-    <path id="node-0" class="node-bkg node-undefined" fill="hsl(240, 100%, 76.275%)" filter="url(#mermaid-timeline-dropshadow)" d="M0 60.816 v-55.816 q0,-5,5,-5 h180 q5,0,5,5 v60.816 H0 Z"></path>
+    <path id="node-0" class="node-bkg node-undefined" fill="hsl(240, 100%, 76.275%)" filter="" d="M0 60.816 v-55.816 q0,-5,5,-5 h180 q5,0,5,5 v60.816 H0 Z"></path>
     <line class="node-line--1" x1="0" y1="65.816" x2="190" y2="65.816" stroke="hsl(60, 100%, 86.275%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="#ffffff"><tspan x="0" dy="1em">2002</tspan></text></g>
@@ -21,14 +20,14 @@ expression: "crate::svg::normalize_floats(&svg)"
 <g class="lineWrapper"><line x1="295" y1="115.816" x2="295" y2="361.631" style="stroke:#333333;stroke-width:2;stroke-dasharray:5,5;" marker-end="url(#mermaid-timeline-arrowhead)"></line></g>
 <g class="eventWrapper" style="filter:brightness(120%)" transform="translate(200, 250)"><g class="timeline-node section--1">
   <g>
-    <path id="node-1" class="node-bkg node-undefined" fill="hsl(240, 100%, 76.275%)" filter="url(#mermaid-timeline-dropshadow)" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
+    <path id="node-1" class="node-bkg node-undefined" fill="hsl(240, 100%, 76.275%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
     <line class="node-line--1" x1="0" y1="50" x2="190" y2="50" stroke="hsl(60, 100%, 86.275%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="#ffffff"><tspan x="0" dy="1em">LinkedIn</tspan></text></g>
 </g></g>
 <g class="taskWrapper" transform="translate(400, 50)"><g class="timeline-node section-0">
   <g>
-    <path id="node-2" class="node-bkg node-undefined" fill="hsl(60, 100%, 73.529%)" filter="url(#mermaid-timeline-dropshadow)" d="M0 60.816 v-55.816 q0,-5,5,-5 h180 q5,0,5,5 v60.816 H0 Z"></path>
+    <path id="node-2" class="node-bkg node-undefined" fill="hsl(60, 100%, 73.529%)" filter="" d="M0 60.816 v-55.816 q0,-5,5,-5 h180 q5,0,5,5 v60.816 H0 Z"></path>
     <line class="node-line-0" x1="0" y1="65.816" x2="190" y2="65.816" stroke="hsl(240, 100%, 83.529%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="black"><tspan x="0" dy="1em">2004</tspan></text></g>
@@ -36,7 +35,7 @@ expression: "crate::svg::normalize_floats(&svg)"
 <g class="lineWrapper"><line x1="495" y1="115.816" x2="495" y2="361.631" style="stroke:#333333;stroke-width:2;stroke-dasharray:5,5;" marker-end="url(#mermaid-timeline-arrowhead)"></line></g>
 <g class="eventWrapper" style="filter:brightness(120%)" transform="translate(400, 250)"><g class="timeline-node section-0">
   <g>
-    <path id="node-3" class="node-bkg node-undefined" fill="hsl(60, 100%, 73.529%)" filter="url(#mermaid-timeline-dropshadow)" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
+    <path id="node-3" class="node-bkg node-undefined" fill="hsl(60, 100%, 73.529%)" filter="" d="M0 45 v-40 q0,-5,5,-5 h180 q5,0,5,5 v45 H0 Z"></path>
     <line class="node-line-0" x1="0" y1="50" x2="190" y2="50" stroke="hsl(240, 100%, 83.529%)" stroke-width="3"></line>
   </g>
   <g transform="translate(95, 10)"><text dy="1em" alignment-baseline="middle" dominant-baseline="middle" text-anchor="middle" fill="black"><tspan x="0" dy="1em">Facebook</tspan></text></g>

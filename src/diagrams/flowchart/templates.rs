@@ -185,6 +185,32 @@ pub fn marker_end_circle(svg_id: &str) -> String {
     format!(r##" marker-end="url(#{svg_id}_flowchart-v2-circleEnd)""##)
 }
 
+pub fn marker_start_point(svg_id: &str) -> String {
+    format!(r##" marker-start="url(#{svg_id}_flowchart-v2-pointStart)""##)
+}
+pub fn marker_start_cross(svg_id: &str) -> String {
+    format!(r##" marker-start="url(#{svg_id}_flowchart-v2-crossStart)""##)
+}
+pub fn marker_start_circle(svg_id: &str) -> String {
+    format!(r##" marker-start="url(#{svg_id}_flowchart-v2-circleStart)""##)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn edge_path_with_start(
+    path_d: &str,
+    edge_id: &str,
+    classes: &str,
+    stroke: &str,
+    stroke_width: &str,
+    stroke_dasharray: &str,
+    marker_start: &str,
+    marker_end: &str,
+) -> String {
+    format!(
+        r##"<path d="{path_d}" id="{edge_id}" class="{classes}" fill="none" stroke="{stroke}" style="stroke-width:{stroke_width};stroke-dasharray:{stroke_dasharray};" data-edge="true" data-et="edge" data-id="{edge_id}" data-look="classic"{marker_start}{marker_end}></path>"##,
+    )
+}
+
 /// Render an edge `<path>` element.
 ///
 /// `stroke`: the edge stroke colour (from `vars.line_color`).

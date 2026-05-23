@@ -37,6 +37,38 @@ pub fn svg_root(
     )
 }
 
+/// Render the CSS style block for a block diagram (font, label, node defaults).
+pub fn svg_style(
+    svg_id: &str,
+    fill: &str,
+    stroke: &str,
+    text_color: &str,
+    line_color: &str,
+) -> String {
+    format!(
+        "<style>\
+#{id}{{font-family:Arial,sans-serif;font-size:16px;fill:{tc};}}\
+#{id} svg{{font-family:Arial,sans-serif;font-size:16px;}}\
+#{id} p{{margin:0;}}\
+#{id} .label{{font-family:Arial,sans-serif;color:{tc};}}\
+#{id} .cluster-label text{{fill:{tc};}}\
+#{id} .cluster-label span,#{id} p{{color:{tc};}}\
+#{id} .label text,#{id} span,#{id} p{{fill:{tc};color:{tc};}}\
+#{id} .node rect,#{id} .node circle,#{id} .node ellipse,#{id} .node polygon,#{id} .node path{{fill:{fill};stroke:{stroke};stroke-width:1px;}}\
+#{id} .flowchart-label text{{text-anchor:middle;}}\
+#{id} .node .label{{text-align:center;}}\
+#{id} .arrowheadPath{{fill:{lc};}}\
+#{id} .edgePath .path{{stroke:{lc};stroke-width:2.0px;}}\
+#{id} .flowchart-link{{stroke:{lc};fill:none;}}\
+</style>",
+        id = svg_id,
+        fill = fill,
+        stroke = stroke,
+        tc = text_color,
+        lc = line_color,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Node shapes
 // ---------------------------------------------------------------------------
@@ -52,7 +84,7 @@ pub fn node_rect_square(x: &str, y: &str, w: &str, h: &str, style: &str) -> Stri
 /// Render a rounded-rectangle node background `<rect>`.
 pub fn node_rect_rounded(x: &str, y: &str, w: &str, h: &str, style: &str) -> String {
     format!(
-        "<rect class=\"basic label-container\" style=\"{style}\" rx=\"8\" ry=\"8\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"></rect>",
+        "<rect class=\"basic label-container\" style=\"{style}\" rx=\"5\" ry=\"5\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"></rect>",
         x = x, y = y, w = w, h = h, style = style,
     )
 }
@@ -122,19 +154,15 @@ pub fn node_group(svg_id: &str, id: &str, cx: &str, cy: &str) -> String {
 // Node label (foreignObject)
 // ---------------------------------------------------------------------------
 
-/// Render the node label group as a native SVG `<text>`.
-pub fn node_label_fo(
-    tx: &str,
-    ty: &str,
-    _fw: &str,
-    fo_h: &str,
-    label: &str,
-    text_color: &str,
-) -> String {
-    let y_val: f64 = fo_h.parse().unwrap_or(24.0) / 2.0;
+/// Render a plain SVG text label centered at the node origin.
+pub fn node_label_text(label: &str, text_color: &str) -> String {
+    if label.is_empty() {
+        return String::new();
+    }
     format!(
-        "<g class=\"label\" style=\"\" transform=\"translate({tx}, {ty})\"><rect></rect><text font-family=\"Arial, sans-serif\" font-size=\"16\" fill=\"{text_color}\" text-anchor=\"middle\" dominant-baseline=\"middle\" x=\"0\" y=\"{y_val}\">{label}</text></g>",
-        tx = tx, ty = ty, y_val = y_val, label = label, text_color = text_color,
+        "<text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"16\" fill=\"{color}\">{label}</text>",
+        color = text_color,
+        label = label,
     )
 }
 

@@ -41,6 +41,15 @@ pub fn parse(input: &str) -> crate::error::ParseResult<PieDiagram> {
             continue;
         }
 
+        // Standalone title line
+        if let Some(t) = trimmed.strip_prefix("title") {
+            let t = t.trim();
+            if !t.is_empty() {
+                diag.title = Some(t.to_string());
+            }
+            continue;
+        }
+
         // Data line: "Label" : value
         if trimmed.starts_with('"') {
             if let Some((label, value)) = parse_data_line(trimmed) {

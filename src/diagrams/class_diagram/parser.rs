@@ -272,12 +272,22 @@ pub struct ClassNode {
 // ─── Diagram ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
+pub struct ClassNote {
+    pub class_id: String,
+    pub text: String,
+}
+
+#[derive(Debug)]
 pub struct ClassDiagram {
     pub direction: String,
     pub classes: HashMap<String, ClassNode>,
     pub relations: Vec<ClassRelation>,
     /// Insertion order for rendering
     pub class_order: Vec<String>,
+    /// namespace name → list of class IDs it contains
+    pub namespaces: Vec<(String, Vec<String>)>,
+    /// notes attached to classes
+    pub notes: Vec<ClassNote>,
 }
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
@@ -288,6 +298,8 @@ pub fn parse(input: &str) -> crate::error::ParseResult<ClassDiagram> {
         classes: HashMap::new(),
         relations: Vec::new(),
         class_order: Vec::new(),
+        namespaces: Vec::new(),
+        notes: Vec::new(),
     };
 
     let mut lines = input.lines().peekable();
@@ -321,6 +333,51 @@ pub fn parse(input: &str) -> crate::error::ParseResult<ClassDiagram> {
             || line.starts_with("link ")
             || line.starts_with("click ")
         {
+            continue;
+        }
+
+        // namespace Name { ... }
+        if let Some(stripped) = line.strip_prefix("namespace ") {
+            let ns_name = stripped.trim_end_matches('{').trim().to_string();
+            // Collect all inner lines up to matching '}'
+            let mut inner_lines: Vec<String> = Vec::new();
+            for inner_raw in lines.by_ref() {
+                let inner = strip_comment(inner_raw).trim().to_string();
+                if inner == "}" {
+                    break;
+                }
+                inner_lines.push(inner);
+            }
+            let mut ns_classes = Vec::new();
+            let mut inner_iter = inner_lines.iter().map(|s| s.as_str()).peekable();
+            while let Some(inner) = inner_iter.next() {
+                if let Some(cls_rest) = inner.strip_prefix("class ") {
+                    let cls_name = cls_rest
+                        .trim()
+                        .split(|c: char| c.is_whitespace() || c == '{')
+                        .next()
+                        .unwrap_or("")
+                        .trim_matches('"')
+                        .to_string();
+                    parse_class_block(cls_rest, &mut inner_iter, &mut diag);
+                    if !cls_name.is_empty() {
+                        ns_classes.push(cls_name);
+                    }
+                }
+            }
+            diag.namespaces.push((ns_name, ns_classes));
+            continue;
+        }
+
+        // note for ClassName "text"
+        if let Some(stripped) = line.strip_prefix("note for ") {
+            if let Some(q) = stripped.find('"') {
+                let class_id = stripped[..q].trim().to_string();
+                let text = stripped[q + 1..].trim_end_matches('"').to_string();
+                if !class_id.is_empty() {
+                    diag.notes.push(ClassNote { class_id, text });
+                }
+            }
             continue;
         }
 

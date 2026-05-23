@@ -162,6 +162,24 @@ pub fn render(diag: &FlowchartDiagram, theme: Theme) -> String {
         }
     }
 
+    // Add INTERNAL top-level subgraphs as opaque nodes before leaf nodes so dagre
+    // places them leftmost — matching Mermaid's declaration-order insertion.
+    let sg_layout_margin = SG_LAYOUT_MARGIN;
+    for sg_id in &top_sg_ids {
+        if !sg_external.contains(sg_id) {
+            if let Some(sg_layout) = sg_layouts.get(sg_id) {
+                g.set_node(
+                    sg_id,
+                    NodeLabel {
+                        width: sg_layout.width.max(1.0),
+                        height: sg_layout.height.max(1.0),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+    }
+
     // Add all nodes that belong at the outer level:
     // - Orphan leaf nodes (no subgraph parent) → added directly
     // - Leaf descendants of EXTERNAL top-level subgraphs → added with set_parent to their top-level external ancestor
@@ -206,29 +224,6 @@ pub fn render(diag: &FlowchartDiagram, theme: Theme) -> String {
                 if sg_external.contains(ancestor) {
                     g.set_parent(id, Some(ancestor));
                 }
-            }
-        }
-    }
-
-    // Add INTERNAL top-level subgraphs as opaque nodes (not compound in outer layout).
-    // sg_layout.width/height are the compound cluster dimensions (the rect w/h from
-    // removeBorderNodes, e.g. 305.6 × 124 for 'one'). These are used directly as the
-    // opaque node dimensions in the outer dagre layout, matching Mermaid's approach where
-    // updateNodeBounds(node, elem) sets node.width/height from the getBBox() of the
-    // recursively-rendered sub-graph SVG element, which returns the compound cluster rect size.
-    // The "full size" for the SVG <g class="root"> translate = (width + 16, height + 16).
-    let sg_layout_margin = SG_LAYOUT_MARGIN;
-    for sg_id in &top_sg_ids {
-        if !sg_external.contains(sg_id) {
-            if let Some(sg_layout) = sg_layouts.get(sg_id) {
-                g.set_node(
-                    sg_id,
-                    NodeLabel {
-                        width: sg_layout.width.max(1.0),
-                        height: sg_layout.height.max(1.0),
-                        ..Default::default()
-                    },
-                );
             }
         }
     }
@@ -654,11 +649,20 @@ fn render_root_group(
                     edge.style,
                     EdgeStyle::Line | EdgeStyle::DotLine | EdgeStyle::Invisible
                 );
-                let is_cross = matches!(edge.style, EdgeStyle::CrossArrow);
-                let is_open = matches!(edge.style, EdgeStyle::OpenArrow);
-                let _is_bidirectional = matches!(
+                // Invisible edges: skip rendering entirely (layout only)
+                if matches!(edge.style, EdgeStyle::Invisible) {
+                    continue;
+                }
+                let is_cross =
+                    matches!(edge.style, EdgeStyle::CrossArrow | EdgeStyle::BiCrossArrow);
+                let is_open = matches!(edge.style, EdgeStyle::OpenArrow | EdgeStyle::BiCircleArrow);
+                let is_bidirectional = matches!(
                     edge.style,
-                    EdgeStyle::BiArrow | EdgeStyle::BiDotArrow | EdgeStyle::BiThickArrow
+                    EdgeStyle::BiArrow
+                        | EdgeStyle::BiDotArrow
+                        | EdgeStyle::BiThickArrow
+                        | EdgeStyle::BiCrossArrow
+                        | EdgeStyle::BiCircleArrow
                 );
                 // Trim end so arrowhead tip lands on node boundary, not inside the fill.
                 let end_trim = if has_arrow && !is_cross && !is_open {
@@ -688,13 +692,25 @@ fn render_root_group(
                 } else {
                     String::new()
                 };
-                out.push_str(&templates::edge_path(
+                let marker_start = if is_bidirectional {
+                    if is_cross {
+                        templates::marker_start_cross(svg_id)
+                    } else if matches!(edge.style, EdgeStyle::BiCircleArrow) {
+                        templates::marker_start_circle(svg_id)
+                    } else {
+                        templates::marker_start_point(svg_id)
+                    }
+                } else {
+                    String::new()
+                };
+                out.push_str(&templates::edge_path_with_start(
                     &path_d,
                     &edge_id,
                     classes,
                     vars.line_color,
                     stroke_width,
                     stroke_dasharray,
+                    &marker_start,
                     &marker_end,
                 ));
             }
@@ -1688,66 +1704,70 @@ fn render_node(
             s.push_str(&templates::node_hexagon(&pts, &inline_style));
         }
         NodeShape::Trapezoid => {
+            // [/text\] — wider at bottom, symmetric: skew = hh on each side
             let hw = w / 2.0;
             let hh = h / 2.0;
             let pts = format!(
                 "{},{} {},{} {},{} {},{}",
-                fmt(-hw + hh / 2.0),
-                fmt(-hh),
-                fmt(hw + hh / 2.0),
-                fmt(-hh),
-                fmt(hw - hh / 2.0),
-                fmt(hh),
-                fmt(-hw - hh / 2.0),
-                fmt(hh),
+                fmt(-hw + hh),
+                fmt(-hh), // top-left (shifted right)
+                fmt(hw - hh),
+                fmt(-hh), // top-right (shifted left)
+                fmt(hw),
+                fmt(hh), // bottom-right
+                fmt(-hw),
+                fmt(hh), // bottom-left
             );
             s.push_str(&templates::node_polygon(&pts, &inline_style));
         }
         NodeShape::TrapezoidAlt => {
+            // [\text/] — wider at top, symmetric: skew = hh on each side
             let hw = w / 2.0;
             let hh = h / 2.0;
             let pts = format!(
                 "{},{} {},{} {},{} {},{}",
-                fmt(-hw - hh / 2.0),
-                fmt(-hh),
-                fmt(hw - hh / 2.0),
-                fmt(-hh),
-                fmt(hw + hh / 2.0),
-                fmt(hh),
-                fmt(-hw + hh / 2.0),
-                fmt(hh),
+                fmt(-hw),
+                fmt(-hh), // top-left
+                fmt(hw),
+                fmt(-hh), // top-right
+                fmt(hw - hh),
+                fmt(hh), // bottom-right (shifted left)
+                fmt(-hw + hh),
+                fmt(hh), // bottom-left (shifted right)
             );
             s.push_str(&templates::node_polygon(&pts, &inline_style));
         }
         NodeShape::Parallelogram => {
+            // [/text/] — both sides lean right: top shifted right by hh
             let hw = w / 2.0;
             let hh = h / 2.0;
             let pts = format!(
                 "{},{} {},{} {},{} {},{}",
-                fmt(-hw + hh / 2.0),
-                fmt(-hh),
-                fmt(hw + hh / 2.0),
-                fmt(-hh),
-                fmt(hw - hh / 2.0),
-                fmt(hh),
-                fmt(-hw - hh / 2.0),
-                fmt(hh),
+                fmt(-hw + hh),
+                fmt(-hh), // top-left
+                fmt(hw),
+                fmt(-hh), // top-right (full width)
+                fmt(hw - hh),
+                fmt(hh), // bottom-right
+                fmt(-hw),
+                fmt(hh), // bottom-left (full width)
             );
             s.push_str(&templates::node_polygon(&pts, &inline_style));
         }
         NodeShape::ParallelogramAlt => {
+            // [\text\] — both sides lean left: top shifted left by hh
             let hw = w / 2.0;
             let hh = h / 2.0;
             let pts = format!(
                 "{},{} {},{} {},{} {},{}",
-                fmt(-hw - hh / 2.0),
-                fmt(-hh),
-                fmt(hw - hh / 2.0),
-                fmt(-hh),
-                fmt(hw + hh / 2.0),
-                fmt(hh),
-                fmt(-hw + hh / 2.0),
-                fmt(hh),
+                fmt(-hw),
+                fmt(-hh), // top-left (full width)
+                fmt(hw - hh),
+                fmt(-hh), // top-right
+                fmt(hw),
+                fmt(hh), // bottom-right (full width)
+                fmt(-hw + hh),
+                fmt(hh), // bottom-left
             );
             s.push_str(&templates::node_polygon(&pts, &inline_style));
         }

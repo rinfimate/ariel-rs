@@ -35,17 +35,19 @@ pub struct FlowNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdgeStyle {
-    Arrow,        // -->
-    Line,         // ---
-    DotArrow,     // -.->
-    ThickArrow,   // ==>
-    DotLine,      // -.-
-    OpenArrow,    // --o
-    CrossArrow,   // --x
-    BiArrow,      // <-->
-    BiDotArrow,   // <-.->
-    BiThickArrow, // <==>
-    Invisible,    // ~~~
+    Arrow,         // -->
+    Line,          // ---
+    DotArrow,      // -.->
+    ThickArrow,    // ==>
+    DotLine,       // -.-
+    OpenArrow,     // --o
+    CrossArrow,    // --x
+    BiArrow,       // <-->
+    BiDotArrow,    // <-.->
+    BiThickArrow,  // <==>
+    BiCrossArrow,  // <--x
+    BiCircleArrow, // o--o
+    Invisible,     // ~~~
 }
 
 #[derive(Debug, Clone)]
@@ -138,10 +140,11 @@ pub fn parse(input: &str) -> crate::error::ParseResult<FlowchartDiagram> {
             continue;
         }
 
-        // classDef / class / linkStyle / %% — skip
+        // classDef / class / linkStyle / click / %% — skip
         if line.starts_with("classDef ")
             || line.starts_with("class ")
             || line.starts_with("linkStyle ")
+            || line.starts_with("click ")
             || line.starts_with("%%")
         {
             continue;
@@ -428,26 +431,43 @@ fn parse_shape(chars: &[char], pos: &mut usize) -> (Option<NodeShape>, Option<St
             } else if *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
                 // [/text\] = Trapezoid or [/text/] = Parallelogram
                 *pos += 2;
-                let raw = read_until_either(chars, pos, r"\]", "]/");
-                if raw.ends_with('\\') {
-                    let text = raw.trim_end_matches('\\').trim().to_string();
-                    (Some(NodeShape::Trapezoid), Some(text))
-                } else {
-                    (Some(NodeShape::Parallelogram), Some(raw.trim().to_string()))
+                let mut text = String::new();
+                let mut shape = NodeShape::Parallelogram;
+                while *pos < chars.len() {
+                    if chars[*pos] == '\\' && *pos + 1 < chars.len() && chars[*pos + 1] == ']' {
+                        shape = NodeShape::Trapezoid;
+                        *pos += 2;
+                        break;
+                    }
+                    if chars[*pos] == '/' && *pos + 1 < chars.len() && chars[*pos + 1] == ']' {
+                        shape = NodeShape::Parallelogram;
+                        *pos += 2;
+                        break;
+                    }
+                    text.push(chars[*pos]);
+                    *pos += 1;
                 }
+                (Some(shape), Some(text.trim().to_string()))
             } else if *pos + 1 < chars.len() && chars[*pos + 1] == '\\' {
                 // [\text/] = TrapezoidAlt or [\text\] = ParallelogramAlt
                 *pos += 2;
-                let raw = read_until_either(chars, pos, "/]", r"\]");
-                if raw.ends_with('/') {
-                    let text = raw.trim_end_matches('/').trim().to_string();
-                    (Some(NodeShape::TrapezoidAlt), Some(text))
-                } else {
-                    (
-                        Some(NodeShape::ParallelogramAlt),
-                        Some(raw.trim().to_string()),
-                    )
+                let mut text = String::new();
+                let mut shape = NodeShape::TrapezoidAlt;
+                while *pos < chars.len() {
+                    if chars[*pos] == '/' && *pos + 1 < chars.len() && chars[*pos + 1] == ']' {
+                        shape = NodeShape::TrapezoidAlt;
+                        *pos += 2;
+                        break;
+                    }
+                    if chars[*pos] == '\\' && *pos + 1 < chars.len() && chars[*pos + 1] == ']' {
+                        shape = NodeShape::ParallelogramAlt;
+                        *pos += 2;
+                        break;
+                    }
+                    text.push(chars[*pos]);
+                    *pos += 1;
                 }
+                (Some(shape), Some(text.trim().to_string()))
             } else {
                 *pos += 1;
                 let text = read_bracket_text(chars, pos, ']');
@@ -485,6 +505,41 @@ fn parse_shape(chars: &[char], pos: &mut usize) -> (Option<NodeShape>, Option<St
             *pos += 1;
             let text = read_bracket_text(chars, pos, ']');
             (Some(NodeShape::Asymmetric), Some(text))
+        }
+        '@' => {
+            // @{ shape: X, label: 'Y' } attribute syntax
+            *pos += 1;
+            if *pos < chars.len() && chars[*pos] == '{' {
+                *pos += 1;
+                let block = read_bracket_text(chars, pos, '}');
+                let mut shape: Option<NodeShape> = None;
+                let mut label: Option<String> = None;
+                for part in block.split(',') {
+                    let part = part.trim();
+                    if let Some(val) = part.strip_prefix("shape:") {
+                        shape = Some(match val.trim().trim_matches('\'').trim_matches('"') {
+                            "circle" | "doublecircle" => NodeShape::Circle,
+                            "rect" | "rectangle" => NodeShape::Rectangle,
+                            "round" | "rounded" => NodeShape::RoundedRect,
+                            "diamond" | "question" => NodeShape::Diamond,
+                            "hexagon" => NodeShape::Hexagon,
+                            "stadium" | "pill" => NodeShape::Stadium,
+                            "cylinder" | "database" => NodeShape::Cylinder,
+                            "subroutine" => NodeShape::Subroutine,
+                            "parallelogram" => NodeShape::Parallelogram,
+                            "parallelogram-alt" => NodeShape::ParallelogramAlt,
+                            "trapezoid" => NodeShape::Trapezoid,
+                            "trapezoid-alt" => NodeShape::TrapezoidAlt,
+                            _ => NodeShape::Default,
+                        });
+                    } else if let Some(val) = part.strip_prefix("label:") {
+                        label = Some(val.trim().trim_matches('\'').trim_matches('"').to_string());
+                    }
+                }
+                (shape, label)
+            } else {
+                (None, None)
+            }
         }
         _ => (None, None),
     }
@@ -544,31 +599,6 @@ fn read_until(chars: &[char], pos: &mut usize, end: &str) -> String {
         *pos += 1;
     }
     text.trim().to_string()
-}
-
-/// Read until one of two possible end sequences; returns text including the terminating char.
-fn read_until_either(chars: &[char], pos: &mut usize, end1: &str, end2: &str) -> String {
-    let e1: Vec<char> = end1.chars().collect();
-    let e2: Vec<char> = end2.chars().collect();
-    let mut text = String::new();
-    while *pos < chars.len() {
-        let try_match = |e: &[char]| -> bool {
-            *pos + e.len() <= chars.len() && chars[*pos..*pos + e.len()] == *e
-        };
-        if try_match(&e1) {
-            text.push(e1[e1.len() - 1]); // include the last char of the terminator
-            *pos += e1.len();
-            break;
-        }
-        if try_match(&e2) {
-            text.push(e2[e2.len() - 1]);
-            *pos += e2.len();
-            break;
-        }
-        text.push(chars[*pos]);
-        *pos += 1;
-    }
-    text
 }
 
 // ─── Style parser ────────────────────────────────────────────────────────────
@@ -632,10 +662,22 @@ fn try_parse_edge(chars: &[char], pos: usize) -> Option<(EdgeStyle, Option<Strin
         let (label, end) = try_pipe_label(chars, pp);
         return Some((EdgeStyle::BiDotArrow, label, end));
     }
+    if rest.starts_with("<--x") {
+        let pp = p + 4;
+        let (label, end) = try_pipe_label(chars, pp);
+        return Some((EdgeStyle::BiCrossArrow, label, end));
+    }
     if rest.starts_with("<-->") {
         let pp = p + 4;
         let (label, end) = try_pipe_label(chars, pp);
         return Some((EdgeStyle::BiArrow, label, end));
+    }
+
+    // Bidirectional circle o--o
+    if rest.starts_with("o--o") {
+        let pp = p + 4;
+        let (label, end) = try_pipe_label(chars, pp);
+        return Some((EdgeStyle::BiCircleArrow, label, end));
     }
 
     // Thick arrow ==>

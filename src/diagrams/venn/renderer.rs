@@ -609,16 +609,27 @@ fn compute_text_centre(interior: &[&Circle], exterior: &[&Circle]) -> (f64, f64)
         return (mx, my);
     }
 
-    // Gradient ascent refinement
+    // Gradient ascent refinement (8 directions including diagonals)
+    let diag2 = 1.0_f64 / 2.0_f64.sqrt();
+    let dirs2: [(f64, f64); 8] = [
+        (1.0, 0.0),
+        (-1.0, 0.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (diag2, diag2),
+        (-diag2, diag2),
+        (diag2, -diag2),
+        (-diag2, -diag2),
+    ];
     let step_init = interior.iter().map(|c| c.radius).fold(0.0_f64, f64::max) * 0.1;
     let mut step = step_init;
     let mut pos = best;
     for _ in 0..500 {
         let m0 = margin(pos.0, pos.1);
         let mut moved = false;
-        for &(dx, dy) in &[(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
-            let nx = pos.0 + dx;
-            let ny = pos.1 + dy;
+        for &(dx, dy) in &dirs2 {
+            let nx = pos.0 + dx * step;
+            let ny = pos.1 + dy * step;
             let m = margin(nx, ny);
             if m > m0 {
                 pos = (nx, ny);
@@ -998,14 +1009,26 @@ fn compute_text_centre_set(interior: &[&Circle], exterior: &[&Circle]) -> (f64, 
     }
 
     // Gradient ascent refinement (500 iterations, mirrors nelderMead maxIterations=500)
+    // Use 8 directions (including diagonals) to better match Nelder-Mead convergence.
+    let diag = 1.0_f64 / 2.0_f64.sqrt();
+    let dirs: [(f64, f64); 8] = [
+        (1.0, 0.0),
+        (-1.0, 0.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (diag, diag),
+        (-diag, diag),
+        (diag, -diag),
+        (-diag, -diag),
+    ];
     let mut step = c.radius * 0.1;
     let mut pos = best;
     for _ in 0..500 {
         let m0 = margin(pos.0, pos.1);
         let mut moved = false;
-        for &(dx, dy) in &[(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
-            let nx = pos.0 + dx;
-            let ny = pos.1 + dy;
+        for &(dx, dy) in &dirs {
+            let nx = pos.0 + dx * step;
+            let ny = pos.1 + dy * step;
             let m = margin(nx, ny);
             if m > m0 {
                 pos = (nx, ny);

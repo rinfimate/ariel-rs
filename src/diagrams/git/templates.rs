@@ -198,7 +198,7 @@ pub fn commit_arrow(d: &str, ci: usize, stroke: &str, branch_idx: usize) -> Stri
 /// Render a highlight commit outer rectangle.
 pub fn commit_highlight_outer(x: f64, y: f64, fill: &str, stroke: &str) -> String {
     format!(
-        r##"<rect x="{:.1}" y="{:.1}" width="20" height="20" rx="2" fill="{}" stroke="{}" stroke-width="2"/>"##,
+        r##"<rect x="{:.1}" y="{:.1}" width="20" height="20" fill="{}" stroke="{}" stroke-width="2"/>"##,
         x, y, fill, stroke,
     )
 }
@@ -206,7 +206,7 @@ pub fn commit_highlight_outer(x: f64, y: f64, fill: &str, stroke: &str) -> Strin
 /// Render a highlight commit inner rectangle.
 pub fn commit_highlight_inner(x: f64, y: f64, fill: &str, stroke: &str) -> String {
     format!(
-        r##"<rect x="{:.1}" y="{:.1}" width="12" height="12" rx="1" fill="{}" stroke="{}" stroke-width="1"/>"##,
+        r##"<rect x="{:.1}" y="{:.1}" width="12" height="12" fill="{}" stroke="{}" stroke-width="1"/>"##,
         x, y, fill, stroke,
     )
 }
@@ -286,7 +286,7 @@ pub fn commit_label_bkg(rect_x: f64, rect_y: f64, rect_w: f64, secondary_color: 
 /// Render the commit label text.
 pub fn commit_label_text(text_x: f64, text_y: f64, label: &str, text_color: &str) -> String {
     format!(
-        "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"10\" fill=\"{text_color}\" class=\"commit-label\">{}</text>",
+        "<text x=\"{:.3}\" y=\"{:.3}\" font-family=\"Arial, sans-serif\" font-size=\"10\" fill=\"{text_color}\" class=\"commit-label\">{}</text>",
         text_x, text_y, label, text_color = text_color,
     )
 }

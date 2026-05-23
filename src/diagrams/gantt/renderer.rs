@@ -73,8 +73,7 @@ fn compute_tick_interval(span_days: f64, explicit: Option<f64>) -> f64 {
 }
 
 /// Format a day number as "YYYY-MM-DD".
-fn format_date(days: f64) -> String {
-    // Reverse of date_to_days (Julian Day Number algorithm)
+fn days_to_ymd(days: f64) -> (i64, i64, i64) {
     let z = days as i64 + 719468;
     let era = z.div_euclid(146097);
     let doe = z.rem_euclid(146097);
@@ -85,6 +84,32 @@ fn format_date(days: f64) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
+fn format_date_with_fmt(days: f64, fmt: &str) -> String {
+    let (y, m, d) = days_to_ymd(days);
+    let mut out = fmt.to_string();
+    out = out.replace("%Y", &format!("{:04}", y));
+    out = out.replace("%y", &format!("{:02}", y % 100));
+    out = out.replace("%m", &format!("{:02}", m));
+    out = out.replace("%d", &format!("{:02}", d));
+    out = out.replace("%j", &format!("{:03}", day_of_year(y, m, d)));
+    out
+}
+
+fn day_of_year(y: i64, m: i64, d: i64) -> i64 {
+    let days_before = [0i64, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let leap = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+        1
+    } else {
+        0
+    };
+    days_before[(m - 1) as usize] + d + if m > 2 { leap } else { 0 }
+}
+
+fn format_date(days: f64) -> String {
+    let (y, m, d) = days_to_ymd(days);
     format!("{:04}-{:02}-{:02}", y, m, d)
 }
 
@@ -312,7 +337,11 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     // D3 rounds to the nearest integer first, then adds 0.5.
     for tick in &ticks {
         let x = ((*tick - t_min) / span * DRAW_WIDTH).round() + 0.5;
-        let label = format_date(*tick);
+        let label = if let Some(ref fmt) = diag.axis_format {
+            format_date_with_fmt(*tick, fmt)
+        } else {
+            format_date(*tick)
+        };
         out.push_str(&grid_tick(
             x,
             -(grid_height as i64),
@@ -422,13 +451,28 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 contrast_color,
             ));
         } else if bar_w < LEFT_PAD {
-            // Text outside to the right
-            let outside_cls = format!("taskTextOutsideRight {}", text_class(task));
+            // Milestone or tiny bar — place text left or right of diamond based on available space
+            let right_edge = LEFT_PAD + DRAW_WIDTH;
+            let diamond_half = BAR_HEIGHT * 0.8 / 2.0;
+            let gap = 7.0;
+            let (text_x, outside_cls) = if bar_cx + diamond_half + text_w + gap > right_edge {
+                // Not enough space to the right — place left (text-anchor:end)
+                (
+                    bar_cx - diamond_half - gap,
+                    format!("taskTextOutsideLeft {}", text_class(task)),
+                )
+            } else {
+                // Place right (text-anchor:start)
+                (
+                    bar_cx + diamond_half + gap,
+                    format!("taskTextOutsideRight {}", text_class(task)),
+                )
+            };
             out.push_str(&task_text(
                 id,
                 &tid,
                 FONT_SIZE as i64,
-                (bar_x + bar_w + 2.0) as i64,
+                text_x as i64,
                 text_y as i64,
                 BAR_HEIGHT as i64,
                 outside_cls.trim(),

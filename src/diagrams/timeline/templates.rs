@@ -209,10 +209,10 @@ pub fn section_box(
         w = width,
         lc = line_color,
     ));
+    // Match Mermaid reference: text group at (cx, 10), dy="1em" + tspan dy="1em"
     svg.push_str(&format!(
-        "  <text x=\"{tx}\" y=\"{ty}\" class=\"section-label\" style=\"fill:{fc};\" text-anchor=\"middle\" dominant-baseline=\"middle\">{label}</text>\n",
+        "  <g transform=\"translate({tx}, 10)\"><text dy=\"1em\" alignment-baseline=\"middle\" dominant-baseline=\"middle\" text-anchor=\"middle\" style=\"fill:{fc};\" class=\"section-label\"><tspan x=\"0\" dy=\"1em\">{label}</tspan></text></g>\n",
         tx = text_x,
-        ty = text_y,
         fc = text_color,
         label = label,
     ));

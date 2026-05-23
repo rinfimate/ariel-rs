@@ -343,7 +343,7 @@ fn render_section_and_items(
             // Assignee (right side) — nowrap so names don't get cut off.
             if let Some(ref assigned) = item.assigned {
                 items_svg.push_str(&templates::assignee_label(
-                    -5.0,
+                    item_w_half - 10.0,
                     meta_y,
                     item_w_half + 5.0,
                     &esc(assigned),

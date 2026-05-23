@@ -96,12 +96,24 @@ impl Layout {
 
                 if lhs_placed && !rhs_placed {
                     let lp = pos[&edge.lhs_id].clone();
-                    let rp = offset_dir(&lp, &edge.lhs_dir, h_step, v_step);
+                    let rp = find_free_pos(
+                        offset_dir(&lp, &edge.lhs_dir, h_step, v_step),
+                        &edge.lhs_dir,
+                        h_step,
+                        v_step,
+                        &pos,
+                    );
                     pos.insert(edge.rhs_id.clone(), rp);
                     changed = true;
                 } else if rhs_placed && !lhs_placed {
                     let rp = pos[&edge.rhs_id].clone();
-                    let lp = offset_dir(&rp, &edge.rhs_dir, h_step, v_step);
+                    let lp = find_free_pos(
+                        offset_dir(&rp, &edge.rhs_dir, h_step, v_step),
+                        &edge.rhs_dir,
+                        h_step,
+                        v_step,
+                        &pos,
+                    );
                     pos.insert(edge.lhs_id.clone(), lp);
                     changed = true;
                 }
@@ -135,6 +147,58 @@ impl Layout {
     fn node_centre(&self, id: &str) -> Option<Pos> {
         self.pos.get(id).cloned()
     }
+}
+
+/// Find a free position starting from `base`. Try perpendicular offsets first,
+/// then same-direction, so colliding siblings don't form a visual chain.
+fn find_free_pos(
+    base: Pos,
+    dir: &Direction,
+    h_step: f64,
+    v_step: f64,
+    pos: &HashMap<String, Pos>,
+) -> Pos {
+    let threshold = h_step.min(v_step) * 0.5;
+    let occupied = |p: &Pos| {
+        pos.values()
+            .any(|q| (q.x - p.x).abs() < threshold && (q.y - p.y).abs() < threshold)
+    };
+    if !occupied(&base) {
+        return base;
+    }
+    // Try perpendicular offsets first (up, down for horizontal edges; left, right for vertical)
+    let perp: &[(f64, f64)] = match dir {
+        Direction::L | Direction::R => &[
+            (0.0, -v_step),
+            (0.0, v_step),
+            (0.0, -2.0 * v_step),
+            (0.0, 2.0 * v_step),
+        ],
+        Direction::T | Direction::B => &[
+            (-h_step, 0.0),
+            (h_step, 0.0),
+            (-2.0 * h_step, 0.0),
+            (2.0 * h_step, 0.0),
+        ],
+    };
+    for &(dx, dy) in perp {
+        let p = Pos {
+            x: base.x + dx,
+            y: base.y + dy,
+        };
+        if !occupied(&p) {
+            return p;
+        }
+    }
+    // Fall back: continue in same direction
+    let mut p = offset_dir(&base, dir, h_step, v_step);
+    for _ in 0..10 {
+        if !occupied(&p) {
+            return p;
+        }
+        p = offset_dir(&p, dir, h_step, v_step);
+    }
+    p
 }
 
 /// Offset a position by one step in the given direction.
@@ -291,6 +355,13 @@ fn icon_inner(name: &str) -> &'static str {
         "cloud" => concat!(
             "<rect width=\"80\" height=\"80\" style=\"fill: #087ebf; stroke-width: 0px;\"></rect>",
             "<path d=\"m65,47.5c0,2.76-2.24,5-5,5H20c-2.76,0-5-2.24-5-5,0-1.87,1.03-3.51,2.56-4.36-.04-.21-.06-.42-.06-.64,0-2.6,2.48-4.74,5.65-4.97,1.65-4.51,6.34-7.76,11.85-7.76.86,0,1.69.08,2.5.23,2.09-1.57,4.69-2.5,7.5-2.5,6.1,0,11.19,4.38,12.28,10.17,2.14.56,3.72,2.51,3.72,4.83,0,.03,0,.07-.01.1,2.29.46,4.01,2.48,4.01,4.9Z\" style=\"fill: none; stroke: #fff; stroke-miterlimit: 10; stroke-width: 2px;\"></path>",
+        ),
+        "lock" => concat!(
+            "<rect width=\"80\" height=\"80\" style=\"fill: #087ebf; stroke-width: 0px;\"></rect>",
+            "<rect x=\"22\" y=\"38\" width=\"36\" height=\"26\" rx=\"3\" ry=\"3\" style=\"fill: none; stroke: #fff; stroke-miterlimit: 10; stroke-width: 2px;\"></rect>",
+            "<path d=\"m56,38v-8c0-8.84-7.16-16-16-16s-16,7.16-16,16v8\" style=\"fill: none; stroke: #fff; stroke-miterlimit: 10; stroke-width: 2px;\"></path>",
+            "<circle cx=\"40\" cy=\"51\" r=\"4\" style=\"fill: #fff;\"></circle>",
+            "<line x1=\"40\" y1=\"55\" x2=\"40\" y2=\"60\" style=\"stroke: #fff; stroke-width: 2px;\"></line>",
         ),
         _ => "<rect width=\"80\" height=\"80\" style=\"fill: #087ebf; stroke-width: 0px;\"></rect>",
     }
@@ -519,15 +590,15 @@ fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, out: &mut Str
         line_color,
     ));
 
-    // Arrow at rhs (into rhs node)
+    // Arrow at rhs (into rhs node) — angle from mid→target
     if edge.rhs_into {
-        let (pts, t) = arrow_at(&rc, &edge.rhs_dir, tx, ty);
+        let (pts, t) = arrow_angled(tx, ty, mid_x, mid_y);
         out.push_str(&edge_arrow(&pts, &t, line_color));
     }
 
-    // Arrow at lhs (into lhs node) — for bidirectional edges
+    // Arrow at lhs (into lhs node) — for bidirectional edges, angle from mid→source
     if edge.lhs_into {
-        let (pts, t) = arrow_at(&lc, &edge.lhs_dir, sx, sy);
+        let (pts, t) = arrow_angled(sx, sy, mid_x, mid_y);
         out.push_str(&edge_arrow(&pts, &t, line_color));
     }
 
@@ -539,6 +610,24 @@ fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, out: &mut Str
     }
 
     out.push_str("</g>");
+}
+
+/// Arrowhead at (tip_x, tip_y) pointing in direction from→tip.
+/// Triangle: tip at origin, base at (-a, ±ha). Rotate then translate.
+fn arrow_angled(tip_x: f64, tip_y: f64, from_x: f64, from_y: f64) -> (String, String) {
+    let a = 40.0_f64 / 3.0;
+    let ha = a / 2.0;
+    let angle_deg = (tip_y - from_y).atan2(tip_x - from_x).to_degrees();
+    // Tip at (0,0), base vertices at (-a,-ha) and (-a,ha) — points rightward by default
+    let pts = format!("0,0 {},{} {},{}", fmt(-a), fmt(-ha), fmt(-a), fmt(ha));
+    // Rotate around tip (0,0) then translate tip to (tip_x, tip_y)
+    let t = format!(
+        "translate({},{}) rotate({})",
+        fmt(tip_x),
+        fmt(tip_y),
+        fmt(angle_deg)
+    );
+    (pts, t)
 }
 
 /// Returns (polygon_points, transform_string) for an arrowhead at a node edge.

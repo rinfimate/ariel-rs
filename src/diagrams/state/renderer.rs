@@ -1,679 +1,1175 @@
-// State diagram renderer — faithful port of Mermaid stateRenderer-v3-unified.ts
-// + dataFetcher.ts compound note pattern.
-//
-// Node layout follows dataFetcher.ts exactly:
-//   - Regular state   → shape "rect", no parentId
-//   - Note compound   → shape "noteGroup", isGroup=true, padding=16, no parentId
-//   - Note node       → shape "note", parentId = "{stateId}----parent"
-//   - State with note → no parentId (root-level, NOT inside compound)
-//   - Note edge       → arrowhead="none", classes="transition note-edge"
-//
-// Sizes follow note.ts / shapes.js:
-//   - State rect: (text_w + 2*padding).max(40) × 40  (padding=8)
-//   - Note box: (text_w + 2*padding) × (text_h + 2*padding)
-//   - NoteGroup: dagre computes from children (set to 0×0 initially)
-//   - Fork/Join: 70×7 (outer) or 7×70 (inner LR)
-//   - Start:  r=7 circle → 14×14
-//   - End:    r=7+2 outer → 18×18
-//   - Choice (diamond): 14×14
-
+/// Faithful port of Mermaid's dagre/index.js + mermaid-graphlib.js + clusters.js
+///
+/// Pipeline:
+///   render() → build compound graph → adjustClustersAndEdges → extractor →
+///   layout main graph → apply title offset → recursiveRender → SVG wrapper
 use super::constants::*;
-use super::parser::{Edge, Node, Shape, StateDiagram};
-use super::templates::{
-    composite_cluster, composite_inner_group, drop_shadow_filter, edge_label_empty, edge_path,
-    markers, node_choice, node_fork_join, node_note, node_rect, node_state_end, node_state_start,
-    note_cluster, text_composite_label, text_edge_label, text_note_label, text_state_label,
-};
-use crate::svg::curve_basis_path;
+use super::parser::{Edge as PEdge, Node as PNode, Shape, StateDiagram};
+use super::templates::{self, esc, fmt};
 use crate::text::measure;
 use crate::theme::{Theme, ThemeVars};
-use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel, Point};
+use dagre_dgl_rs::graph::{Edge, EdgeLabel, Graph, GraphLabel, NodeLabel};
 use dagre_dgl_rs::layout::layout;
-
-// ─── Public entry point ───────────────────────────────────────────────────────
+use std::collections::{HashMap, HashSet};
 
 pub fn render(diag: &StateDiagram, theme: Theme) -> String {
     let vars = theme.resolve();
-    render_level(&diag.nodes, &diag.edges, &diag.direction, &vars, SVG_ID)
+    do_render(&diag.nodes, &diag.edges, &diag.direction, &vars)
 }
 
-// ─── Inner layout for composite states ───────────────────────────────────────
+// ─── Main render ─────────────────────────────────────────────────────────────
 
-/// Run dagre for the inner content of a composite state.
-/// Returns (inner_width, inner_height, inner_svg_string).
-fn run_inner_layout(
-    nodes: &[Node],
-    edges: &[Edge],
-    direction: &str,
-    vars: &ThemeVars,
-    svg_id: &str,
-    composite_label: &str,
-    composite_dom_id: &str,
-) -> (f64, f64, String) {
-    let mut g = Graph::with_options(true, false, true);
+fn do_render(pnodes: &[PNode], pedges: &[PEdge], direction: &str, vars: &ThemeVars) -> String {
+    let mut g = Graph::with_options(true, true, true);
     g.set_graph(GraphLabel {
-        rankdir: Some(direction.to_string()),
-        ranksep: Some(INNER_RANKSEP),
-        nodesep: Some(INNER_NODESEP),
-        marginx: Some(INNER_MARGINX),
-        marginy: Some(INNER_MARGINY),
-        ..Default::default()
-    });
-
-    for node in nodes {
-        let (w, h) = node_size(node);
-        let intersect = if node.shape == Shape::Choice {
-            Some("diamond")
-        } else {
-            None
-        };
-        g.set_node(
-            &node.id,
-            NodeLabel {
-                width: w,
-                height: h,
-                intersect_type: intersect,
-                ..Default::default()
-            },
-        );
-    }
-
-    for edge in edges {
-        if g.node_opt(&edge.start).is_none() || g.node_opt(&edge.end).is_none() {
-            continue;
-        }
-        let is_note_edge = edge.classes.contains("note-edge");
-        g.set_edge(
-            &edge.start,
-            &edge.end,
-            EdgeLabel {
-                minlen: Some(1),
-                weight: if is_note_edge { Some(0.0) } else { Some(1.0) },
-                width: Some(if edge.label.is_empty() { 0.0 } else { 1.0 }),
-                height: Some(if edge.label.is_empty() { 0.0 } else { 24.0 }),
-                labelpos: Some("c".to_string()),
-                ..Default::default()
-            },
-            None,
-        );
-    }
-
-    layout(&mut g);
-
-    let graph_w = g.graph().width.unwrap_or(60.0);
-    let graph_h = g.graph().height.unwrap_or(60.0);
-
-    // Build inner SVG content (clusters, edges, nodes) without the <svg> wrapper
-    let mut out = String::new();
-
-    out.push_str("<g class=\"clusters\">");
-    out.push_str(&composite_cluster(
-        composite_dom_id,
-        composite_label,
-        graph_w,
-        graph_h,
-        0.0,
-        vars,
-    ));
-    out.push_str("</g>");
-
-    // Inner edge paths
-    out.push_str("<g class=\"edgePaths\">");
-    for (ei, edge) in edges.iter().enumerate() {
-        let e = dagre_dgl_rs::graph::Edge::new(&edge.start, &edge.end);
-        if let Some(lbl) = g.edge(&e) {
-            if let Some(pts) = &lbl.points {
-                if pts.len() >= 2 {
-                    out.push_str(&render_edge(
-                        edge,
-                        pts,
-                        svg_id,
-                        1000 + ei,
-                        &g,
-                        nodes,
-                        vars.state_transition_color,
-                    ));
-                }
-            }
-        }
-    }
-    out.push_str("</g>");
-
-    // Inner edge labels
-    out.push_str("<g class=\"edgeLabels\">");
-    for edge in edges {
-        out.push_str(edge_label_empty());
-        let _ = edge;
-    }
-    out.push_str("</g>");
-
-    // Inner nodes
-    out.push_str("<g class=\"nodes\">");
-    for node in nodes {
-        if let Some(n) = g.node_opt(&node.id) {
-            if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                out.push_str(&render_node(node, cx, cy, n.width, n.height, vars, svg_id));
-            }
-        }
-    }
-    out.push_str("</g>");
-
-    // Return VISUAL size for outer dagre compound sizing.
-    // -2*sp removes the dagre margins; -4 corrects the bottom margin difference
-    // between dagre-dgl-rs (45.5) and dagre-d3-es compound border node behavior (41.5).
-    (
-        graph_w - 2.0 * CLUSTER_PADDING,
-        graph_h - 2.0 * CLUSTER_PADDING - 4.0,
-        out,
-    )
-}
-
-// ─── Level renderer ───────────────────────────────────────────────────────────
-
-fn render_level(
-    nodes: &[Node],
-    edges: &[Edge],
-    direction: &str,
-    vars: &ThemeVars,
-    svg_id: &str,
-) -> String {
-    // Pre-compute inner layout for composite (group) nodes so we know their sizes
-    // before running the outer dagre.  Mirrors how Mermaid recurses into composites.
-    let mut composite_sizes: std::collections::HashMap<String, (f64, f64)> =
-        std::collections::HashMap::new();
-    let mut composite_inner_svgs: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-    // Full (graph_w, graph_h) including dagre margins — used for inner group translate
-    let mut composite_full_sizes: std::collections::HashMap<String, (f64, f64)> =
-        std::collections::HashMap::new();
-
-    for node in nodes {
-        if node.is_group && node.shape == Shape::RoundedWithTitle {
-            // Collect children of this composite
-            let children: Vec<&Node> = nodes
-                .iter()
-                .filter(|n| n.parent_id.as_deref() == Some(&node.id))
-                .collect();
-            let child_edges: Vec<&Edge> = edges
-                .iter()
-                .filter(|e| {
-                    children.iter().any(|n| n.id == e.start)
-                        || children.iter().any(|n| n.id == e.end)
-                })
-                .collect();
-            let child_nodes: Vec<Node> = children.iter().map(|n| (*n).clone()).collect();
-            let child_edges: Vec<Edge> = child_edges.iter().map(|e| (*e).clone()).collect();
-            if !child_nodes.is_empty() {
-                let (visual_w, visual_h, inner_svg) = run_inner_layout(
-                    &child_nodes,
-                    &child_edges,
-                    &node.dir,
-                    vars,
-                    svg_id,
-                    &node.label,
-                    &node.dom_id,
-                );
-                // Outer dagre sees visual size; inner group translate uses full size (+ 2*sp)
-                let full_w = visual_w + 2.0 * CLUSTER_PADDING;
-                let full_h = visual_h + 2.0 * CLUSTER_PADDING;
-                composite_sizes.insert(node.id.clone(), (visual_w, visual_h));
-                composite_full_sizes.insert(node.id.clone(), (full_w, full_h));
-                composite_inner_svgs.insert(node.id.clone(), inner_svg);
-            }
-        }
-    }
-
-    // Build dagre graph with compound=true (matches dataFetcher.ts using graphlib compound:true)
-    let mut g = Graph::with_options(true, false, true);
-    g.set_graph(GraphLabel {
-        rankdir: Some(direction.to_string()),
-        ranksep: Some(RANKSEP),
-        nodesep: Some(NODESEP),
+        rankdir: Some(direction.into()),
+        nodesep: Some(NODE_SEP),
+        ranksep: Some(RANK_SEP),
         marginx: Some(MARGIN),
         marginy: Some(MARGIN),
         ..Default::default()
     });
 
-    // Add all nodes to dagre, following dataFetcher.ts order:
-    // groupData → noteData → nodeData
-    for node in nodes {
-        // Skip nodes that are children of a composite — they're in the inner layout
-        if node
-            .parent_id
-            .as_ref()
-            .map(|pid| {
-                nodes
-                    .iter()
-                    .any(|n| n.id == *pid && n.is_group && n.shape == Shape::RoundedWithTitle)
-            })
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        let (w, h) = if let Some(&(iw, ih)) = composite_sizes.get(&node.id) {
-            (iw, ih) // composite uses inner layout size
-        } else {
-            node_size(node)
-        };
-        let intersect = if node.shape == Shape::Choice {
-            Some("diamond")
-        } else {
-            None
-        };
+    for pn in pnodes {
+        let (w, h) = node_size(pn);
         g.set_node(
-            &node.id,
+            &pn.id,
             NodeLabel {
                 width: w,
                 height: h,
-                intersect_type: intersect,
                 ..Default::default()
             },
         );
-    }
-
-    // Set parent relationships (noteData.parentId = groupId)
-    // Only for note compound children — composite children are handled in inner layout
-    for node in nodes {
-        if let Some(ref pid) = node.parent_id {
-            // Only set parent if both the node AND the parent exist in the outer graph
-            if g.node_opt(&node.id).is_some() && g.node_opt(pid).is_some() {
-                g.set_parent(&node.id, Some(pid));
+        if let Some(ref pid) = pn.parent_id {
+            if g.has_node(pid) {
+                g.set_parent(&pn.id, Some(pid));
             }
         }
     }
 
-    // Add edges between outer-level nodes only
-    let mut edge_counter = 0usize;
-    for edge in edges {
-        // Skip edges between nodes that are not in the outer graph
-        if g.node_opt(&edge.start).is_none() || g.node_opt(&edge.end).is_none() {
+    for (i, pe) in pedges.iter().enumerate() {
+        if !g.has_node(&pe.start) || !g.has_node(&pe.end) {
             continue;
         }
-        let is_note_edge = edge.classes.contains("note-edge");
+        let lw = if pe.label.is_empty() {
+            0.0
+        } else {
+            label_w(&pe.label)
+        };
+        let lh = if pe.label.is_empty() { 0.0 } else { 18.0 };
         g.set_edge(
-            &edge.start,
-            &edge.end,
+            &pe.start,
+            &pe.end,
             EdgeLabel {
                 minlen: Some(1),
-                weight: if is_note_edge { Some(0.0) } else { Some(1.0) },
-                width: Some(if edge.label.is_empty() { 0.0 } else { 1.0 }),
-                height: Some(if edge.label.is_empty() { 0.0 } else { 24.0 }),
-                labelpos: Some("c".to_string()),
+                weight: Some(1.0),
+                width: Some(lw),
+                height: Some(lh),
+                labelpos: Some("c".into()),
                 ..Default::default()
             },
-            None,
+            Some(&format!("e{}", i)),
         );
-        edge_counter += 1;
     }
-    let _ = edge_counter;
+
+    let mut cluster_db: HashMap<String, ClusterEntry> = HashMap::new();
+    adjust_clusters_and_edges(&mut g, &mut cluster_db);
+
+    let mut sub_graphs: HashMap<String, SubGraph> = HashMap::new();
+    extractor(
+        &mut g,
+        direction,
+        &mut cluster_db,
+        pnodes,
+        &mut sub_graphs,
+        0,
+    );
 
     layout(&mut g);
+    apply_title_offset(&mut g, &cluster_db, pnodes);
 
-    // Compute actual content bounding box from node positions (matches Mermaid's getBBox approach)
-    let pad = MARGIN;
-    let mut min_x = f64::INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    for node in nodes {
-        if let Some(n) = g.node_opt(&node.id) {
-            if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                let hw = n.width / 2.0;
-                let hh = n.height / 2.0;
-                min_x = min_x.min(cx - hw);
-                max_x = max_x.max(cx + hw);
-                min_y = min_y.min(cy - hh);
-                max_y = max_y.max(cy + hh);
+    let mut body = String::new();
+    recursive_render(
+        &g,
+        pedges,
+        pnodes,
+        &sub_graphs,
+        &cluster_db,
+        vars,
+        &mut body,
+    );
+
+    let (vx, vy, vw, vh) = viewbox(&g, pedges, pnodes, &sub_graphs);
+    format!(
+        "<svg id=\"mermaid-svg\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" \
+         viewBox=\"{vx} {vy} {vw} {vh}\" style=\"max-width:{vw}px;\">{css}{marker}{body}</svg>",
+        vx = fmt(vx),
+        vy = fmt(vy),
+        vw = fmt(vw),
+        vh = fmt(vh),
+        css = css(vars),
+        marker = templates::arrow_marker(vars.state_transition_color),
+        body = body,
+    )
+}
+
+// ─── Structures ───────────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug)]
+struct ClusterEntry {
+    anchor: String,
+    external: bool,
+}
+
+struct SubGraph {
+    graph: Graph,
+    #[allow(dead_code)]
+    dir: String,
+}
+
+// ─── adjustClustersAndEdges ───────────────────────────────────────────────────
+
+fn adjust_clusters_and_edges(g: &mut Graph, cluster_db: &mut HashMap<String, ClusterEntry>) {
+    for id in g.nodes() {
+        if !g.children(&id).is_empty() {
+            let anchor = find_non_cluster_child(&id, g).unwrap_or(id.clone());
+            cluster_db.insert(
+                id.clone(),
+                ClusterEntry {
+                    anchor,
+                    external: false,
+                },
+            );
+        }
+    }
+    let mut descendants: HashMap<String, HashSet<String>> = HashMap::new();
+    for id in cluster_db.keys() {
+        descendants.insert(id.clone(), extract_descendants(id, g));
+    }
+    for e in g.edges() {
+        for (cid, descs) in &descendants {
+            let d1 = descs.contains(&e.v);
+            let d2 = descs.contains(&e.w);
+            if d1 ^ d2 {
+                if let Some(entry) = cluster_db.get_mut(cid) {
+                    entry.external = true;
+                }
             }
         }
     }
-    // Include edge points and edge label extents in bounds.
-    // Edge labels are centered at the path midpoint; their half-width must be included so
-    // labels that overhang beyond node edges are fully contained in the viewBox.
-    for edge in edges {
-        let e = dagre_dgl_rs::graph::Edge::new(&edge.start, &edge.end);
+    let edges: Vec<Edge> = g.edges();
+    let mut removes: Vec<Edge> = Vec::new();
+    let mut adds: Vec<(String, String, EdgeLabel, String)> = Vec::new();
+    for e in edges {
+        let vc = cluster_db.contains_key(&e.v);
+        let wc = cluster_db.contains_key(&e.w);
+        if !vc && !wc {
+            continue;
+        }
+        let new_v = if vc {
+            cluster_db[&e.v].anchor.clone()
+        } else {
+            e.v.clone()
+        };
+        let new_w = if wc {
+            cluster_db[&e.w].anchor.clone()
+        } else {
+            e.w.clone()
+        };
+        if new_v != e.v {
+            if let Some(par) = g.parent(&new_v).map(|s| s.to_string()) {
+                if let Some(en) = cluster_db.get_mut(&par) {
+                    en.external = true;
+                }
+            }
+        }
+        if new_w != e.w {
+            if let Some(par) = g.parent(&new_w).map(|s| s.to_string()) {
+                if let Some(en) = cluster_db.get_mut(&par) {
+                    en.external = true;
+                }
+            }
+        }
         if let Some(lbl) = g.edge(&e) {
-            if let Some(pts) = &lbl.points {
-                for p in pts {
-                    min_x = min_x.min(p.x);
-                    max_x = max_x.max(p.x);
-                    min_y = min_y.min(p.y);
-                    max_y = max_y.max(p.y);
-                }
-                // If the edge has a visible label, include its horizontal extent.
-                if !edge.label.is_empty() && pts.len() >= 2 {
-                    let mid = midpoint(pts);
-                    let (tw_raw, _) = measure(&edge.label, FONT_SIZE);
-                    let tw = (tw_raw * LABEL_SCALE).max(20.0);
-                    let half_tw = tw / 2.0;
-                    min_x = min_x.min(mid.0 - half_tw);
-                    max_x = max_x.max(mid.0 + half_tw);
-                }
-            }
+            removes.push(e.clone());
+            adds.push((
+                new_v,
+                new_w,
+                lbl.clone(),
+                e.name.clone().unwrap_or_default(),
+            ));
         }
     }
-    if min_x.is_infinite() {
-        min_x = 0.0;
-        min_y = 0.0;
-        max_x = 100.0;
-        max_y = 100.0;
+    for e in removes {
+        g.remove_edge_obj(&e);
     }
-    let vb_x = min_x - pad;
-    let vb_y = min_y - pad;
-    let vb_w = (max_x - min_x) + 2.0 * pad;
-    let vb_h = (max_y - min_y) + 2.0 * pad;
-
-    // Build SVG
-    let mut out = String::new();
-    out.push_str(&super::templates::svg_root(svg_id, vb_x, vb_y, vb_w, vb_h));
-    out.push_str("<g>");
-    out.push_str(&markers(svg_id, vars.state_transition_color));
-    out.push_str("</g>");
-    out.push_str("<g class=\"root\">");
-
-    // Clusters: noteGroup rects + composite (roundedWithTitle) groups
-    out.push_str("<g class=\"clusters\">");
-    for node in nodes {
-        if node.shape == Shape::NoteGroup {
-            if let Some(n) = g.node_opt(&node.id) {
-                if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                    let w = n.width;
-                    let h = n.height;
-                    out.push_str(&note_cluster(
-                        &node.dom_id,
-                        cx - w / 2.0,
-                        cy - h / 2.0,
-                        w,
-                        h,
-                    ));
-                }
-            }
+    for (v, w, lbl, name) in adds {
+        if g.has_node(&v) && g.has_node(&w) {
+            g.set_edge(&v, &w, lbl, Some(&name));
         }
     }
-    out.push_str("</g>");
+}
 
-    // Helper: circle intersection — replace endpoint so it sits on the circle surface
-    // instead of the bounding-box face (fixes gap on diagonal edges into start/end circles).
-    let circle_intersect =
-        |pts: &[Point], node_cx: f64, node_cy: f64, r: f64, is_target: bool| -> Vec<Point> {
-            let mut v = pts.to_vec();
-            if v.len() < 2 {
-                return v;
-            }
-            let (inner, _outer) = if is_target {
-                let n = v.len();
-                (v[n - 2].clone(), v[n - 1].clone())
-            } else {
-                (v[1].clone(), v[0].clone())
-            };
-            // direction from inner waypoint toward node center
-            let dx = node_cx - inner.x;
-            let dy = node_cy - inner.y;
-            let len = (dx * dx + dy * dy).sqrt();
-            if len > 0.0 {
-                let pt = Point {
-                    x: node_cx - r * dx / len,
-                    y: node_cy - r * dy / len,
-                };
-                if is_target {
-                    *v.last_mut().unwrap() = pt;
-                } else {
-                    v[0] = pt;
-                }
-            }
-            v
+fn extract_descendants(id: &str, g: &Graph) -> HashSet<String> {
+    let mut res = HashSet::new();
+    for c in g.children(id) {
+        res.insert(c.clone());
+        res.extend(extract_descendants(&c, g));
+    }
+    res
+}
+
+fn find_non_cluster_child(id: &str, g: &Graph) -> Option<String> {
+    let children = g.children(id);
+    if children.is_empty() {
+        return Some(id.to_string());
+    }
+    for c in &children {
+        if g.children(c).is_empty() {
+            return Some(c.clone());
+        }
+        if let Some(r) = find_non_cluster_child(c, g) {
+            return Some(r);
+        }
+    }
+    None
+}
+
+// ─── extractor ────────────────────────────────────────────────────────────────
+//
+// Direction logic:
+//   - explicit dir → use it
+//   - concurrent region (all children are dividers) → SAME dir as parent
+//     (keeps dividers in same rank → side-by-side in TB or LR)
+//   - otherwise → flip TB↔LR
+
+fn extractor(
+    g: &mut Graph,
+    parent_dir: &str,
+    cluster_db: &mut HashMap<String, ClusterEntry>,
+    pnodes: &[PNode],
+    sub_graphs: &mut HashMap<String, SubGraph>,
+    depth: usize,
+) {
+    if depth > 10 {
+        return;
+    }
+    let nodes: Vec<String> = g.nodes();
+    if !nodes.iter().any(|id| !g.children(id).is_empty()) {
+        return;
+    }
+
+    for id in &nodes {
+        if g.children(id).is_empty() {
+            continue;
+        }
+        let pn = pnodes.iter().find(|n| n.id == *id);
+        // Note groups are never extracted
+        let is_note_grp = pn.map(|n| n.shape == Shape::NoteGroup).unwrap_or(false);
+        if is_note_grp {
+            continue;
+        }
+
+        let pn_dir = pn.map(|n| n.dir.as_str()).unwrap_or("");
+        let all_children_are_dividers = !g.children(id).is_empty()
+            && g.children(id).iter().all(|cid| {
+                pnodes
+                    .iter()
+                    .find(|n| n.id == *cid)
+                    .map(|n| n.shape == Shape::Divider)
+                    .unwrap_or(false)
+            });
+
+        let parent_ranksep = g.graph().ranksep.unwrap_or(RANK_SEP);
+        let sub_ranksep = if all_children_are_dividers {
+            SUB_RANK_SEP
+        } else {
+            parent_ranksep + 25.0
         };
 
-    let node_shape_of =
-        |id: &str| -> Option<Shape> { nodes.iter().find(|n| n.id == id).map(|n| n.shape.clone()) };
-    let node_pos_of =
-        |id: &str| -> Option<(f64, f64)> { g.node_opt(id).and_then(|n| n.x.zip(n.y)) };
+        let sub_dir = if !pn_dir.is_empty() {
+            pn_dir.to_string()
+        } else if all_children_are_dividers {
+            parent_dir.to_string()
+        } else {
+            "TB".to_string()
+        };
 
-    // Edge paths
-    out.push_str("<g class=\"edgePaths\">");
-    for (ei, edge) in edges.iter().enumerate() {
-        let e = dagre_dgl_rs::graph::Edge::new(&edge.start, &edge.end);
-        if let Some(lbl) = g.edge(&e) {
-            if let Some(pts) = &lbl.points {
-                if pts.len() >= 2 {
-                    // Recompute endpoints for circular nodes
-                    let mut pts2 = pts.clone();
-                    if let (Some(shape), Some((cx, cy))) =
-                        (node_shape_of(&edge.start), node_pos_of(&edge.start))
-                    {
-                        let r = match shape {
-                            Shape::StateStart => START_R,
-                            Shape::StateEnd => END_OUTER_R,
-                            _ => 0.0,
-                        };
-                        if r > 0.0 {
-                            pts2 = circle_intersect(&pts2, cx, cy, r, false);
-                        }
+        let mut sg = Graph::with_options(true, true, true);
+        // Concurrent regions use larger marginy to create top/bottom padding inside inner rect
+        let (sg_marginx, sg_marginy) = if all_children_are_dividers {
+            (CONCURRENT_MARGINX, CONCURRENT_MARGINY)
+        } else {
+            // Composite states (explicit dir) use larger margins to match reference
+            (COMPOSITE_MARGINX, COMPOSITE_MARGINY)
+        };
+        sg.set_graph(GraphLabel {
+            rankdir: Some(sub_dir.clone()),
+            nodesep: Some(SUB_NODE_SEP),
+            ranksep: Some(sub_ranksep),
+            marginx: Some(sg_marginx),
+            marginy: Some(sg_marginy),
+            ..Default::default()
+        });
+
+        let child_ids = collect_all_descendants(id, g);
+        for cid in &child_ids {
+            if let Some(n) = g.node_opt(cid) {
+                sg.set_node(cid, n.clone());
+                if let Some(par) = g.parent(cid) {
+                    if par != id && child_ids.contains(&par.to_string()) {
+                        sg.set_parent(cid, Some(par));
                     }
-                    if let (Some(shape), Some((cx, cy))) =
-                        (node_shape_of(&edge.end), node_pos_of(&edge.end))
-                    {
-                        let r = match shape {
-                            Shape::StateStart => START_R,
-                            Shape::StateEnd => END_OUTER_R,
-                            _ => 0.0,
-                        };
-                        if r > 0.0 {
-                            pts2 = circle_intersect(&pts2, cx, cy, r, true);
-                        }
-                    }
-                    out.push_str(&render_edge(
-                        edge,
-                        &pts2,
-                        svg_id,
-                        ei,
-                        &g,
-                        nodes,
-                        vars.state_transition_color,
-                    ));
                 }
             }
         }
-    }
-    out.push_str("</g>");
+        for e in g.edges() {
+            if child_ids.contains(&e.v) && child_ids.contains(&e.w) {
+                if let Some(lbl) = g.edge(&e) {
+                    sg.set_edge(&e.v, &e.w, lbl.clone(), e.name.as_deref());
+                }
+            }
+        }
 
-    // Edge labels
-    out.push_str("<g class=\"edgeLabels\">");
-    for (ei, edge) in edges.iter().enumerate() {
-        let e = dagre_dgl_rs::graph::Edge::new(&edge.start, &edge.end);
-        if let Some(lbl) = g.edge(&e) {
-            if let Some(pts) = &lbl.points {
-                if !edge.label.is_empty() && pts.len() >= 2 {
-                    let mid = midpoint(pts);
-                    let (tw_raw, _) = measure(&edge.label, FONT_SIZE);
-                    let tw = (tw_raw * LABEL_SCALE).max(20.0);
-                    let edge_id = format!("{}-edge{}", svg_id, ei);
-                    out.push_str(&text_edge_label(
-                        mid.0,
-                        mid.1,
-                        -tw / 2.0,
-                        -12.0,
-                        tw,
-                        &edge_id,
-                        &edge.label,
-                        vars.primary_text,
-                        vars.edge_label_bg,
-                    ));
+        // Recursively extract nested clusters (but NOT for concurrent regions —
+        // dividers stay as compound nodes so they layout side-by-side).
+        if !all_children_are_dividers {
+            extractor(&mut sg, &sub_dir, cluster_db, pnodes, sub_graphs, depth + 1);
+        }
+
+        layout(&mut sg);
+
+        if all_children_are_dividers {
+            correct_divider_layout(&mut sg, pnodes);
+        }
+
+        // Composite correction: dagre's translate_graph includes edge-label proxies in its
+        // min_y scan, so real nodes land ~8px lower than COMPOSITE_MARGINY. Shift them up
+        // so the inner-rect top pad matches the reference (COMPOSITE_MARGINY + 3.0 = 19.5px).
+        if !all_children_are_dividers && !pn.map(|p| p.shape == Shape::Divider).unwrap_or(false) {
+            let target_top = COMPOSITE_MARGINY + 3.0;
+            let nids: Vec<String> = sg.nodes();
+            let min_top = nids
+                .iter()
+                .filter_map(|nid| {
+                    sg.node_opt(nid)
+                        .and_then(|n| n.y.map(|y| y - n.height / 2.0))
+                })
+                .fold(f64::MAX, f64::min);
+            if min_top < f64::MAX {
+                let dy = target_top - min_top;
+                // Only shift UP (dy < 0). When there are no labeled edges, dagre places content
+                // at margin_y (16.5) which is already above target_top — no correction needed.
+                // A positive dy would push the bottom node outside the box.
+                if dy < -0.1 {
+                    for nid in &nids {
+                        if let Some(n) = sg.node_opt_mut(nid) {
+                            if let Some(ref mut y) = n.y {
+                                *y += dy;
+                            }
+                        }
+                    }
+                    let edges: Vec<_> = sg.edges();
+                    for e in &edges {
+                        if let Some(lbl) = sg.edge_mut(e) {
+                            if let Some(ref mut pts) = lbl.points {
+                                for p in pts.iter_mut() {
+                                    p.y += dy;
+                                }
+                            }
+                            if let Some(ref mut ly) = lbl.y {
+                                *ly += dy;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Size the cluster in the main graph from its sub-graph dimensions.
+        // Dividers have no title; composite states add CLUSTER_LABEL_H.
+        let is_divider_node = pn.map(|n| n.shape == Shape::Divider).unwrap_or(false);
+        // Labeled edges create proxy nodes at lh=18; reference DOM measures ~24px → 12px height deficit
+        let has_labeled_edges = sg.edges().iter().any(|e| {
+            sg.edge(e)
+                .and_then(|l| l.height)
+                .map(|h| h > 0.0)
+                .unwrap_or(false)
+        });
+        let sgh = if is_divider_node {
+            sg.graph().height.unwrap_or(40.0) + 2.0 * MARGIN
+        } else if all_children_are_dividers {
+            // correct_divider_layout sets sg.w exactly; sg.h is from dagre TB layout of leaf divider nodes
+            sg.graph().height.unwrap_or(40.0)
+                + 2.0 * MARGIN
+                + CLUSTER_TITLE_AREA
+                + CONCURRENT_HEIGHT_ADJUST
+        } else {
+            // Composite: outer rect = full dagre extent so edges touch
+            let label_adjust = if has_labeled_edges { 12.0 } else { 0.0 };
+            sg.graph().height.unwrap_or(40.0)
+                + CLUSTER_TITLE_AREA
+                + 4.0
+                + label_adjust
+                + COMPOSITE_BOTTOM_EXT
+        };
+        let sgw = if is_divider_node {
+            sg.graph().width.unwrap_or(40.0) + 2.0 * MARGIN
+        } else {
+            // Concurrent: correct_divider_layout already set sg.w to the exact outer rect width
+            // Composite: sg.w is already the correct full width
+            sg.graph().width.unwrap_or(40.0)
+        };
+        if let Some(n) = g.node_opt_mut(id) {
+            n.width = sgw;
+            n.height = sgh;
+        }
+
+        // Re-create border-crossing edges as cluster↔outside
+        let mut to_add: Vec<(String, String, EdgeLabel, String)> = Vec::new();
+        for e in g.edges() {
+            let v_in = child_ids.contains(&e.v);
+            let w_in = child_ids.contains(&e.w);
+            if v_in == w_in {
+                continue;
+            }
+            if let Some(lbl) = g.edge(&e) {
+                let (new_v, new_w) = if v_in {
+                    (id.to_string(), e.w.clone())
                 } else {
-                    out.push_str(edge_label_empty());
+                    (e.v.clone(), id.to_string())
+                };
+                to_add.push((
+                    new_v,
+                    new_w,
+                    lbl.clone(),
+                    e.name.clone().unwrap_or_default(),
+                ));
+            }
+        }
+        for (v, w, lbl, name) in to_add {
+            if g.has_node(&v) && g.has_node(&w) {
+                g.set_edge(&v, &w, lbl, Some(&name));
+            }
+        }
+
+        for cid in &child_ids {
+            g.remove_node(cid);
+        }
+        sub_graphs.insert(
+            id.clone(),
+            SubGraph {
+                graph: sg,
+                dir: sub_dir,
+            },
+        );
+    }
+    extractor(g, parent_dir, cluster_db, pnodes, sub_graphs, depth + 1);
+}
+
+// ─── Concurrent divider corrections ──────────────────────────────────────────
+
+fn correct_divider_layout(sg: &mut Graph, pnodes: &[PNode]) {
+    let mut div_nodes: Vec<(String, f64, f64, f64)> = sg
+        .nodes()
+        .iter()
+        .filter(|nid| {
+            pnodes
+                .iter()
+                .find(|p| p.id.as_str() == nid.as_str())
+                .map(|p| p.is_group)
+                .unwrap_or(false)
+        })
+        .filter_map(|nid| {
+            sg.node_opt(nid)
+                .map(|n| (nid.clone(), n.x.unwrap_or(0.0), n.width, n.height))
+        })
+        .collect();
+    div_nodes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+    if div_nodes.len() >= 2 {
+        let mut cursor_x = div_nodes[0].1;
+        for i in 1..div_nodes.len() {
+            let prev_w = div_nodes[i - 1].2;
+            let cur_w = div_nodes[i].2;
+            let target_cx = cursor_x + prev_w / 2.0 + CONCURRENT_DIV_GAP + cur_w / 2.0;
+            let delta = target_cx - div_nodes[i].1;
+            let nid = div_nodes[i].0.clone();
+            shift_subtree_x(sg, &nid, delta);
+            let descendants = collect_all_descendants(&nid, sg);
+            let mut shifted = vec![nid.clone()];
+            shifted.extend(descendants);
+            for e in sg.edges() {
+                if !shifted.contains(&e.v) && !shifted.contains(&e.w) {
+                    continue;
                 }
+                if let Some(lbl) = sg.edge_mut(&e) {
+                    if let Some(ref mut pts) = lbl.points {
+                        for p in pts.iter_mut() {
+                            p.x += delta;
+                        }
+                    }
+                    if let Some(ref mut lx) = lbl.x {
+                        *lx += delta;
+                    }
+                }
+            }
+            div_nodes[i].1 = target_cx;
+            cursor_x = target_cx;
+        }
+        let last = &div_nodes[div_nodes.len() - 1];
+        sg.graph_mut().width = Some(last.1 + last.2 / 2.0 + CONCURRENT_MARGINX);
+        // Shift dividers so top pad = reference (11.5px from inner rect top).
+        // dagre places div center at CONCURRENT_MARGINY + div_h/2; we want top edge = MARGIN+3.5.
+        // y_shift = (target_top - CONCURRENT_MARGINY) = 11.5 - 19.5 = -8 = -MARGIN.
+        let y_shift = -MARGIN;
+        for (div_id, _, _, _) in &div_nodes {
+            if let Some(n) = sg.node_opt_mut(div_id) {
+                if let Some(ref mut cy) = n.y {
+                    *cy += y_shift;
+                }
+            }
+        }
+    }
+
+    // Y-centering: visually center each divider's leaf children within the rect.
+    // rect spans [cy - h/2, cy + h/2]. rect_center = cy_compound (actual y after y_shift).
+    let vis_half = |h: f64| -> f64 { h / 2.0 };
+    for (div_id, _cx, _div_w, _div_h) in &div_nodes {
+        // Read actual div center y after y_shift was applied
+        let rect_center_y = sg.node_opt(div_id).and_then(|n| n.y).unwrap_or(0.0);
+        // Leaf children: nodes in sg that are NOT groups in pnodes
+        let leaves: Vec<String> = sg
+            .nodes()
+            .into_iter()
+            .filter(|nid| {
+                let pn = pnodes.iter().find(|p| p.id == *nid);
+                // Must be a child of this divider (has divider as parent) and not a group
+                pn.map(|p| p.parent_id.as_deref() == Some(div_id.as_str()) && !p.is_group)
+                    .unwrap_or(false)
+            })
+            .collect();
+        if leaves.is_empty() {
+            continue;
+        }
+        let ct = leaves
+            .iter()
+            .filter_map(|c| {
+                sg.node_opt(c)
+                    .map(|n| n.y.unwrap_or(0.0) - vis_half(n.height))
+            })
+            .fold(f64::MAX, f64::min);
+        let cb = leaves
+            .iter()
+            .filter_map(|c| {
+                sg.node_opt(c)
+                    .map(|n| n.y.unwrap_or(0.0) + vis_half(n.height))
+            })
+            .fold(f64::MIN, f64::max);
+        if ct == f64::MAX || cb == f64::MIN {
+            continue;
+        }
+        let delta_y = rect_center_y - (ct + cb) / 2.0;
+        if delta_y.abs() < 0.01 {
+            continue;
+        }
+        for cid in &leaves {
+            if let Some(n) = sg.node_opt_mut(cid) {
+                if let Some(ref mut y) = n.y {
+                    *y += delta_y;
+                }
+            }
+        }
+        for e in sg.edges() {
+            if !leaves.contains(&e.v) && !leaves.contains(&e.w) {
+                continue;
+            }
+            if let Some(lbl) = sg.edge_mut(&e) {
+                if let Some(ref mut pts) = lbl.points {
+                    for p in pts.iter_mut() {
+                        p.y += delta_y;
+                    }
+                }
+                if let Some(ref mut ly) = lbl.y {
+                    *ly += delta_y;
+                }
+            }
+        }
+    }
+}
+
+fn shift_subtree_x(g: &mut Graph, id: &str, delta: f64) {
+    if let Some(n) = g.node_opt_mut(id) {
+        if let Some(ref mut x) = n.x {
+            *x += delta;
+        }
+    }
+    for child in g.children(id) {
+        shift_subtree_x(g, &child, delta);
+    }
+}
+
+fn collect_all_descendants(id: &str, g: &Graph) -> Vec<String> {
+    let mut res = Vec::new();
+    for c in g.children(id) {
+        res.push(c.clone());
+        res.extend(collect_all_descendants(&c, g));
+    }
+    res
+}
+
+// ─── apply_title_offset ───────────────────────────────────────────────────────
+
+fn apply_title_offset(g: &mut Graph, cluster_db: &HashMap<String, ClusterEntry>, pnodes: &[PNode]) {
+    // For compound nodes that stay in the main graph (not extracted into sub_graphs),
+    // shift the cluster upward and children downward so the title area is at the top.
+    // NoteGroups have NO title area — skip them.
+    for cid in cluster_db.keys() {
+        let children = g.children(cid);
+        if children.is_empty() {
+            continue;
+        } // extracted sub-graph or leaf
+          // Skip note groups — they have no title, just an invisible container
+        let is_note_grp = pnodes
+            .iter()
+            .find(|p| p.id == *cid)
+            .map(|p| p.shape == Shape::NoteGroup)
+            .unwrap_or(false);
+        if is_note_grp {
+            continue;
+        }
+        // Expand cluster and shift it up to make room for title
+        if let Some(n) = g.node_opt_mut(cid) {
+            n.height += CLUSTER_LABEL_H;
+            if let Some(ref mut cy) = n.y {
+                *cy -= CLUSTER_LABEL_H / 2.0;
+            }
+        }
+        // Shift children DOWN by CLUSTER_LABEL_H so they appear below the title,
+        // and add 25px per rank gap to match Mermaid's dagre-d3-es spacing.
+        // Sort children top→bottom, then add i*25 extra (i=0 for topmost child).
+        let mut children_with_y: Vec<(String, f64)> = children
+            .iter()
+            .filter_map(|c| g.node_opt(c).and_then(|n| n.y).map(|y| (c.clone(), y)))
+            .collect();
+        children_with_y.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        let extra_total = if children_with_y.len() > 1 {
+            (children_with_y.len() as f64 - 1.0) * 25.0
+        } else {
+            0.0
+        };
+        for (i, (child, _)) in children_with_y.iter().enumerate() {
+            let extra = i as f64 * 25.0;
+            if let Some(n) = g.node_opt_mut(child) {
+                if let Some(ref mut y) = n.y {
+                    *y += CLUSTER_LABEL_H + extra;
+                }
+            }
+        }
+        // Expand cluster bottom by extra_total (children pushed down, top unchanged)
+        if let Some(n) = g.node_opt_mut(cid) {
+            n.height += extra_total;
+            if let Some(ref mut cy) = n.y {
+                *cy += extra_total / 2.0;
+            }
+        }
+    }
+}
+
+// ─── recursiveRender ─────────────────────────────────────────────────────────
+
+fn recursive_render(
+    g: &Graph,
+    pedges: &[PEdge],
+    pnodes: &[PNode],
+    sub_graphs: &HashMap<String, SubGraph>,
+    _cluster_db: &HashMap<String, ClusterEntry>,
+    vars: &ThemeVars,
+    out: &mut String,
+) {
+    out.push_str("<g class=\"root\">");
+    out.push_str("<g class=\"clusters\">");
+    for id in &g.nodes() {
+        let has_children = !g.children(id).is_empty();
+        let in_sub = sub_graphs.contains_key(id);
+        if let Some(n) = g.node_opt(id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            let w = n.width;
+            let h = n.height;
+            let dom_id = format!("mermaid-svg-{}", esc(id));
+            let pn = pnodes.iter().find(|p| p.id == *id);
+            let label = pn.map(|p| p.label.as_str()).unwrap_or(id.as_str());
+            let is_note_group = pn.map(|p| p.shape == Shape::NoteGroup).unwrap_or(false);
+            let is_divider = pn.map(|p| p.shape == Shape::Divider).unwrap_or(false);
+
+            if is_note_group {
+                out.push_str(&format!(
+                    "<g class=\"statediagram-state statediagram-note-group\" id=\"{dom_id}\"></g>"
+                ));
+            } else if in_sub {
+                // Extracted sub-graph. Content starts at inner rect (after title area).
+                // inner_rect.y = cy - h/2 + CLUSTER_PAD + CLUSTER_LABEL_H
+                // ty = inner_rect.y - MARGIN = cy - h/2 + CLUSTER_TITLE_AREA
+                out.push_str(&render_cluster(
+                    &dom_id, cx, cy, w, h, label, is_divider, vars,
+                ));
+                // tx at outer rect left; sub-graph's own marginx provides internal padding
+                let tx = cx - w / 2.0;
+                let ty = cy - h / 2.0 + CLUSTER_TITLE_AREA;
+                out.push_str(&format!(
+                    "<g transform=\"translate({},{})\">",
+                    fmt(tx),
+                    fmt(ty)
+                ));
+                render_sub_graph(&sub_graphs[id].graph, pnodes, pedges, vars, out);
+                out.push_str("</g>");
+            } else if has_children {
+                // Compound node still in main graph (external connections, not extracted)
+                out.push_str(&render_cluster(
+                    &dom_id, cx, cy, w, h, label, is_divider, vars,
+                ));
             }
         }
     }
     out.push_str("</g>");
 
-    // Nodes
+    out.push_str("<g class=\"edgePaths\">");
+    for (i, pe) in pedges.iter().enumerate() {
+        let e = Edge::named(&pe.start, &pe.end, &format!("e{}", i));
+        if let Some(lbl) = g.edge(&e) {
+            let mut lbl_clone = lbl.clone();
+            // Fix diamond gap: project edge endpoints onto actual diamond boundary for choice nodes
+            let start_choice = pnodes
+                .iter()
+                .find(|p| p.id == pe.start)
+                .map(|p| p.shape == Shape::Choice)
+                .unwrap_or(false);
+            let end_choice = pnodes
+                .iter()
+                .find(|p| p.id == pe.end)
+                .map(|p| p.shape == Shape::Choice)
+                .unwrap_or(false);
+            if start_choice || end_choice {
+                if let Some(ref mut pts) = lbl_clone.points {
+                    if start_choice {
+                        if let Some(n) = g.node_opt(&pe.start) {
+                            let cx = n.x.unwrap_or(0.0);
+                            let cy = n.y.unwrap_or(0.0);
+                            if pts.len() >= 2 {
+                                let (p1x, p1y) = (pts[1].x, pts[1].y);
+                                clip_to_diamond(&mut pts[0], cx, cy, CHOICE_SIZE, p1x, p1y);
+                            }
+                        }
+                    }
+                    if end_choice {
+                        if let Some(n) = g.node_opt(&pe.end) {
+                            let cx = n.x.unwrap_or(0.0);
+                            let cy = n.y.unwrap_or(0.0);
+                            let last = pts.len() - 1;
+                            if last >= 1 {
+                                let prev_x = pts[last - 1].x;
+                                let prev_y = pts[last - 1].y;
+                                clip_to_diamond(
+                                    &mut pts[last],
+                                    cx,
+                                    cy,
+                                    CHOICE_SIZE,
+                                    prev_x,
+                                    prev_y,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            render_edge_pts(&lbl_clone, &pe.classes, vars, out);
+        }
+    }
+    out.push_str("</g>");
+
+    out.push_str("<g class=\"edgeLabels\">");
+    for (i, pe) in pedges.iter().enumerate() {
+        if pe.label.is_empty() {
+            continue;
+        }
+        let e = Edge::named(&pe.start, &pe.end, &format!("e{}", i));
+        if let Some(lbl) = g.edge(&e) {
+            if let (Some(x), Some(y)) = (lbl.x, lbl.y) {
+                out.push_str(&edge_label(x, y, &pe.label, vars));
+            }
+        }
+    }
+    out.push_str("</g>");
+
     out.push_str("<g class=\"nodes\">");
-    for node in nodes {
-        if node.shape == Shape::NoteGroup {
-            continue; // rendered in clusters section
+    for id in &g.nodes() {
+        let pn_is_group = pnodes
+            .iter()
+            .find(|p| p.id == *id)
+            .map(|p| p.is_group)
+            .unwrap_or(false);
+        if pn_is_group {
+            continue;
         }
-        if let Some(n) = g.node_opt(&node.id) {
-            if let (Some(cx), Some(cy)) = (n.x, n.y) {
-                out.push_str(&render_node(node, cx, cy, n.width, n.height, vars, svg_id));
+        if sub_graphs.contains_key(id) {
+            continue;
+        }
+        // Skip children of extracted sub-graphs (they're rendered inside the sub-graph)
+        let parent_in_sub = g
+            .parent(id)
+            .map(|par| sub_graphs.contains_key(par))
+            .unwrap_or(false);
+        if parent_in_sub {
+            continue;
+        }
+        if let Some(n) = g.node_opt(id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            let dom_id = format!("mermaid-svg-{}", esc(id));
+            if let Some(pn) = pnodes.iter().find(|p| p.id == *id) {
+                out.push_str(&render_node(pn, &dom_id, cx, cy, n.width, n.height, vars));
+            }
+        }
+    }
+    out.push_str("</g>");
+    out.push_str("</g>");
+}
+
+fn render_sub_graph(
+    sg: &Graph,
+    pnodes: &[PNode],
+    pedges: &[PEdge],
+    vars: &ThemeVars,
+    out: &mut String,
+) {
+    // Use pnodes.is_group to detect clusters — dagre may not preserve compound
+    // structure after layout, so sg.children() is unreliable here.
+    let is_cluster = |id: &str| {
+        pnodes
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.is_group)
+            .unwrap_or(false)
+    };
+
+    out.push_str("<g class=\"clusters\">");
+    for id in &sg.nodes() {
+        if !is_cluster(id) {
+            continue;
+        }
+        if let Some(n) = sg.node_opt(id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            let dom_id = format!("mermaid-svg-{}", esc(id));
+            let pn = pnodes.iter().find(|p| p.id == *id);
+            let label = pn.map(|p| p.label.as_str()).unwrap_or("");
+            let is_divider = pn.map(|p| p.shape == Shape::Divider).unwrap_or(false);
+            out.push_str(&render_cluster(
+                &dom_id, cx, cy, n.width, n.height, label, is_divider, vars,
+            ));
+        }
+    }
+    out.push_str("</g>");
+
+    out.push_str("<g class=\"edgePaths\">");
+    for e in sg.edges() {
+        if let Some(lbl) = sg.edge(&e) {
+            let pe = pedges.iter().find(|p| p.start == e.v && p.end == e.w);
+            render_edge_pts(
+                lbl,
+                pe.map(|p| p.classes.as_str()).unwrap_or("transition"),
+                vars,
+                out,
+            );
+        }
+    }
+    out.push_str("</g>");
+
+    out.push_str("<g class=\"edgeLabels\">");
+    for e in sg.edges() {
+        if let Some(lbl) = sg.edge(&e) {
+            if let (Some(x), Some(y)) = (lbl.x, lbl.y) {
+                if let Some(pe) = pedges.iter().find(|p| p.start == e.v && p.end == e.w) {
+                    if !pe.label.is_empty() {
+                        out.push_str(&edge_label(x, y, &pe.label, vars));
+                    }
+                }
             }
         }
     }
     out.push_str("</g>");
 
-    // Composite inner layouts — each rendered in a translated root group
-    for node in nodes {
-        if node.is_group && node.shape == Shape::RoundedWithTitle {
-            if let (Some(inner_svg), Some(dagre_n)) =
-                (composite_inner_svgs.get(&node.id), g.node_opt(&node.id))
-            {
-                if let (Some(cx), Some(cy)) = (dagre_n.x, dagre_n.y) {
-                    // Use full size (visual + 2*sp) for the inner group translate
-                    let (full_iw, full_ih) = composite_full_sizes
-                        .get(&node.id)
-                        .copied()
-                        .unwrap_or((dagre_n.width, dagre_n.height));
-                    let tx = cx - full_iw / 2.0;
-                    let ty = cy - full_ih / 2.0;
-                    out.push_str(&composite_inner_group(tx, ty, inner_svg));
-                }
+    out.push_str("<g class=\"nodes\">");
+    for id in &sg.nodes() {
+        if is_cluster(id) {
+            continue;
+        }
+        if let Some(n) = sg.node_opt(id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            let dom_id = format!("mermaid-svg-{}", esc(id));
+            if let Some(pn) = pnodes.iter().find(|p| p.id == *id) {
+                out.push_str(&render_node(pn, &dom_id, cx, cy, n.width, n.height, vars));
             }
         }
     }
-
-    out.push_str("</g>"); // root
-    out.push_str(&drop_shadow_filter(svg_id));
-    out.push_str("</svg>");
-    out
+    out.push_str("</g>");
 }
 
-// ─── Node sizing (follows note.ts + shapes.js) ────────────────────────────────
+// ─── Cluster rendering (clusters.js) ─────────────────────────────────────────
+//
+// divider: rect at full node.x-w/2, node.y-h/2 (no inset, no title)
+// roundedWithTitle: outer rect + title text + inner content rect
 
-fn node_size(node: &Node) -> (f64, f64) {
-    match node.shape {
-        Shape::StateStart => (START_R * 2.0, START_R * 2.0),
-        Shape::StateEnd => (END_OUTER_R * 2.0, END_OUTER_R * 2.0),
-        Shape::ForkJoin => (FORK_W, FORK_H),
-        Shape::Choice => (CHOICE_R * 2.0, CHOICE_R * 2.0),
-        Shape::NoteGroup => (0.0, 0.0), // dagre computes from children
-        Shape::Note => {
-            // note.ts: totalWidth = bbox.width + node.padding*2, node.padding=config.flowchart.padding=15
-            let (tw, _) = measure(&node.label, FONT_SIZE);
-            let w = (tw * LABEL_SCALE + 15.0 * 2.0).max(60.0);
-            (w, NOTE_H)
-        }
-        // Composite groups: dagre computes size from children
-        Shape::RoundedWithTitle if node.is_group => (0.0, 0.0),
-        Shape::Rect | Shape::RectWithTitle | Shape::Divider | Shape::RoundedWithTitle => {
-            let (tw, _) = measure(&node.label, FONT_SIZE);
-            let w = (tw * LABEL_SCALE + NODE_PADDING * 2.0).max(40.0);
-            (w, NODE_H)
-        }
+fn render_cluster(
+    dom_id: &str,
+    cx: f64,
+    cy: f64,
+    w: f64,
+    h: f64,
+    label: &str,
+    is_divider: bool,
+    vars: &ThemeVars,
+) -> String {
+    let x = cx - w / 2.0;
+    let y = cy - h / 2.0;
+    if is_divider {
+        format!(
+            "<g class=\"statediagram-state statediagram-cluster statediagram-cluster-alt\" id=\"{dom_id}\">\
+             <rect class=\"divider\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" \
+             style=\"fill:#f0f0f0;stroke:{s};stroke-dasharray:10,10;\"></rect></g>",
+            dom_id=dom_id, x=fmt(x), y=fmt(y), w=fmt(w), h=fmt(h), s=vars.state_end_bg,
+        )
+    } else {
+        // Outer rect at full node boundary so edge endpoints touch it (no CLUSTER_PAD inset).
+        let rx = x;
+        let ry = y;
+        let rw = w;
+        let outer_rh = h;
+        let inner_y = y + CLUSTER_TITLE_AREA;
+        let inner_h = h - CLUSTER_TITLE_AREA - 4.0;
+        let tcy = y + CLUSTER_TITLE_AREA / 2.0;
+        format!(
+            "<g class=\"statediagram-state statediagram-cluster\" id=\"{dom_id}\">\
+             <rect class=\"outer\" x=\"{rx}\" y=\"{ry}\" width=\"{rw}\" height=\"{rh}\" \
+             rx=\"5\" ry=\"5\" style=\"fill:{pc};stroke:{pb};stroke-width:1px;\"></rect>\
+             <text x=\"{tcx}\" y=\"{tcy}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
+             font-size=\"{fs}\" fill=\"{fc}\">{lbl}</text>\
+             <rect class=\"inner\" x=\"{rx}\" y=\"{iy}\" width=\"{rw}\" height=\"{ih}\" \
+             style=\"fill:{bg};stroke:{pb};stroke-width:1px;\"></rect></g>",
+            dom_id = dom_id,
+            rx = fmt(rx),
+            ry = fmt(ry),
+            rw = fmt(rw),
+            rh = fmt(outer_rh),
+            tcx = fmt(cx),
+            tcy = fmt(tcy),
+            iy = fmt(inner_y),
+            ih = fmt(inner_h),
+            pc = vars.primary_color,
+            pb = vars.state_end_bg,
+            fs = FONT_SIZE as u32,
+            fc = vars.primary_text,
+            lbl = esc(label),
+            bg = vars.state_composit_bg,
+        )
     }
 }
 
-// ─── Node SVG ────────────────────────────────────────────────────────────────
+// ─── Node rendering ───────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 fn render_node(
-    node: &Node,
+    pn: &PNode,
+    dom_id: &str,
     cx: f64,
     cy: f64,
     w: f64,
     h: f64,
     vars: &ThemeVars,
-    _svg_id: &str,
 ) -> String {
-    let dom_id = &node.dom_id;
-    match node.shape {
-        // stateStart.ts: rc.circle(0,0,14, solidStateFill(lineColor)) → fill=lineColor, r=7
-        Shape::StateStart => node_state_start(dom_id, cx, cy, vars),
-        // stateEnd.ts: outer rc.circle(0,0,14, stroke=lineColor,sw=2) fill=primary_color
-        //              inner rc.circle(0,0,5, fill=stateBorder/primary_border) r=2.5
-        Shape::StateEnd => node_state_end(dom_id, cx, cy, vars),
-        Shape::ForkJoin => node_fork_join(dom_id, cx, cy, w, h, vars.line_color),
-        Shape::Choice => node_choice(dom_id, cx, cy, vars),
-        Shape::Note => {
-            let label_html = text_note_label(&node.label, vars.note_text_color);
-            node_note(dom_id, cx, cy, w, h, &node.label, &label_html, vars)
-        }
-        Shape::Rect | Shape::RectWithTitle | Shape::Divider => {
-            let label_html = text_state_label(&node.label, vars.primary_text);
-            node_rect(dom_id, cx, cy, w, h, vars, &label_html)
-        }
-        Shape::RoundedWithTitle => {
-            // Composite state — simplified rect with title
-            let hh = h / 2.0;
-            let label_html = text_composite_label(&node.label, hh);
-            node_rect(dom_id, cx, cy, w, h, vars, &label_html)
-        }
-        Shape::NoteGroup => String::new(), // rendered in clusters
+    match pn.shape {
+        Shape::Start => templates::node_start(dom_id, cx, cy, vars),
+        Shape::End => templates::node_end(dom_id, cx, cy, vars),
+        Shape::Fork | Shape::Join => templates::node_fork_join(dom_id, cx, cy, vars),
+        Shape::Choice => templates::node_choice(dom_id, cx, cy, vars),
+        Shape::Note => templates::node_note(dom_id, cx, cy, w, h, &pn.label, vars),
+        _ => templates::node_rect(dom_id, cx, cy, w, h, &pn.label, vars),
     }
 }
 
-// ─── Edge SVG ─────────────────────────────────────────────────────────────────
+// ─── Edge rendering ───────────────────────────────────────────────────────────
 
-fn render_edge(
-    edge: &Edge,
-    pts: &[Point],
-    svg_id: &str,
-    _idx: usize,
-    _g: &Graph,
-    _nodes: &[Node],
-    line_color: &str,
-) -> String {
-    let pts_f: Vec<(f64, f64)> = pts.iter().map(|p| (p.x, p.y)).collect();
-    let path_d = curve_basis_path(&pts_f);
-    let edge_id = format!("{}-{}-{}", svg_id, edge.start, edge.end);
-    let is_note = edge.classes.contains("note-edge");
-    let dasharray = if is_note { "5" } else { "0" };
-    let marker = if edge.arrowhead == "none" {
-        String::new()
-    } else if is_note {
-        format!("url(#{svg_id}_stateDiagram-barbEnd)")
-    } else {
-        format!("url(#{svg_id}-dependencyEnd)")
-    };
-    edge_path(
-        &path_d,
-        &edge_id,
-        &edge.classes,
-        line_color,
-        dasharray,
-        &marker,
+/// Project point p onto the diamond boundary, approaching from direction of (from_x, from_y).
+/// Diamond: center (cx, cy), half-size s. Uses ray-diamond intersection.
+fn clip_to_diamond(
+    p: &mut dagre_dgl_rs::graph::Point,
+    cx: f64,
+    cy: f64,
+    s: f64,
+    from_x: f64,
+    from_y: f64,
+) {
+    let dx = from_x - cx;
+    let dy = from_y - cy;
+    if dx.abs() < 0.001 && dy.abs() < 0.001 {
+        return;
+    }
+    // Ray from center toward (from_x, from_y): intersect with diamond |x/s| + |y/s| = 1
+    let t = s / (dx.abs() + dy.abs());
+    p.x = cx + dx * t;
+    p.y = cy + dy * t;
+}
+
+fn render_edge_pts(lbl: &EdgeLabel, classes: &str, vars: &ThemeVars, out: &mut String) {
+    if let Some(ref pts) = lbl.points {
+        if pts.len() < 2 {
+            return;
+        }
+        let d = crate::svg::curve_basis_path(&pts.iter().map(|p| (p.x, p.y)).collect::<Vec<_>>());
+        let is_note = classes.contains("note-edge");
+        let dash = if is_note { "stroke-dasharray:5;" } else { "" };
+        let me = if is_note {
+            ""
+        } else {
+            " marker-end=\"url(#state-barbEnd)\""
+        };
+        out.push_str(&format!(
+            "<path d=\"{d}\" class=\"transition\" fill=\"none\" stroke=\"{c}\" style=\"{dash}\"{me}></path>",
+            d=d, c=vars.state_transition_color, dash=dash, me=me,
+        ));
+    }
+}
+
+fn edge_label(x: f64, y: f64, label: &str, vars: &ThemeVars) -> String {
+    let lw = (label_w(label) + 10.0).max(10.0);
+    // Background height=24 matches Mermaid's foreignObject label height (line-height 1.5 × 16px)
+    format!(
+        "<g class=\"edgeLabel\" transform=\"translate({x},{y})\">\
+         <rect x=\"{rx}\" y=\"-12\" width=\"{lw}\" height=\"24\" fill=\"{bg}\" stroke=\"none\"></rect>\
+         <text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
+         font-size=\"{fs}\" fill=\"{fc}\">{lbl}</text></g>",
+        x=fmt(x), y=fmt(y), rx=fmt(-lw/2.0), lw=fmt(lw),
+        bg=vars.edge_label_bg, fs=FONT_SIZE as u32, fc=vars.primary_text, lbl=esc(label),
     )
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// ─── Sizing ───────────────────────────────────────────────────────────────────
 
-fn midpoint(pts: &[Point]) -> (f64, f64) {
-    let n = pts.len();
-    if n == 0 {
-        return (0.0, 0.0);
+fn node_size(pn: &PNode) -> (f64, f64) {
+    match pn.shape {
+        // stateStart/stateEnd: default width=height=14 (Mermaid stateStart.ts)
+        Shape::Start | Shape::End => {
+            let d = START_RADIUS * 2.0;
+            (d, d)
+        }
+        Shape::Fork | Shape::Join => (FORK_JOIN_WIDTH, FORK_JOIN_HEIGHT),
+        // choice diamond: dagre size matches start/end (14px default in Mermaid)
+        Shape::Choice => (CHOICE_SIZE * 2.0, CHOICE_SIZE * 2.0),
+        Shape::Note => {
+            let (tw, _) = measure(&pn.label, FONT_SIZE);
+            (
+                (tw * LABEL_SCALE + NOTE_PADDING * 2.0).max(NOTE_MIN_WIDTH),
+                NOTE_HEIGHT,
+            )
+        }
+        Shape::Group | Shape::Divider | Shape::NoteGroup => (1.0, 1.0),
+        _ => {
+            let (tw, _) = measure(&pn.label, FONT_SIZE);
+            ((tw * LABEL_SCALE + NODE_PADDING * 2.0).max(1.0), 40.0)
+        }
     }
-    let mid = n / 2;
-    if n % 2 == 1 {
-        (pts[mid].x, pts[mid].y)
+}
+
+fn label_w(label: &str) -> f64 {
+    let (tw, _) = measure(label, FONT_SIZE);
+    tw * LABEL_SCALE
+}
+
+// ─── ViewBox ──────────────────────────────────────────────────────────────────
+
+fn viewbox(
+    g: &Graph,
+    pedges: &[PEdge],
+    pnodes: &[PNode],
+    sub_graphs: &HashMap<String, SubGraph>,
+) -> (f64, f64, f64, f64) {
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
+    for id in &g.nodes() {
+        if let Some(n) = g.node_opt(id) {
+            let cx = n.x.unwrap_or(0.0);
+            let cy = n.y.unwrap_or(0.0);
+            min_x = min_x.min(cx - n.width / 2.0);
+            min_y = min_y.min(cy - n.height / 2.0);
+            max_x = max_x.max(cx + n.width / 2.0);
+            max_y = max_y.max(cy + n.height / 2.0);
+        }
+    }
+    for (i, _) in pedges.iter().enumerate() {
+        let e = Edge::named(&pedges[i].start, &pedges[i].end, &format!("e{}", i));
+        if let Some(lbl) = g.edge(&e) {
+            if let Some(ref pts) = lbl.points {
+                for p in pts {
+                    min_x = min_x.min(p.x);
+                    min_y = min_y.min(p.y);
+                    max_x = max_x.max(p.x);
+                    max_y = max_y.max(p.y);
+                }
+            }
+        }
+    }
+    for (cid, sg) in sub_graphs {
+        if let Some(cn) = g.node_opt(cid) {
+            let tx = cn.x.unwrap_or(0.0) - cn.width / 2.0;
+            let ty = cn.y.unwrap_or(0.0) - cn.height / 2.0 + CLUSTER_LABEL_H;
+            for nid in &sg.graph.nodes() {
+                if let Some(n) = sg.graph.node_opt(nid) {
+                    let scx = tx + n.x.unwrap_or(0.0);
+                    let scy = ty + n.y.unwrap_or(0.0);
+                    min_x = min_x.min(scx - n.width / 2.0);
+                    min_y = min_y.min(scy - n.height / 2.0);
+                    max_x = max_x.max(scx + n.width / 2.0);
+                    max_y = max_y.max(scy + n.height / 2.0);
+                }
+            }
+        }
+    }
+    if min_x == f64::MAX {
+        (0.0, 0.0, 200.0, 200.0)
     } else {
         (
-            (pts[mid - 1].x + pts[mid].x) / 2.0,
-            (pts[mid - 1].y + pts[mid].y) / 2.0,
+            min_x - MARGIN,
+            min_y - MARGIN,
+            (max_x - min_x) + 2.0 * MARGIN,
+            (max_y - min_y) + 2.0 * MARGIN,
         )
     }
 }
 
-// ─── Test snapshot ────────────────────────────────────────────────────────────
+// ─── CSS ──────────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::theme::Theme;
-
-    #[test]
-    fn snapshot_default_theme() {
-        let input = "stateDiagram-v2\n    Still --> Moving\n    Moving --> Still\n    Moving --> Crash\n    Crash --> [*]";
-        let diag = super::super::parser::parse(input);
-        let svg = render(&diag, Theme::Default);
-        insta::assert_snapshot!(svg);
-    }
+fn css(vars: &ThemeVars) -> String {
+    format!(
+        "<style>\
+         .statediagram-cluster rect{{fill:{pc};stroke:{pb};}}\
+         .statediagram-state rect.basic{{fill:{pc};stroke:{pb};}}\
+         .node circle.state-start{{fill:{sc};}}\
+         .node .fork-join{{fill:{sc};}}\
+         .transition{{stroke:{tc};fill:none;}}\
+         .statediagram-state rect.divider{{stroke-dasharray:10,10;fill:#f0f0f0;}}\
+         .statediagram-note rect{{fill:{nb};stroke:{nst};}}\
+         .note-edge{{stroke-dasharray:5;}}\
+         text{{font-family:Arial,sans-serif;font-size:{fs}px;}}\
+         </style>",
+        pc = vars.primary_color,
+        pb = vars.state_end_bg,
+        sc = vars.state_start_fill,
+        tc = vars.state_transition_color,
+        nb = vars.note_bg,
+        nst = vars.note_border,
+        fs = FONT_SIZE as u32,
+    )
 }

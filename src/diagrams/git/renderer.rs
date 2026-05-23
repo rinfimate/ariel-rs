@@ -299,8 +299,18 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
                 .unwrap_or(0),
         );
         let (fill, stroke) = vars.git_branch_colors[ci % vars.git_branch_colors.len()];
+        let highlight_fill = vars.git_highlight_colors[ci % vars.git_highlight_colors.len()];
         let sym = commit.custom_type.unwrap_or(commit.commit_type);
-        draw_commit_bullet(&mut out, commit, cp, sym, fill, stroke, primary_color);
+        draw_commit_bullet(
+            &mut out,
+            commit,
+            cp,
+            sym,
+            fill,
+            stroke,
+            primary_color,
+            highlight_fill,
+        );
     }
     out += "</g>"; // commit-bullets
 
@@ -518,11 +528,14 @@ fn draw_commit_bullet(
     fill: &str,
     stroke: &str,
     primary_color: &str,
+    highlight_fill: &str,
 ) {
     match sym {
         COMMIT_HIGHLIGHT => {
-            *out += &commit_highlight_outer(cp.x - 10.0, cp.y - 10.0, fill, stroke);
-            *out += &commit_highlight_inner(cp.x - 6.0, cp.y - 6.0, fill, stroke);
+            *out +=
+                &commit_highlight_outer(cp.x - 10.0, cp.y - 10.0, highlight_fill, highlight_fill);
+            // Inner uses primary_color, matching Mermaid's .commit-highlight-inner class
+            *out += &commit_highlight_inner(cp.x - 6.0, cp.y - 6.0, primary_color, primary_color);
         }
         COMMIT_CHERRY_PICK => {
             *out += &commit_cherry_circle(cp.x, cp.y, COMMIT_RADIUS, fill, stroke);
