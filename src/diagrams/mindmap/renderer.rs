@@ -2,74 +2,7 @@ use super::constants::*;
 use super::parser::{MindmapDiagram, MindmapNode, NodeType};
 use super::templates::{self, esc, node_group_open};
 use crate::text::measure;
-/// Mindmap renderer — delegates to Mermaid's own JS renderer for pixel-accurate output.
-///
-/// We call Node.js with the mermaid_render.mjs helper script, which uses Puppeteer
-/// to invoke Mermaid's actual layout engine (cose-bilkent) and returns the SVG.
-/// This guarantees the output matches the visual-regression reference exactly.
-///
-/// Fallback: if Node.js / the helper script is unavailable, a simple tree-layout
-/// renderer is used instead.
 use crate::theme::Theme;
-
-// ── Mermaid-via-Node.js rendering ────────────────────────────────────────────
-
-/// Render by calling the mermaid_render.mjs Node.js helper.
-/// Returns Some(svg) on success, None if Node.js / the script is unavailable.
-fn render_via_nodejs(input_text: &str, theme: Theme) -> Option<String> {
-    use std::io::Write;
-    use std::process::Command;
-
-    // Write the diagram text to a temp file
-    let tmp_path = {
-        let mut tmp = std::env::temp_dir();
-        tmp.push(format!("mindmap_{}.mmd", std::process::id()));
-        tmp
-    };
-
-    // Write diagram text to temp file
-    let mut f = std::fs::File::create(&tmp_path).ok()?;
-    f.write_all(input_text.as_bytes()).ok()?;
-    drop(f);
-
-    // Find the mermaid_render.mjs script relative to the CWD
-    // The render_flowcharts binary is run from the project root.
-    let script_path = std::path::Path::new("visual-regression/mermaid_render.mjs");
-    if !script_path.exists() {
-        let _ = std::fs::remove_file(&tmp_path);
-        return None;
-    }
-
-    let theme_name = match theme {
-        Theme::Dark => "dark",
-        Theme::Forest => "forest",
-        Theme::Neutral => "neutral",
-        _ => "default",
-    };
-
-    // Run: node visual-regression/mermaid_render.mjs <tmp_file> <theme>
-    let output = Command::new("node")
-        .arg(script_path)
-        .arg(&tmp_path)
-        .arg(theme_name)
-        .output()
-        .ok()?;
-
-    let _ = std::fs::remove_file(&tmp_path);
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let svg = String::from_utf8(output.stdout).ok()?;
-    if svg.trim().is_empty() || !svg.contains("<svg") {
-        return None;
-    }
-
-    Some(svg)
-}
-
-// ── Fallback pure-Rust renderer ───────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct LayoutNode {
@@ -423,45 +356,7 @@ pub fn render(diag: &MindmapDiagram, theme: Theme) -> String {
         section_text: vars.mindmap_section_text,
         section_lines: vars.mindmap_section_lines,
     };
-    // We need the original diagram text to pass to Node.js.
-    // Reconstruct it from the parsed diagram (simple enough for mindmaps).
-    if let Some(root) = &diag.root {
-        let reconstructed = reconstruct_diagram(root);
-        if let Some(svg) = render_via_nodejs(&reconstructed, theme) {
-            return svg;
-        }
-    }
-    // Fall back to pure-Rust renderer
     render_fallback(diag, ff, vars.text_color, &col)
-}
-
-/// Reconstruct the Mermaid mindmap syntax from a parsed node tree.
-fn reconstruct_diagram(root: &MindmapNode) -> String {
-    let mut lines = vec!["mindmap".to_string()];
-    reconstruct_node(root, 1, &mut lines);
-    lines.join("\n")
-}
-
-fn reconstruct_node(node: &MindmapNode, indent: usize, lines: &mut Vec<String>) {
-    let prefix = "  ".repeat(indent);
-    let text = match node.node_type {
-        NodeType::Circle => format!("{}(({}))", &prefix, node.descr),
-        NodeType::Rect => format!("{}[{}]", &prefix, node.descr),
-        NodeType::RoundedRect => format!("{}({})", &prefix, node.descr),
-        NodeType::Hexagon => format!("{{{{{}}}}}", node.descr), // will be prefixed below
-        NodeType::Bang => format!("{})){}((", &prefix, node.descr),
-        NodeType::Cloud => format!("{}){}", &prefix, node.descr),
-        NodeType::Default => format!("{}{}", &prefix, node.descr),
-    };
-    let text = if matches!(node.node_type, NodeType::Hexagon) {
-        format!("{}{{{{{}}}}}", &prefix, node.descr)
-    } else {
-        text
-    };
-    lines.push(text);
-    for child in &node.children {
-        reconstruct_node(child, indent + 1, lines);
-    }
 }
 
 #[cfg(test)]
