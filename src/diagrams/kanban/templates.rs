@@ -75,7 +75,16 @@ pub fn section_header_text(sec_idx: usize, theme: Theme) -> &'static str {
             NEUTRAL_SECTION_TEXTS[i % NEUTRAL_SECTION_TEXTS.len()]
         }
         Theme::Dark => "#ccc",
-        _ => "#333333",
+        // Default/forest: Mermaid's themeColor.ts picks contrast based on bg luminosity.
+        // Only section-2 (hue 270°, purple) is dark enough to need white text — all
+        // other sections in the 11-entry cycle use black. Verified from ref CSS.
+        _ => {
+            if sec_idx % 11 == 2 {
+                "#ffffff"
+            } else {
+                "#333333"
+            }
+        }
     }
 }
 
@@ -84,9 +93,10 @@ pub fn section_header_text(sec_idx: usize, theme: Theme) -> &'static str {
 // ---------------------------------------------------------------------------
 
 /// Render the outer `<svg>` element for a kanban diagram.
-pub fn svg_root(id: &str, mw: f64, vbx: i64, vby: i64, vbw: u64, vbh: u64) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn svg_root(id: &str, mw: f64, vbx: i64, vby: i64, vbw: u64, vbh: u64, ff: &str) -> String {
     format!(
-        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: {mw:.0}px;" viewBox="{vbx} {vby} {vbw} {vbh}" role="graphics-document document" aria-roledescription="kanban">"##,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="{ff}" style="max-width: {mw:.0}px;" viewBox="{vbx} {vby} {vbw} {vbh}" role="graphics-document document" aria-roledescription="kanban">"##,
     )
 }
 
@@ -115,11 +125,10 @@ pub fn section_rect(x: f64, y: f64, w: f64, h: f64, sec_idx: usize, theme: Theme
 }
 
 /// Render the column header label as a native SVG `<text>`.
-pub fn section_label_fo(tx: f64, ty: f64, label: &str, primary_text: &str) -> String {
-    format!(
-        r##"<g class="cluster-label " transform="translate({tx:.4}, {ty:.0})"><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="middle" dominant-baseline="middle" x="80" y="12">{label}</text></g>"##,
-        primary_text = primary_text,
-    )
+pub fn section_label_fo(tx: f64, ty: f64, label: &str, primary_text: &str, ff: &str) -> String {
+    let lbl_g =
+        crate::diagrams::util::label_tspan(80.0, 12.0, label, 16.0, primary_text, "middle", "", ff);
+    format!(r##"<g class="cluster-label " transform="translate({tx:.4}, {ty:.0})">{lbl_g}</g>"##,)
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +194,7 @@ pub fn item_label_wrapped(
     lines: &[String],
     line_h: f64,
     primary_text: &str,
+    ff: &str,
 ) -> String {
     let n = lines.len() as f64;
     // Center the text block: first line center = -(n-1)*line_h/2
@@ -202,12 +212,13 @@ pub fn item_label_wrapped(
         }
     }
     format!(
-        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y0:.1}">{tspans}</text></g>"##,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="{ff}" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y0:.1}">{tspans}</text></g>"##,
         primary_text = primary_text,
     )
 }
 
 /// Render an item label as a native SVG `<text>` (primary label) — kept for metadata case.
+#[allow(clippy::too_many_arguments)]
 pub fn item_label_fo(
     tx: f64,
     ty: f64,
@@ -216,15 +227,18 @@ pub fn item_label_fo(
     fh: f64,
     label: &str,
     primary_text: &str,
+    ff: &str,
 ) -> String {
     let y = fh / 2.0;
+    let lbl_g =
+        crate::diagrams::util::label_tspan(0.0, y, label, 16.0, primary_text, "start", "", ff);
     format!(
-        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y:.0}">{label}</text></g>"##,
-        primary_text = primary_text,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect>{lbl_g}</g>"##,
     )
 }
 
 /// Render an item label with fixed width and dynamic height as a native SVG `<text>`.
+#[allow(clippy::too_many_arguments)]
 pub fn item_label_fo_fixed(
     tx: f64,
     ty: f64,
@@ -233,11 +247,13 @@ pub fn item_label_fo_fixed(
     fh: f64,
     label: &str,
     primary_text: &str,
+    ff: &str,
 ) -> String {
     let y = fh / 2.0;
+    let lbl_g =
+        crate::diagrams::util::label_tspan(0.0, y, label, 16.0, primary_text, "start", "", ff);
     format!(
-        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" x="0" y="{y:.0}">{label}</text></g>"##,
-        primary_text = primary_text,
+        r##"<g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect>{lbl_g}</g>"##,
     )
 }
 
@@ -249,9 +265,17 @@ pub fn item_label_empty(tx: f64, ty: f64, _mw: f64) -> String {
 }
 
 /// Render a ticket link `<a>` wrapping a native SVG `<text>` label.
-pub fn ticket_link(url: &str, tx: f64, ty: f64, label: &str, primary_text: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn ticket_link(
+    url: &str,
+    tx: f64,
+    ty: f64,
+    label: &str,
+    primary_text: &str,
+    ff: &str,
+) -> String {
     format!(
-        r##"<a class="kanban-ticket-link" xlink:href="{url}" target="_blank" style="text-decoration:none;"><g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" text-decoration="underline" x="0" y="12">{label}</text></g></a>"##,
+        r##"<a class="kanban-ticket-link" xlink:href="{url}" target="_blank" style="text-decoration:none;"><g class="label" style="text-align:left !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="{ff}" font-size="16" fill="{primary_text}" text-anchor="start" dominant-baseline="middle" text-decoration="underline" x="0" y="12">{label}</text></g></a>"##,
         url = url,
         tx = tx,
         ty = ty,
@@ -261,9 +285,16 @@ pub fn ticket_link(url: &str, tx: f64, ty: f64, label: &str, primary_text: &str)
 }
 
 /// Render an assignee label as a native SVG `<text>`.
-pub fn assignee_label(tx: f64, ty: f64, _fw: f64, label: &str, primary_text: &str) -> String {
+pub fn assignee_label(
+    tx: f64,
+    ty: f64,
+    _fw: f64,
+    label: &str,
+    primary_text: &str,
+    ff: &str,
+) -> String {
     format!(
-        r##"<g class="label" style="text-align:right !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="Arial, sans-serif" font-size="16" fill="{primary_text}" text-anchor="end" dominant-baseline="middle" x="0" y="12">{label}</text></g>"##,
+        r##"<g class="label" style="text-align:right !important" transform="translate({tx:.2}, {ty:.2})"><rect></rect><text font-family="{ff}" font-size="16" fill="{primary_text}" text-anchor="end" dominant-baseline="middle" x="0" y="12">{label}</text></g>"##,
         tx = tx,
         ty = ty,
         label = label,

@@ -29,24 +29,15 @@ pub const THEME_COLOR_LIMIT: usize = 8;
 // ---------------------------------------------------------------------------
 
 /// Horizontal padding inside a branch label box on each side (px).
-pub const BRANCH_LABEL_PADDING: f64 = 10.0;
+/// Mermaid: bkg.width = bbox.width + 18 → 9px each side.
+pub const BRANCH_LABEL_PADDING: f64 = 9.0;
 
 /// Font size for branch name labels (px).
 pub const BRANCH_FONT_SIZE: f64 = 16.0;
 
-/// Scale factor to compensate for difference between bundled Arial and browser-rendered Arial (LR branches).
-/// Browser metrics are ~7.5% wider per character at 16px.
-pub const BRANCH_FONT_SCALE: f64 = 1.075;
-
 // ---------------------------------------------------------------------------
 // Commit labels
 // ---------------------------------------------------------------------------
-
-/// Scale factor for commit label text (hex-like strings at 10px, ~14% wider in browser).
-pub const COMMIT_LABEL_FONT_SCALE: f64 = 1.14;
-
-/// Scale factor for tag text (short labels at 10px, ~27% wider in browser).
-pub const TAG_TEXT_FONT_SCALE: f64 = 1.27;
 
 /// Whether to render commit ID labels below each commit.
 pub const SHOW_COMMIT_LABEL: bool = true;

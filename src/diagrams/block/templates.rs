@@ -129,6 +129,30 @@ pub fn node_cylinder_ellipse(
     )
 }
 
+/// Render a cluster (composite) background `<rect>` inside a node group.
+pub fn cluster_composite_rect(x: &str, y: &str, w: &str, h: &str, style: &str) -> String {
+    format!(
+        r##"<rect class="basic cluster composite label-container" style="{style}" rx="0" ry="0" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"##,
+    )
+}
+
+/// Render a stadium-shape rounded `<rect>` for a stadium node.
+pub fn node_rect_stadium(x: &str, y: &str, w: &str, h: &str, r: &str, style: &str) -> String {
+    format!(
+        r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" ry="{r}" class="label-container" style="{style}"></rect>"##,
+    )
+}
+
+/// Render a cylinder node `<path>` with translate transform.
+pub fn node_cylinder_path(style: &str, d: &str, tx: &str, ty: &str) -> String {
+    format!(r##"<path style="{style}" d="{d}" transform="translate({tx},{ty})"></path>"##,)
+}
+
+/// Render a block-arrow `<polygon>` shape.
+pub fn node_block_arrow(pts: &str, style: &str) -> String {
+    format!(r##"<polygon points="{pts}" class="label-container" style="{style}"></polygon>"##,)
+}
+
 /// Render a hexagon node background `<polygon>`.
 pub fn node_hexagon(pts: &str, style: &str) -> String {
     format!(
@@ -154,13 +178,15 @@ pub fn node_group(svg_id: &str, id: &str, cx: &str, cy: &str) -> String {
 // Node label (foreignObject)
 // ---------------------------------------------------------------------------
 
-/// Render a plain SVG text label centered at the node origin.
+/// Render a label group + text matching Mermaid's tspan structure for htmlLabels:false.
+/// The group is offset by -8.5 (-FONT_SIZE/1.88) and text y=-10.1 + tspan dy=1.1em
+/// puts the baseline at +7.5 below the group center — same as Mermaid renders.
 pub fn node_label_text(label: &str, text_color: &str) -> String {
     if label.is_empty() {
         return String::new();
     }
     format!(
-        "<text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"16\" fill=\"{color}\">{label}</text>",
+        "<g class=\"label\" transform=\"translate(0,-8.5)\"><text text-anchor=\"middle\" y=\"-10.1\" font-family=\"Arial,sans-serif\" font-size=\"16\" fill=\"{color}\"><tspan x=\"0\" y=\"-0.1em\" dy=\"1.1em\"><tspan>{label}</tspan></tspan></text></g>",
         color = text_color,
         label = label,
     )
@@ -186,9 +212,9 @@ pub fn edge_path(
 }
 
 /// Render an edge label `<text>` element.
-pub fn edge_label_text(mx: &str, my: &str, label: &str, text_color: &str) -> String {
+pub fn edge_label_text(mx: &str, my: &str, label: &str, text_color: &str, ff: &str) -> String {
     format!(
-        "<text x=\"{mx}\" y=\"{my}\" text-anchor=\"middle\" font-size=\"12\" font-family=\"Arial, sans-serif\" fill=\"{text_color}\">{label}</text>",
+        "<text x=\"{mx}\" y=\"{my}\" text-anchor=\"middle\" font-size=\"12\" font-family=\"{ff}\" fill=\"{text_color}\">{label}</text>",
         mx = mx, my = my, label = label, text_color = text_color,
     )
 }

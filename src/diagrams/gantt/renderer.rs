@@ -33,7 +33,7 @@ use super::templates::{
     milestone_rect, section_band_rect, section_title, svg_root, task_bar_rect, task_text,
     title_text, today_line,
 };
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 fn svg_height(num_rows: usize) -> f64 {
     CHART_TOP + (num_rows as f64) * ROW_HEIGHT + GRID_AXIS_OFFSET + GRID_BOTTOM_PAD + 25.0
@@ -173,7 +173,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     }
 
     let vars = theme.resolve();
-    let text_color = vars.text_color;
+    let _text_color = vars.text_color;
     let title_color = vars.title_color;
     let background = vars.background;
     // Per-theme contrast colour for done/active task label text (CSS: doneText, activeCritText, etc.)
@@ -269,7 +269,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
     let mut out = String::new();
 
     // SVG root
-    out.push_str(&svg_root(id, SVG_WIDTH, height as i64));
+    out.push_str(&svg_root(id, SVG_WIDTH, height as i64, vars.font_family));
 
     // Empty first group (Mermaid always emits this)
     out.push_str("<g></g>");
@@ -347,7 +347,7 @@ pub fn render(diag: &GanttDiagram, theme: Theme, _use_foreign_object: bool) -> S
             -(grid_height as i64),
             AXIS_FONT_SIZE as i64,
             &label,
-            text_color,
+            "#000",
         ));
     }
 

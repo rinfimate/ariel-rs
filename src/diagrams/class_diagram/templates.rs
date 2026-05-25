@@ -8,6 +8,9 @@
 // Utilities
 // ---------------------------------------------------------------------------
 
+use super::constants::{
+    NAMESPACE_FILL, NAMESPACE_STROKE, NOTE_FILL, NOTE_STROKE, SHADOW_FLOOD_COLOR,
+};
 pub use crate::diagrams::util::{esc, fmt};
 
 // ---------------------------------------------------------------------------
@@ -25,22 +28,73 @@ pub fn svg_root(id: &str, w: &str, h: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Namespace cluster
+// ---------------------------------------------------------------------------
+
+/// Render the opening `<g>` for a namespace cluster.
+pub fn namespace_group_open(ns: &str) -> String {
+    format!(r#"<g class="cluster" id="mermaid-svg-{ns}" data-look="classic">"#)
+}
+
+/// Render the namespace cluster background `<rect>`.
+pub fn namespace_rect(x: &str, y: &str, w: &str, h: &str) -> String {
+    format!(
+        r#"<rect style="fill:{NAMESPACE_FILL};stroke:{NAMESPACE_STROKE};stroke-width:1px;" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"#,
+    )
+}
+
+/// Render the namespace label `<text>`.
+pub fn namespace_label(fs: u32, fc: &str, lx: &str, ly: &str, label: &str, ff: &str) -> String {
+    format!(
+        r#"<text font-family="{ff}" font-size="{fs}" fill="{fc}" text-anchor="middle" x="{lx}" y="{ly}">{label}</text>"#,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Note (dashed edge + note node)
+// ---------------------------------------------------------------------------
+
+/// Render a note's dashed edge `<path>`.
+pub fn note_edge_path(path_d: &str, color: &str) -> String {
+    format!(
+        r#"<path d="{path_d}" class="edge-thickness-normal edge-pattern-dashed relation" fill="none" stroke="{color}" style="stroke-width:1px;stroke-dasharray:3;"></path>"#,
+    )
+}
+
+/// Render the opening `<g>` for a note node.
+pub fn note_group_open(cx: &str, cy: &str) -> String {
+    format!(r#"<g class="node note" transform="translate({cx},{cy})">"#)
+}
+
+/// Render the note `<rect>` background.
+pub fn note_rect(x: &str, y: &str, w: &str, h: &str) -> String {
+    format!(
+        r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" style="fill:{NOTE_FILL};stroke:{NOTE_STROKE};stroke-width:1.3px;"></rect>"#,
+    )
+}
+
+/// Render the note's centred `<text>` content.
+pub fn note_text(fs: u32, fc: &str, text: &str, ff: &str) -> String {
+    format!(
+        r#"<text font-family="{ff}" font-size="{fs}" fill="{fc}" text-anchor="middle" dominant-baseline="middle" x="0" y="0">{text}</text>"#,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Drop-shadow filters
 // ---------------------------------------------------------------------------
 
 /// Render the standard drop-shadow `<defs><filter>` (130% × 130%).
 pub fn drop_shadow_filter(id: &str) -> String {
     format!(
-        "<defs><filter id=\"{id}-drop-shadow\" height=\"130%\" width=\"130%\"><feDropShadow dx=\"4\" dy=\"4\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"#000000\"></feDropShadow></filter></defs>",
-        id = id,
+        "<defs><filter id=\"{id}-drop-shadow\" height=\"130%\" width=\"130%\"><feDropShadow dx=\"4\" dy=\"4\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"{SHADOW_FLOOD_COLOR}\"></feDropShadow></filter></defs>",
     )
 }
 
 /// Render the small drop-shadow `<defs><filter>` (150% × 150%).
 pub fn drop_shadow_filter_small(id: &str) -> String {
     format!(
-        "<defs><filter id=\"{id}-drop-shadow-small\" height=\"150%\" width=\"150%\"><feDropShadow dx=\"2\" dy=\"2\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"#000000\"></feDropShadow></filter></defs>",
-        id = id,
+        "<defs><filter id=\"{id}-drop-shadow-small\" height=\"150%\" width=\"150%\"><feDropShadow dx=\"2\" dy=\"2\" stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"{SHADOW_FLOOD_COLOR}\"></feDropShadow></filter></defs>",
     )
 }
 
@@ -87,7 +141,7 @@ pub fn edge_label_text(
     text: &str,
 ) -> String {
     format!(
-        r##"<g class="edgeLabel" transform="translate({mx}, {my})"><rect x="{ox}" y="-12" width="{fw}" height="24" fill="{pf}" stroke="none"></rect><text x="0" y="5" text-anchor="middle" font-family="{ff}" font-size="16" fill="{text_color}">{text}</text></g>"##,
+        r##"<g class="edgeLabel" transform="translate({mx}, {my})"><rect x="{ox}" y="-10.5" width="{fw}" height="21" fill="{pf}" stroke="none"></rect><text x="0" y="5" text-anchor="middle" font-family="{ff}" font-size="16" fill="{text_color}">{text}</text></g>"##,
         mx = mx,
         my = my,
         ox = ox,
@@ -104,28 +158,9 @@ pub fn edge_label_empty() -> String {
     r##"<g class="edgeLabel"></g>"##.to_string()
 }
 
-/// Render a terminal label (cardinality) as a plain SVG `<text>` element.
-/// Target-end cardinality label: text left-aligned, anchored at arrowhead x.
-pub fn terminal_label_text_target(
-    cx: &str,
-    cy: &str,
-    ff: &str,
-    fill: &str,
-    text: &str,
-    _text_w: f64,
-) -> String {
-    format!(
-        r##"<g class="edgeTerminals" transform="translate({cx}, {cy})"><text x="2" y="0" text-anchor="start" dominant-baseline="middle" font-family="{ff}" font-size="11" fill="{fill}">{text}</text></g>"##,
-        cx = cx,
-        cy = cy,
-        ff = ff,
-        fill = fill,
-        text = text,
-    )
-}
-
-/// Source-end cardinality label: text centered at group position.
-pub fn terminal_label_text_source(
+/// Render a cardinality (terminal) label centered at (cx, cy).
+/// Both source and target labels use centered text, matching Mermaid's inner-group centering.
+pub fn terminal_label_text(
     cx: &str,
     cy: &str,
     ff: &str,
@@ -213,26 +248,38 @@ pub fn annotation_group(y: &str) -> String {
 }
 
 /// Render a single annotation row as plain SVG `<text>`.
-pub fn annotation_text(y: &str, fs: f64, pb: &str, text: &str) -> String {
-    format!(
-        r##"<text x="0" y="{y}" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}">{text}</text>"##,
-        y = y,
-        fs = fs,
-        pb = pb,
-        text = text,
-    )
+pub fn annotation_text(y: &str, fs: f64, pb: &str, text: &str, ff: &str) -> String {
+    let y_f = y.parse::<f64>().unwrap_or(0.0);
+    crate::diagrams::util::label_tspan(0.0, y_f, text, fs, pb, "middle", "", ff)
 }
 
 /// Render the label group (class name) as plain SVG `<text>`.
-pub fn label_group_text(ox: &str, gy: &str, hw: &str, fs: f64, pb: &str, text: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn label_group_text(
+    ox: &str,
+    gy: &str,
+    hw: &str,
+    fs: f64,
+    pb: &str,
+    text: &str,
+    ff: &str,
+) -> String {
+    let hw_f = hw.parse::<f64>().unwrap_or(0.0);
+    // Mermaid uses font-weight: bolder on the label group, not on text. Match exactly.
+    let lbl_g = crate::diagrams::util::label_tspan(
+        hw_f,
+        0.0,
+        text,
+        fs,
+        pb,
+        "middle",
+        " font-weight=\"bolder\"",
+        ff,
+    );
     format!(
-        r##"<g class="label-group text" transform="translate({ox}, {gy})"><text x="{hw}" y="0" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}" font-weight="bold">{text}</text></g>"##,
+        r##"<g class="label-group text" transform="translate({ox}, {gy})">{lbl_g}</g>"##,
         ox = ox,
         gy = gy,
-        hw = hw,
-        fs = fs,
-        pb = pb,
-        text = text,
     )
 }
 
@@ -255,14 +302,9 @@ pub fn methods_group(ox: &str, gy: &str) -> String {
 }
 
 /// Render a member/method row as plain SVG `<text>`.
-pub fn member_row_text(y: &str, fs: f64, pb: &str, text: &str) -> String {
-    format!(
-        r##"<text x="0" y="{y}" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="{fs}" fill="{pb}">{text}</text>"##,
-        y = y,
-        fs = fs,
-        pb = pb,
-        text = text,
-    )
+pub fn member_row_text(y: &str, fs: f64, pb: &str, text: &str, ff: &str) -> String {
+    let y_f = y.parse::<f64>().unwrap_or(0.0);
+    crate::diagrams::util::label_tspan(0.0, y_f, text, fs, pb, "start", "", ff)
 }
 
 /// Render a class box divider `<path>` (cubic bezier).

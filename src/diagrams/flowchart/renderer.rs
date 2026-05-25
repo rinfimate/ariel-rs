@@ -23,12 +23,12 @@
 use super::constants::*;
 use super::parser::{EdgeStyle, FlowchartDiagram, NodeShape, NodeStyle, Subgraph};
 use super::templates::{self, esc, fmt};
+use crate::backends::layout;
+use crate::backends::measure;
 use crate::icons::parse_fa_label;
 use crate::svg::SvgWriter;
-use crate::text::measure;
 use crate::theme::{Theme, ThemeVars};
 use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel, Point};
-use dagre_dgl_rs::layout::layout;
 use std::collections::{HashMap, HashSet};
 
 // --- Public entry point -------------------------------------------------------
@@ -271,10 +271,15 @@ pub fn render(diag: &FlowchartDiagram, theme: Theme) -> String {
                     &from_n,
                     &to_n,
                     EdgeLabel {
-                        minlen: Some(1),
+                        minlen: Some(edge.length as i32),
                         weight: Some(1.0),
                         width: Some(lbl_w),
                         height: Some(lbl_h),
+                        labelpos: if lbl_w > 0.0 {
+                            Some("c".to_string())
+                        } else {
+                            None
+                        },
                         ..Default::default()
                     },
                     None,
@@ -757,8 +762,10 @@ fn render_root_group(
                     let mid_abs = midpoint(&pts);
                     let mx = mid_abs.0 - off_x;
                     let my = mid_abs.1 - off_y;
-                    let (fo_w_raw, _) = measure(lbl_text, FONT_SIZE);
-                    let fo_w = fo_w_raw * TEXT_SCALE;
+                    let (text_w, _) = measure(lbl_text, FONT_SIZE);
+                    // Mermaid createText.ts adds padding=2 around the bbox when
+                    // addSvgBackground=true (used for all edge labels).
+                    let fo_w = text_w + 4.0;
                     out.push_str(&templates::edge_label_text(
                         &fmt(mx),
                         &fmt(my),
@@ -892,7 +899,7 @@ fn render_cluster_rect(
     let label_html = templates::cluster_label_text(
         &fmt(local_cx),
         &fmt(y + CLUSTER_LABEL_TEXT_DY),
-        "Arial, sans-serif",
+        vars.font_family,
         FONT_SIZE,
         &esc(label),
         vars.title_color,
@@ -1452,15 +1459,9 @@ fn shape_intersect_type(shape: &NodeShape) -> Option<&'static str> {
 }
 
 fn node_size(label: &str, shape: &NodeShape) -> (f64, f64) {
-    // Measure the display text, not the raw label — strip fa:fa-xxx prefix if present.
-    let (_, display_text) = crate::icons::parse_fa_label(label);
-    let measure_text = if display_text.is_empty() {
-        label
-    } else {
-        display_text
-    };
-    let (raw_tw, _) = measure(measure_text, FONT_SIZE);
-    let tw = raw_tw * TEXT_SCALE;
+    // Measure the full label — Mermaid renders the literal "fa:fa-xxx" as text
+    // when no icon system is loaded, so we must reserve the same width.
+    let (tw, _) = measure(label, FONT_SIZE);
     match shape {
         NodeShape::Rectangle | NodeShape::Default => ((tw + H_PAD * 2.0).max(50.0), RECT_H),
         NodeShape::Subroutine => {
@@ -1478,9 +1479,24 @@ fn node_size(label: &str, shape: &NodeShape) -> (f64, f64) {
             (w, h)
         }
         NodeShape::Stadium => ((tw + SMALL_PAD * 2.0).max(40.0), COMPACT_H),
-        NodeShape::Diamond | NodeShape::Hexagon => {
+        NodeShape::Diamond => {
             let dim = (tw + DIAMOND_PAD * 2.0).max(60.0);
             (dim, dim)
+        }
+        NodeShape::Hexagon => {
+            // Mermaid's hexagon.ts (classic look):
+            //   h = bbox.height + padding          (24 + 15 = 39)
+            //   m = h / 4                          (= 9.75)
+            //   w = bbox.width + 2*m + padding     (= text_w + 19.5 + 15 = text_w + 34.5)
+            // padding=15 is the flowchart default (config.schema.yaml line 2253).
+            // Hexagon is NOT square — unlike Diamond.
+            // Verified against grammar ref: text "Hexagon" (w=64.047) → polygon w=98.547, h=39.
+            let text_h = 24.0_f64;
+            let padding = 15.0_f64;
+            let h = text_h + padding;
+            let m = h / 4.0;
+            let w = (tw + 2.0 * m + padding).max(60.0);
+            (w, h)
         }
         NodeShape::Circle => {
             // The reference uses r = tw/2 + CIRCLE_LABEL_PAD, not DIAMOND_PAD.
@@ -1517,8 +1533,7 @@ fn render_node(
     style: Option<&NodeStyle>,
     dom_id: &str,
 ) -> String {
-    let (raw_tw, _) = measure(&node.label, FONT_SIZE);
-    let _tw = raw_tw * TEXT_SCALE;
+    let (_tw, _) = measure(&node.label, FONT_SIZE);
     let ff = vars.font_family;
 
     // Build inline style for node shapes.
@@ -1559,6 +1574,8 @@ fn render_node(
             s.push_str(&templates::node_rect(
                 &fmt(-w / 2.0),
                 &fmt(w),
+                &fmt(h),
+                &fmt(-h / 2.0),
                 &inline_style,
             ));
         }
@@ -1566,6 +1583,8 @@ fn render_node(
             s.push_str(&templates::node_rounded_rect(
                 &fmt(-w / 2.0),
                 &fmt(w),
+                &fmt(h),
+                &fmt(-h / 2.0),
                 &inline_style,
             ));
         }
@@ -1783,18 +1802,13 @@ fn render_node(
     } else {
         vars.primary_text
     };
-    // For the plain SVG text path, show only the text portion of any FA label.
-    // We don't embed the FA glyph here because Font Awesome may not be loaded
-    // in static contexts (resvg, PNG export), which would show a broken box.
-    let svg_label = if fa_char.is_some() {
-        if fa_text.is_empty() {
-            String::new()
-        } else {
-            esc(fa_text)
-        }
-    } else {
-        esc(&node.label)
-    };
+    // Match Mermaid's static SVG rendering: when no icon system is loaded, the
+    // full label including "fa:fa-xxx" prefix renders as literal text (not the
+    // glyph). Our parse_fa_label still runs so the icon char is available, but
+    // for the visible SVG text we keep the full original label.
+    let _ = fa_char;
+    let _ = fa_text;
+    let svg_label = esc(&node.label);
     // Per-shape label adjustments (from ref SVG measurements):
     // Cylinder: ref label group at translate(x,-2), fo height=24 → text center y = -2+12 = 10
     //   → TEXT_LABEL_Y=10 (slightly below center, in the body)

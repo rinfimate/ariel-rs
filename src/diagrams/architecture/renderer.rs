@@ -16,8 +16,8 @@ use super::constants::*;
 use super::parser::{ArchDiagram, ArchEdge, ArchGroup, ArchJunction, ArchService, Direction};
 #[allow(unused_imports)]
 use super::templates::{
-    self, edge_arrow, edge_label, edge_path, esc, fmt, group_icon_and_label, group_plain_label,
-    group_rect, service_group, service_icon_svg, service_label, svg_root,
+    self, edge_arrow, edge_label, edge_path, empty_svg, esc, fmt, group_icon_and_label,
+    group_plain_label, group_rect, service_group, service_icon_svg, service_label, svg_root,
 };
 use crate::theme::Theme;
 use std::collections::HashMap;
@@ -384,7 +384,7 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
 
     // If no nodes, output a minimal SVG
     if node_ids.is_empty() {
-        return r##"<svg id="mermaid-svg" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" viewBox="0 0 100 100" role="graphics-document document" aria-roledescription="architecture"><g></g><g class="architecture-edges"></g><g class="architecture-services"></g><g class="architecture-groups"></g></svg>"##.to_string();
+        return empty_svg(vars.font_family);
     }
 
     // Node icon bounding boxes (without labels)
@@ -432,7 +432,7 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
     let mut out = String::new();
 
     // SVG header
-    out.push_str(&svg_root(vb_w, vb_x, vb_y, vb_w, vb_h));
+    out.push_str(&svg_root(vb_w, vb_x, vb_y, vb_w, vb_h, vars.font_family));
 
     // mermaid outputs an empty <g> first
     out.push_str("<g></g>");
@@ -440,7 +440,7 @@ pub fn render(diag: &ArchDiagram, theme: Theme) -> String {
     // Edges layer (BEFORE services in mermaid's output)
     out.push_str("<g class=\"architecture-edges\">");
     for edge in &diag.edges {
-        render_edge(edge, &layout, line_color, &mut out);
+        render_edge(edge, &layout, line_color, vars.font_family, &mut out);
     }
     out.push_str("</g>");
 
@@ -556,7 +556,7 @@ fn render_service(svc: &ArchService, layout: &Layout, text_color: &str, out: &mu
 
 // ─── Edge rendering ────────────────────────────────────────────────────────────
 
-fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, out: &mut String) {
+fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, ff: &str, out: &mut String) {
     let lc = match layout.node_centre(&edge.lhs_id) {
         Some(c) => c,
         None => return,
@@ -606,7 +606,7 @@ fn render_edge(edge: &ArchEdge, layout: &Layout, line_color: &str, out: &mut Str
     if let Some(label) = &edge.title {
         let lx = (sx + tx) / 2.0;
         let ly = (sy + ty) / 2.0 - 6.0;
-        out.push_str(&edge_label(lx, ly, &esc(label), line_color));
+        out.push_str(&edge_label(lx, ly, &esc(label), line_color, ff));
     }
 
     out.push_str("</g>");

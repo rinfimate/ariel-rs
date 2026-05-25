@@ -68,9 +68,6 @@ pub const DIAGRAM_MARGIN_Y: f64 = 10.0;
 /// Default font size used for all text in sequence diagrams (px).
 pub const FONT_SIZE: f64 = 16.0;
 
-/// Browser renders Arial ~11.7% wider than ab_glyph raw metrics.
-pub const TEXT_SCALE: f64 = 1.117;
-
 // ---------------------------------------------------------------------------
 // Activation boxes
 // ---------------------------------------------------------------------------

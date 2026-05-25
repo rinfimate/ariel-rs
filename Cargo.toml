@@ -17,6 +17,20 @@ exclude = [
     "src/bin/debug_dagre.rs",
 ]
 
+[features]
+# Enable Node.js-backed fidelity backends (BrowserMeasurer + DagreJsLayouter).
+# Never enabled in release builds; only for diagnostic tooling.
+fidelity = []
+
+[[bin]]
+name = "render_corpus"
+path = "src/bin/render_corpus.rs"
+
+[[bin]]
+name = "fidelity_corpus"
+path = "src/bin/fidelity_corpus.rs"
+required-features = ["fidelity"]
+
 [dependencies]
 dagre-dgl-rs = "0.1.1"
 ab_glyph = "0.2"

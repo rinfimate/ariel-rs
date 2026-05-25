@@ -23,7 +23,7 @@ use super::templates::{
     commit_merge_inner, commit_reverse_cross, esc, main_translate_group, svg_root,
     tag_badge_polygon, tag_badge_rect_tb, tag_hole_circle, tag_text_lr, tag_text_tb,
 };
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 use std::collections::HashMap;
 
@@ -65,7 +65,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
     {
         let mut pos: f64 = 0.0;
         for (idx, branch) in diag.branches.iter().enumerate() {
-            let label_w = measure(&branch.name, BRANCH_FONT_SIZE).0 * BRANCH_FONT_SCALE;
+            let label_w = measure(&branch.name, BRANCH_FONT_SIZE).0;
             branch_pos_map.insert(branch.name.clone(), BranchPosition { pos, index: idx });
             let tb_extra = if dir == DiagramDirection::TB || dir == DiagramDirection::BT {
                 label_w / 2.0
@@ -127,12 +127,11 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
 
     let (svg_w, svg_h, x_offset, translate_y) = match dir {
         DiagramDirection::LR => {
-            // x_offset formula: empirically tuned to match Mermaid's reference x_offset.
-            // Reference: x_offset = label_w_browser + 63, where label_w_browser ≈ our_measure * 1.075.
+            // x_offset = label_w + (2*PADDING + 43) where 43 = 35 (label→spine gap) + 8 (left margin)
             let max_label_w = diag
                 .branches
                 .iter()
-                .map(|b| measure(&b.name, BRANCH_FONT_SIZE).0 * BRANCH_FONT_SCALE + 63.0)
+                .map(|b| measure(&b.name, BRANCH_FONT_SIZE).0 + BRANCH_LABEL_PADDING * 2.0 + 43.0)
                 .fold(0.0_f64, f64::max);
             let left = max_label_w;
             // Height: matches the Mermaid reference viewBox height.
@@ -140,28 +139,26 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
             // Empirically: h ≈ translate_y + (n-1)*90 + bottom_margin
             //   where bottom_margin = 62.5 - (n-2)*13  (n=2 → 62.5, n=3 → 49.5, etc.)
             let n = diag.branches.len() as f64;
-            // For n≥3, the bottom margin also depends on the longest commit label
-            // at the lowest branch — longer labels extend further when rotated 45°.
-            // Baseline rect_w ≈31 (short label, e.g. "Hotfix") is baked into 49.5.
-            // Extra extension = (max_rect_w - baseline) * inv_sqrt2.
-            let label_bottom_extra = if n >= 3.0 {
-                let lowest_branch = diag.branches.last().map(|b| b.name.as_str()).unwrap_or("");
-                let max_rect_w = diag
-                    .commits
-                    .iter()
-                    .filter(|c| c.branch == lowest_branch)
-                    .map(|c| measure(&c.id, 10.0).0 * COMMIT_LABEL_FONT_SCALE + 4.0)
-                    .fold(0.0_f64, f64::max);
-                ((max_rect_w - 31.0).max(0.0)) * std::f64::consts::FRAC_1_SQRT_2
-            } else {
-                0.0
-            };
-            let bottom_margin = 62.5 - (n - 2.0) * 13.0 + label_bottom_extra;
+            // Geometric bottom margin: the rotated commit label on the lowest branch extends
+            // below it. The rectangle's bottom-left corner (after rotate -45° around the commit
+            // and the label group's translate) ends at:
+            //   extent_below = (39.77 + rect_w) * (1/√2)
+            // where rect_w = text_w + 4 (4px = 2px padding each side), and 39.77 = 28.5 (rect
+            // bottom y in local coords = 13.5 + 15) + 11.27 (label-group ty offset constant).
+            let lowest_branch = diag.branches.last().map(|b| b.name.as_str()).unwrap_or("");
+            let max_rect_w = diag
+                .commits
+                .iter()
+                .filter(|c| c.branch == lowest_branch)
+                .map(|c| measure(&c.id, 10.0).0 + 4.0)
+                .fold(0.0_f64, f64::max);
+            let label_extent_below = (39.77 + max_rect_w) * std::f64::consts::FRAC_1_SQRT_2;
             // When tags are present, height is slightly larger (extra 1.47 from Mermaid)
             let tag_h_extra = if has_tags { 1.47 } else { 0.0 };
-            let h = (20.0 + tag_top_margin) + (n - 1.0) * 90.0 + bottom_margin + tag_h_extra;
+            // translate_y = 20.5: matches Mermaid's getBBox-derived padding of ~8.5px above topmost element.
+            let h = (20.5 + tag_top_margin) + (n - 1.0) * 90.0 + label_extent_below + tag_h_extra;
             // Width: left_margin + branch_extent + right_margin (8 units, matching reference)
-            (left + max_pos + 8.0, h, left, 20.0 + tag_top_margin)
+            (left + max_pos + 8.0, h, left, 20.5 + tag_top_margin)
         }
         DiagramDirection::TB => {
             let w = diag.branches.len() as f64 * 60.0 + 80.0;
@@ -191,7 +188,7 @@ pub fn render(diag: &GitGraphDiagram, theme: Theme) -> String {
         };
         let ci = color_index(bp.index);
         let (fill, stroke) = vars.git_branch_colors[ci % vars.git_branch_colors.len()];
-        let label_w = measure(&branch.name, BRANCH_FONT_SIZE).0 * BRANCH_FONT_SCALE;
+        let label_w = measure(&branch.name, BRANCH_FONT_SIZE).0;
         let box_w = label_w + BRANCH_LABEL_PADDING * 2.0;
 
         let text_color =
@@ -577,9 +574,7 @@ fn draw_commit_label(
     }
 
     let label = &commit.id;
-    let (label_w_raw, label_h) = measure(label, 10.0);
-    // Apply scale factor to match browser font metrics (browser Arial is ~14% wider at 10px)
-    let label_w = label_w_raw * COMMIT_LABEL_FONT_SCALE;
+    let (label_w, label_h) = measure(label, 10.0);
 
     match dir {
         DiagramDirection::LR => {
@@ -612,7 +607,7 @@ fn draw_commit_label(
             let ty = (rect_w / 2.0 + 11.27) * inv_sqrt2;
             *out += &commit_label_group_lr(tx, ty, rx, ry);
             *out += &commit_label_bkg(rect_x, rect_y, rect_w, secondary_color);
-            *out += &commit_label_text(text_x, text_y, &esc(label), text_color);
+            *out += &commit_label_text(text_x, text_y, &esc(label), text_color, ff);
             *out += "</g>";
         }
         DiagramDirection::TB | DiagramDirection::BT => {
@@ -641,8 +636,7 @@ fn draw_commit_tags(
     }
     let mut y_off: f64 = 0.0;
     for tag in &commit.tags {
-        let (tw_raw, _) = measure(tag, 10.0);
-        let tw = tw_raw * TAG_TEXT_FONT_SCALE;
+        let (tw, _) = measure(tag, 10.0);
         match dir {
             DiagramDirection::LR => {
                 // Classic Mermaid tag-badge shape: a rectangle with a left-pointing

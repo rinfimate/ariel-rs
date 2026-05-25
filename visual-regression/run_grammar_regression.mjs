@@ -83,6 +83,9 @@ for (const theme of THEMES) {
   await page.evaluate(t => window.mermaid.initialize({
     startOnLoad: false, theme: t, securityLevel: 'loose', fontFamily: 'Arial, sans-serif',
     look: 'classic',
+    // htmlLabels:false → Mermaid emits <text> instead of <foreignObject>, matching
+    // ariel-rs's SVG output and allowing pixel-comparable rendering via Puppeteer/resvg.
+    htmlLabels: false,
   }), theme);
 
   let ctr = 0, ok = 0, err = 0;

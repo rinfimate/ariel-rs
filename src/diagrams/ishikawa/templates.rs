@@ -38,9 +38,10 @@ pub fn svg_root(
     tx: f64,
     ty: f64,
     content: &str,
+    ff: &str,
 ) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" viewBox="0 0 {vw:.5} {vh:.5}" width="100%" style="max-width:{mw:.0}px">{title_part}<g class="ishikawa" transform="translate({tx:.5},{ty:.5})">{content}</g></svg>"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" font-family="{ff}" viewBox="0 0 {vw:.5} {vh:.5}" width="100%" style="max-width:{mw:.0}px">{title_part}<g class="ishikawa" transform="translate({tx:.5},{ty:.5})">{content}</g></svg>"##,
         vw = vw,
         vh = vh,
         mw = mw,
@@ -184,6 +185,55 @@ pub fn head_group(
         fill = fill,
         stroke = stroke,
         text_color = text_color,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Group wrappers (renderer-built composites)
+// ---------------------------------------------------------------------------
+
+/// Render the head `<g>` wrapper: kite path + a pre-rendered multi-line text SVG fragment.
+pub fn head_group_multiline(
+    spine_y: f64,
+    pc: &str,
+    lc: &str,
+    head_path: &str,
+    head_text_svg: &str,
+) -> String {
+    format!(
+        r##"<g class="ishikawa-head-group" transform="translate(0,{spine_y:.5})"><path class="ishikawa-head" fill="{pc}" stroke="{lc}" stroke-width="2" d="{head_path}"/>{head_text_svg}</g>"##,
+    )
+}
+
+/// Render the cause label `<g>` wrapper: background rect + text.
+pub fn cause_label_group(rect_svg: &str, text_svg: &str) -> String {
+    format!(r##"<g class="ishikawa-label-group">{rect_svg}{text_svg}</g>"##,)
+}
+
+/// Render a branch-subtree `<g>` wrapper with a per-entry class.
+pub fn branch_subtree_group(grp_class: &str, sub_el: &str, text_el: &str) -> String {
+    format!(r##"<g class="{grp_class}">{sub_el}{text_el}</g>"##,)
+}
+
+/// Render a single `<tspan>` line (used inside multi-line text labels).
+pub fn text_tspan_line(x: f64, dy: &str, text: &str) -> String {
+    format!(r##"<tspan x="{x:.5}" dy="{dy}">{text}</tspan>"##,)
+}
+
+/// Render a multi-line `<text>` element with optional font-weight attribute and inline tspans.
+#[allow(clippy::too_many_arguments)]
+pub fn multiline_text(
+    cls: &str,
+    fill: &str,
+    anchor: &str,
+    x: f64,
+    y_first: f64,
+    font_size: f64,
+    weight_attr: &str,
+    tspans: &str,
+) -> String {
+    format!(
+        r#"<text class="{cls}" fill="{fill}" text-anchor="{anchor}" x="{x:.5}" y="{y_first:.5}" font-size="{font_size}"{weight_attr} dominant-baseline="middle">{tspans}</text>"#,
     )
 }
 

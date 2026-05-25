@@ -70,10 +70,11 @@ pub fn branch_spine_lr(y: f64, max_pos: f64, line_color: &str) -> String {
 }
 
 /// Render a branch label background rectangle for LR mode.
+/// Height matches Mermaid's `bbox.height + 4` ≈ 21 for 16px Arial.
 pub fn branch_label_rect_lr(bx: f64, by: f64, bw: f64, fill: &str) -> String {
     format!(
         concat!(
-            r##"<rect x="{bx:.1}" y="{by:.1}" width="{bw:.1}" height="20""##,
+            r##"<rect x="{bx:.1}" y="{by:.1}" width="{bw:.1}" height="21""##,
             r##" rx="4" ry="4" fill="{f}"/>"##
         ),
         bx = bx,
@@ -284,9 +285,15 @@ pub fn commit_label_bkg(rect_x: f64, rect_y: f64, rect_w: f64, secondary_color: 
 }
 
 /// Render the commit label text.
-pub fn commit_label_text(text_x: f64, text_y: f64, label: &str, text_color: &str) -> String {
+pub fn commit_label_text(
+    text_x: f64,
+    text_y: f64,
+    label: &str,
+    text_color: &str,
+    ff: &str,
+) -> String {
     format!(
-        "<text x=\"{:.3}\" y=\"{:.3}\" font-family=\"Arial, sans-serif\" font-size=\"10\" fill=\"{text_color}\" class=\"commit-label\">{}</text>",
+        "<text x=\"{:.3}\" y=\"{:.3}\" font-family=\"{ff}\" font-size=\"10\" fill=\"{text_color}\" class=\"commit-label\">{}</text>",
         text_x, text_y, label, text_color = text_color,
     )
 }

@@ -17,6 +17,7 @@ pub use crate::diagrams::util::esc;
 ///
 /// `max_width` is the CSS `max-width` value (px), `vb_x/vb_y` are the viewBox
 /// origin, and `vb_w/vb_h` are the viewBox dimensions.
+#[allow(clippy::too_many_arguments)]
 pub fn svg_root(
     svg_id: &str,
     max_width: f64,
@@ -24,6 +25,7 @@ pub fn svg_root(
     vb_y: f64,
     vb_w: f64,
     vb_h: f64,
+    ff: &str,
 ) -> String {
     format!(
         concat!(
@@ -31,7 +33,7 @@ pub fn svg_root(
             r##"xmlns:xlink="http://www.w3.org/1999/xlink" "##,
             r##"viewBox="{vx} {vy} {vw} {vh}" "##,
             r##"style="max-width: {mw}px;" "##,
-            r##"font-family="Arial, sans-serif" font-size="16px" "##,
+            r##"font-family="{ff}" font-size="16px" "##,
             r##"role="graphics-document document" "##,
             r##"aria-roledescription="treeView">"##,
         ),
@@ -41,6 +43,7 @@ pub fn svg_root(
         vy = vb_y,
         vw = vb_w,
         vh = vb_h,
+        ff = ff,
     )
 }
 

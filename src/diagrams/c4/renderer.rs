@@ -508,7 +508,12 @@ pub fn render(diag: &C4Diagram, theme: Theme, _use_foreign_object: bool) -> Stri
     }
 
     if let Some(ref title) = diag.title {
-        out.push_str(&title_text(title_x, &esc(title), vars.text_color));
+        out.push_str(&title_text(
+            title_x,
+            &esc(title),
+            vars.text_color,
+            vars.font_family,
+        ));
     }
     out.push_str("</svg>");
     out

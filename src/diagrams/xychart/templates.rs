@@ -27,9 +27,9 @@ pub fn escape_attr(s: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the outer SVG root element for an xychart diagram.
-pub fn svg_root(id: &str, width: i64, height: i64) -> String {
+pub fn svg_root(id: &str, width: i64, height: i64, ff: &str) -> String {
     format!(
-        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: {w}px;" viewBox="0 0 {w} {h}" role="graphics-document document" aria-roledescription="xychart">"##,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="{ff}" style="max-width: {w}px;" viewBox="0 0 {w} {h}" role="graphics-document document" aria-roledescription="xychart">"##,
         id = id,
         w = width,
         h = height,

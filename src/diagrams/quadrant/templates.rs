@@ -14,9 +14,9 @@ pub use crate::diagrams::util::{esc, fmt};
 // ---------------------------------------------------------------------------
 
 /// Render the outer `<svg>` element for a quadrant chart.
-pub fn svg_root(id: &str, w: &str, h: &str) -> String {
+pub fn svg_root(id: &str, w: &str, h: &str, ff: &str) -> String {
     format!(
-        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" viewBox="0 0 {w} {h}" style="max-width:{w}px;" role="graphics-document document" aria-roledescription="quadrantChart">"##,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="{ff}" viewBox="0 0 {w} {h}" style="max-width:{w}px;" role="graphics-document document" aria-roledescription="quadrantChart">"##,
     )
 }
 

@@ -15,10 +15,18 @@ pub use crate::diagrams::util::{esc, fmt};
 // ---------------------------------------------------------------------------
 
 /// Render the outer SVG wrapper for an architecture diagram.
-pub fn svg_root(max_w: f64, vb_x: f64, vb_y: f64, vb_w: f64, vb_h: f64) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn svg_root(max_w: f64, vb_x: f64, vb_y: f64, vb_w: f64, vb_h: f64, ff: &str) -> String {
     format!(
-        "<svg id=\"mermaid-svg\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" font-family=\"Arial, sans-serif\" style=\"max-width: {}px;\" viewBox=\"{} {} {} {}\" role=\"graphics-document document\" aria-roledescription=\"architecture\">",
+        "<svg id=\"mermaid-svg\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" font-family=\"{ff}\" style=\"max-width: {}px;\" viewBox=\"{} {} {} {}\" role=\"graphics-document document\" aria-roledescription=\"architecture\">",
         max_w, vb_x, vb_y, vb_w, vb_h,
+    )
+}
+
+/// Render the empty-diagram SVG fallback (no services or junctions).
+pub fn empty_svg(ff: &str) -> String {
+    format!(
+        r##"<svg id="mermaid-svg" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="{ff}" viewBox="0 0 100 100" role="graphics-document document" aria-roledescription="architecture"><g></g><g class="architecture-edges"></g><g class="architecture-services"></g><g class="architecture-groups"></g></svg>"##,
     )
 }
 
@@ -114,9 +122,9 @@ pub fn edge_arrow(pts: &str, t: &str, line_color: &str) -> String {
 }
 
 /// Render an edge label `<text>` element.
-pub fn edge_label(x: f64, y: f64, text: &str, line_color: &str) -> String {
+pub fn edge_label(x: f64, y: f64, text: &str, line_color: &str, ff: &str) -> String {
     format!(
-        "<text x=\"{x}\" y=\"{y}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"14\" fill=\"{line_color}\">{text}</text>",
+        "<text x=\"{x}\" y=\"{y}\" text-anchor=\"middle\" font-family=\"{ff}\" font-size=\"14\" fill=\"{line_color}\">{text}</text>",
         x = x,
         y = y,
         text = text,

@@ -52,6 +52,6 @@ pub const V_LINE_BOTTOM_TWEAK: f64 = 0.5;
 // Text measurement
 // ---------------------------------------------------------------------------
 
-/// Chrome getBBox() includes a trailing advance of ~4.4375 px at 16 px Arial.
-/// Added to the measured text width to obtain the actual right edge of each label.
-pub const TRAILING_ADVANCE: f64 = 4.4375;
+/// Trailing advance/padding added to text width to determine the rightmost x edge.
+/// Derived empirically from Mermaid reference (treeview vbW = text_x + tw + 3.5 + 1.5).
+pub const TRAILING_ADVANCE: f64 = 3.5;

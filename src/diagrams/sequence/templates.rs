@@ -49,10 +49,33 @@ pub fn actor_rect(
     )
 }
 
-/// Render the actor text label `<text>` centred in a box.
-pub fn actor_text(cx: f64, cy: f64, font_size: f64, name: &str, tc: &str) -> String {
+/// Render the background-box label `<text>` for an actor box-group wrapper.
+pub fn box_group_label_text(cx: f64, ty: f64, label: &str, ff: &str) -> String {
     format!(
-        r##"<text x="{cx}" y="{cy}" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: {fs}px; font-weight: 400; font-family: Arial, sans-serif; fill: {tc};"><tspan x="{cx}" dy="0">{name}</tspan></text>"##,
+        r##"<text x="{cx:.1}" y="{ty:.1}" dominant-baseline="central" alignment-baseline="central" class="text" style="text-anchor: middle; font-size: 14px; font-weight: 400; font-family: {ff};"><tspan x="{cx:.1}" dy="0">{label}</tspan></text>"##,
+    )
+}
+
+/// Render the background-box `<rect>` for an actor box-group wrapper (drop-shadow filter).
+#[allow(clippy::too_many_arguments)]
+pub fn box_group_rect(
+    bx: f64,
+    box_y: f64,
+    bw: f64,
+    box_h: f64,
+    fill: &str,
+    stroke: &str,
+    label_html: &str,
+) -> String {
+    format!(
+        r##"<rect x="{bx:.1}" y="{box_y:.1}" fill="{fill}" stroke="{stroke}" width="{bw:.0}" height="{box_h:.0}" class="rect" style="filter:drop-shadow(1px 2px 2px rgba(185,185,185,1))"/>{label_html}"##,
+    )
+}
+
+/// Render the actor text label `<text>` centred in a box.
+pub fn actor_text(cx: f64, cy: f64, font_size: f64, name: &str, tc: &str, ff: &str) -> String {
+    format!(
+        r##"<text x="{cx}" y="{cy}" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: {fs}px; font-weight: 400; font-family: {ff}; fill: {tc};"><tspan x="{cx}" dy="0">{name}</tspan></text>"##,
         cx = cx,
         cy = cy,
         fs = font_size,
@@ -68,7 +91,7 @@ pub fn actor_text(cx: f64, cy: f64, font_size: f64, name: &str, tc: &str) -> Str
 /// Render the vertical lifeline `<line>` for an actor.
 pub fn lifeline(ai: usize, cx: f64, y_start: f64, y_end: f64, name: &str, pb: &str) -> String {
     format!(
-        r##"<line id="actor{ai}" x1="{cx}" y1="{ys}" x2="{cx}" y2="{ye}" class="actor-line 200" stroke-width="2" stroke="{pb}" name="{name}" data-et="life-line" data-id="{name}"></line>"##,
+        r##"<line id="actor{ai}" x1="{cx}" y1="{ys}" x2="{cx}" y2="{ye}" class="actor-line 200" stroke-width="0.5px" stroke="{pb}" name="{name}" data-et="life-line" data-id="{name}"></line>"##,
         ai = ai,
         cx = cx,
         ys = y_start,
@@ -131,9 +154,16 @@ pub fn note_rect(x: f64, y: f64, w: f64, h: f64, note_bg: &str, note_border: &st
 }
 
 /// Render the text inside a note box.
-pub fn note_text(tx: f64, ty: f64, font_size: u32, text: &str, text_color: &str) -> String {
+pub fn note_text(
+    tx: f64,
+    ty: f64,
+    font_size: u32,
+    text: &str,
+    text_color: &str,
+    ff: &str,
+) -> String {
     format!(
-        r##"<text x="{tx}" y="{ty}" text-anchor="middle" dominant-baseline="central" fill="{text_color}" class="noteText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;">{text}</text>"##,
+        r##"<text x="{tx}" y="{ty}" text-anchor="middle" dominant-baseline="central" fill="{text_color}" class="noteText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;">{text}</text>"##,
         tx = tx,
         ty = ty,
         fs = font_size,
@@ -219,9 +249,10 @@ pub fn message_label_text(
     font_size: u32,
     text: &str,
     text_color: &str,
+    ff: &str,
 ) -> String {
     format!(
-        r##"<text x="{tx}" y="{ty}" text-anchor="middle" dominant-baseline="auto" fill="{tc}" class="messageText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;">{text}</text>"##,
+        r##"<text x="{tx}" y="{ty}" text-anchor="middle" dominant-baseline="auto" fill="{tc}" class="messageText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;">{text}</text>"##,
         tx = tx,
         ty = ty,
         fs = font_size,
@@ -298,9 +329,10 @@ pub fn control_badge(
     pf: &str,
     pb: &str,
     _tc: &str,
+    ff: &str,
 ) -> String {
     format!(
-        r##"<polygon points="{p1} {p2} {p3} {p4} {p5}" class="labelBox" fill="{pf}" stroke="{pb}"></polygon><text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;">{kind}</text>"##,
+        r##"<polygon points="{p1} {p2} {p3} {p4} {p5}" class="labelBox" fill="{pf}" stroke="{pb}"></polygon><text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;">{kind}</text>"##,
         p1 = p1,
         p2 = p2,
         p3 = p3,
@@ -316,9 +348,16 @@ pub fn control_badge(
 }
 
 /// Render the main condition label for a control structure.
-pub fn control_label_text(cx: f64, cy: f64, font_size: u32, label: &str, _tc: &str) -> String {
+pub fn control_label_text(
+    cx: f64,
+    cy: f64,
+    font_size: u32,
+    label: &str,
+    _tc: &str,
+    ff: &str,
+) -> String {
     format!(
-        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">[{label}]</tspan></text>"##,
+        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="loopText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">[{label}]</tspan></text>"##,
         cx = cx,
         cy = cy,
         fs = font_size,
@@ -327,6 +366,7 @@ pub fn control_label_text(cx: f64, cy: f64, font_size: u32, label: &str, _tc: &s
 }
 
 /// Render a wrapped (two-line) condition label for a control structure.
+#[allow(clippy::too_many_arguments)]
 pub fn control_label_text_wrapped(
     cx: f64,
     cy: f64,
@@ -334,10 +374,11 @@ pub fn control_label_text_wrapped(
     line1: &str,
     line2: &str,
     _tc: &str,
+    ff: &str,
 ) -> String {
     let line_h = font_size as f64 + 2.0;
     format!(
-        r##"<text x="{cx}" y="{y1}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line1}</tspan></text><text x="{cx}" y="{y2}" text-anchor="middle" class="loopText" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line2}</tspan></text>"##,
+        r##"<text x="{cx}" y="{y1}" text-anchor="middle" class="loopText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line1}</tspan></text><text x="{cx}" y="{y2}" text-anchor="middle" class="loopText" style="font-family: {ff}; font-size: {fs}px; font-weight: 400;"><tspan x="{cx}">{line2}</tspan></text>"##,
         cx = cx,
         y1 = cy - line_h / 2.0,
         y2 = cy + line_h / 2.0,
@@ -348,9 +389,16 @@ pub fn control_label_text_wrapped(
 }
 
 /// Render a section-title label inside an alt/par divider.
-pub fn control_section_title(cx: f64, cy: f64, font_size: u32, label: &str, tc: &str) -> String {
+pub fn control_section_title(
+    cx: f64,
+    cy: f64,
+    font_size: u32,
+    label: &str,
+    tc: &str,
+    ff: &str,
+) -> String {
     format!(
-        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="sectionTitle" style="font-family: Arial, sans-serif; font-size: {fs}px; font-weight: 400; fill: {tc};">[{label}]</text>"##,
+        r##"<text x="{cx}" y="{cy}" text-anchor="middle" class="sectionTitle" style="font-family: {ff}; font-size: {fs}px; font-weight: 400; fill: {tc};">[{label}]</text>"##,
         cx = cx,
         cy = cy,
         fs = font_size,
@@ -392,6 +440,7 @@ pub fn actor_man(
     pf: &str,
     pb: &str,
     tc: &str,
+    ff: &str,
 ) -> String {
     format!(
         concat!(
@@ -401,7 +450,7 @@ pub fn actor_man(
             r##"<line x1="{ll}" y1="{le}" x2="{cx}" y2="{ls}" stroke-width="2"></line>"##,
             r##"<line x1="{cx}" y1="{ls}" x2="{rl}" y2="{le}" stroke-width="2"></line>"##,
             r##"<circle cx="{cx}" cy="{cy}" r="{r}" width="{w}" height="{h}" fill="{pf}" stroke-width="2"></circle>"##,
-            r##"<text x="{cx}" y="{ty}" dominant-baseline="central" alignment-baseline="central" class="actor actor-man" fill="{tc}" stroke="none" style="text-anchor: middle; font-size: {fs}px; font-weight: 400; font-family: Arial, sans-serif;"><tspan x="{cx}" dy="0">{name}</tspan></text>"##,
+            r##"<text x="{cx}" y="{ty}" dominant-baseline="central" alignment-baseline="central" class="actor actor-man" fill="{tc}" stroke="none" style="text-anchor: middle; font-size: {fs}px; font-weight: 400; font-family: {ff};"><tspan x="{cx}" dy="0">{name}</tspan></text>"##,
             r##"</g>"##,
         ),
         cls = cls,
@@ -426,6 +475,7 @@ pub fn actor_man(
         pf = pf,
         pb = pb,
         tc = tc,
+        ff = ff,
     )
 }
 

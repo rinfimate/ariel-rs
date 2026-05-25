@@ -1157,7 +1157,12 @@ pub fn render(chart: &XyChart, theme: Theme, _use_foreign_object: bool) -> Strin
     let mut out = String::new();
 
     // SVG root
-    out.push_str(&templates::svg_root(id, WIDTH as i64, HEIGHT as i64));
+    out.push_str(&templates::svg_root(
+        id,
+        WIDTH as i64,
+        HEIGHT as i64,
+        vars.font_family,
+    ));
 
     // Background rect (mirrors xychartRenderer.ts background rect)
     out.push_str(&templates::main_group_with_bg(

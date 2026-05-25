@@ -175,7 +175,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 5.56250000_f64);
             m.insert('\u{0038}', 5.56250000_f64);
             m.insert('\u{0039}', 5.56250000_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 2.78125000_f64);
             m.insert('\u{0021}', 2.78125000_f64);
             m.insert('\u{0022}', 3.56250000_f64);
             m.insert('\u{0023}', 5.56250000_f64);
@@ -279,7 +279,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 6.68750000_f64);
             m.insert('\u{0038}', 6.68750000_f64);
             m.insert('\u{0039}', 6.68750000_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 3.32812500_f64);
             m.insert('\u{0021}', 3.34375000_f64);
             m.insert('\u{0022}', 4.26562500_f64);
             m.insert('\u{0023}', 6.68750000_f64);
@@ -383,7 +383,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 7.79687500_f64);
             m.insert('\u{0038}', 7.79687500_f64);
             m.insert('\u{0039}', 7.79687500_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 3.89062500_f64);
             m.insert('\u{0021}', 3.89062500_f64);
             m.insert('\u{0022}', 4.98437500_f64);
             m.insert('\u{0023}', 7.79687500_f64);
@@ -487,7 +487,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 8.90625000_f64);
             m.insert('\u{0038}', 8.90625000_f64);
             m.insert('\u{0039}', 8.90625000_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 4.45312500_f64);
             m.insert('\u{0021}', 4.45312500_f64);
             m.insert('\u{0022}', 5.68750000_f64);
             m.insert('\u{0023}', 8.90625000_f64);
@@ -591,7 +591,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 9.46875000_f64);
             m.insert('\u{0038}', 9.46875000_f64);
             m.insert('\u{0039}', 9.46875000_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 4.71875000_f64);
             m.insert('\u{0021}', 4.73437500_f64);
             m.insert('\u{0022}', 6.04687500_f64);
             m.insert('\u{0023}', 9.46875000_f64);
@@ -695,7 +695,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 10.01562500_f64);
             m.insert('\u{0038}', 10.01562500_f64);
             m.insert('\u{0039}', 10.01562500_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 5.00000000_f64);
             m.insert('\u{0021}', 5.01562500_f64);
             m.insert('\u{0022}', 6.39062500_f64);
             m.insert('\u{0023}', 10.01562500_f64);
@@ -799,7 +799,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 11.12500000_f64);
             m.insert('\u{0038}', 11.12500000_f64);
             m.insert('\u{0039}', 11.12500000_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 5.56250000_f64);
             m.insert('\u{0021}', 5.56250000_f64);
             m.insert('\u{0022}', 7.10937500_f64);
             m.insert('\u{0023}', 11.12500000_f64);
@@ -903,7 +903,7 @@ pub static CHAR_WIDTHS: std::sync::LazyLock<HashMap<u32, HashMap<char, f64>>> =
             m.insert('\u{0037}', 13.35937500_f64);
             m.insert('\u{0038}', 13.35937500_f64);
             m.insert('\u{0039}', 13.35937500_f64);
-            m.insert('\u{0020}', 0.00000000_f64);
+            m.insert('\u{0020}', 6.67187500_f64);
             m.insert('\u{0021}', 6.67187500_f64);
             m.insert('\u{0022}', 8.53125000_f64);
             m.insert('\u{0023}', 13.35937500_f64);

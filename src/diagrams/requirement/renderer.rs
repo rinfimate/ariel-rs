@@ -5,10 +5,9 @@
 use super::constants::*;
 use super::parser::{Element, Requirement, RequirementDiagram};
 use super::templates;
-use crate::text_browser_metrics::measure_browser;
+use crate::backends::{layout, measure};
 use crate::theme::Theme;
 use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel};
-use dagre_dgl_rs::layout::layout;
 
 struct NodeGeom {
     id: String,
@@ -17,11 +16,19 @@ struct NodeGeom {
 }
 
 fn tmw(s: &str) -> f64 {
-    let (w, _) = measure_browser(s, FONT_SIZE);
-    // Add correct space advance width (measure_browser stores 0 for space).
-    // +6px safety margin prevents last letter clipping in browser rendering.
-    let n_spaces = s.chars().filter(|&c| c == ' ').count() as f64;
-    w + n_spaces * SPACE_W_16 + TEXT_SAFETY_MARGIN
+    let (w, _) = measure(s, FONT_SIZE);
+    w + TEXT_SAFETY_MARGIN
+}
+
+/// Body section height for N body rows.
+/// Matches Mermaid: HEADER + (N rows span + top + bottom padding) where
+/// span = (N-1)*ROW_H, top pad = BODY_FIRST_ROW_OFFSET, bottom pad = ROW_H/2 + BODY_BOTTOM_PAD.
+fn body_section_h(n_rows: usize) -> f64 {
+    if n_rows == 0 {
+        0.0
+    } else {
+        BODY_FIRST_ROW_OFFSET + (n_rows as f64 - 1.0) * ROW_H + ROW_H / 2.0 + BODY_BOTTOM_PAD
+    }
 }
 
 fn req_geom(req: &Requirement) -> NodeGeom {
@@ -40,7 +47,7 @@ fn req_geom(req: &Requirement) -> NodeGeom {
     NodeGeom {
         id: req.name.clone(),
         width: (max_w + PAD_X * 2.0),
-        height: (HEADER_H + (n_body as f64 + 0.5) * ROW_H + PAD_Y),
+        height: HEADER_H + body_section_h(n_body),
     }
 }
 
@@ -57,7 +64,7 @@ fn elem_geom(elem: &Element) -> NodeGeom {
     NodeGeom {
         id: elem.name.clone(),
         width: (max_w + PAD_X * 2.0),
-        height: (HEADER_H + (body_rows as f64 + 0.5) * ROW_H + PAD_Y),
+        height: HEADER_H + body_section_h(body_rows),
     }
 }
 
@@ -72,6 +79,7 @@ struct ReqColors<'a> {
     box_fill: &'a str,
     box_stroke: &'a str,
     font_color: &'a str,
+    font_family: &'a str,
 }
 
 fn render_req(req: &Requirement, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColors) -> String {
@@ -84,13 +92,27 @@ fn render_req(req: &Requirement, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqCol
     o += &templates::node_box_path(-hw, -hh, hw, hh, col.box_stroke, col.box_fill);
     // Divider line
     o += &templates::node_divider(-hw, hw, sep_y, col.box_stroke);
-    // Header: <<type>> centered in header rows
+    // Header: <<type>> centered in header rows. Use BODY_FIRST_ROW_OFFSET from top to
+    // match Mermaid: first row at -hh + 8.5, second at +ROW_H from that.
     let type_str = format!("&lt;&lt;{}&gt;&gt;", req.req_type.display());
-    // y center of each header row: -hh + PAD_Y + ROW_H/2 and -hh + PAD_Y + ROW_H*1.5
-    let type_cy = -hh + PAD_Y + ROW_H / 2.0;
-    let name_cy = -hh + PAD_Y + ROW_H * 1.5;
-    o += &templates::label_text(0.0, type_cy, FONT_SIZE, col.font_color, &type_str);
-    o += &templates::label_text_bold(0.0, name_cy, FONT_SIZE, col.font_color, &xe(&req.name));
+    let type_cy = -hh + BODY_FIRST_ROW_OFFSET;
+    let name_cy = type_cy + ROW_H;
+    o += &templates::label_text(
+        0.0,
+        type_cy,
+        FONT_SIZE,
+        col.font_color,
+        &type_str,
+        col.font_family,
+    );
+    o += &templates::label_text_bold(
+        0.0,
+        name_cy,
+        FONT_SIZE,
+        col.font_color,
+        &xe(&req.name),
+        col.font_family,
+    );
     // Body items: left-aligned, each row centered vertically at sep_y + PAD_Y + (i+0.5)*ROW_H
     let items = [
         format!("ID: {}", req.id),
@@ -98,10 +120,17 @@ fn render_req(req: &Requirement, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqCol
         format!("Risk: {}", req.risk.display()),
         format!("Verification: {}", req.verify_method.display()),
     ];
-    let mut row_cy = sep_y + PAD_Y + ROW_H / 2.0;
+    let mut row_cy = sep_y + BODY_FIRST_ROW_OFFSET;
     for item in &items {
         let ix = -hw + PAD_X;
-        o += &templates::label_text_body(ix, row_cy, FONT_SIZE, col.font_color, &xe(item));
+        o += &templates::label_text_body(
+            ix,
+            row_cy,
+            FONT_SIZE,
+            col.font_color,
+            &xe(item),
+            col.font_family,
+        );
         row_cy += ROW_H;
     }
     o + "</g>"
@@ -116,17 +145,25 @@ fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColor
     o += &templates::node_box_path(-hw, -hh, hw, hh, col.box_stroke, col.box_fill);
     // Divider line
     o += &templates::node_divider(-hw, hw, sep_y, col.box_stroke);
-    // Header: <<Element>> and name centered in header rows
-    let type_cy = -hh + PAD_Y + ROW_H / 2.0;
-    let name_cy = -hh + PAD_Y + ROW_H * 1.5;
+    // Header: <<Element>> and name. Same as req: first row at -hh + 8.5, second at +ROW_H.
+    let type_cy = -hh + BODY_FIRST_ROW_OFFSET;
+    let name_cy = type_cy + ROW_H;
     o += &templates::label_text(
         0.0,
         type_cy,
         FONT_SIZE,
         col.font_color,
         "&lt;&lt;Element&gt;&gt;",
+        col.font_family,
     );
-    o += &templates::label_text_bold(0.0, name_cy, FONT_SIZE, col.font_color, &xe(&elem.name));
+    o += &templates::label_text_bold(
+        0.0,
+        name_cy,
+        FONT_SIZE,
+        col.font_color,
+        &xe(&elem.name),
+        col.font_family,
+    );
     // Body items: left-aligned, each row centered vertically
     let mut body: Vec<String> = vec![];
     if !elem.elem_type.is_empty() {
@@ -135,10 +172,17 @@ fn render_elem(elem: &Element, geom: &NodeGeom, cx: f64, cy: f64, col: &ReqColor
     if !elem.doc_ref.is_empty() {
         body.push(format!("Doc Ref: {}", elem.doc_ref));
     }
-    let mut row_cy = sep_y + PAD_Y + ROW_H / 2.0;
+    let mut row_cy = sep_y + BODY_FIRST_ROW_OFFSET;
     for item in &body {
         let ix = -hw + PAD_X;
-        o += &templates::label_text_body(ix, row_cy, FONT_SIZE, col.font_color, &xe(item));
+        o += &templates::label_text_body(
+            ix,
+            row_cy,
+            FONT_SIZE,
+            col.font_color,
+            &xe(item),
+            col.font_family,
+        );
         row_cy += ROW_H;
     }
     o + "</g>"
@@ -189,6 +233,7 @@ fn fallback_pts(g: &Graph, v: &str, w: &str) -> Vec<(f64, f64)> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_relation(
     rel: &super::parser::Relation,
     pts: &[(f64, f64)],
@@ -196,7 +241,7 @@ fn render_relation(
     sid: &str,
     line_color: &str,
     font_color: &str,
-    label_bg: &str,
+    font_family: &str,
 ) -> String {
     if pts.len() < 2 {
         return String::new();
@@ -215,10 +260,8 @@ fn render_relation(
     };
     let path = templates::relation_path(&d, line_color, dash, &marker_start, &marker_end);
     let lhtml = format!("&lt;&lt;{}&gt;&gt;", rel.rel_type.display());
-    // Use dagre's labelpos:"c" computed position; fall back to geometric midpoint
     let (mx, my) = label_pos.unwrap_or_else(|| midpt(pts));
-    let (lw, _) = measure_browser(&format!("<<{}>>", rel.rel_type.display()), FONT_SIZE);
-    let lbl = templates::edge_label_text(mx, my, lw, FONT_SIZE, font_color, label_bg, &lhtml);
+    let lbl = templates::edge_label_text(mx, my, FONT_SIZE, font_color, &lhtml, font_family);
     format!("{path}{lbl}")
 }
 
@@ -234,6 +277,7 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
         box_fill: vars.primary_color,
         box_stroke: vars.primary_border,
         font_color: vars.primary_text,
+        font_family: vars.font_family,
     };
     let line_color = vars.line_color;
     let sid = "mermaid-req-svg";
@@ -273,9 +317,10 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
             },
         );
     }
-    let label_fs = FONT_SIZE - 4.0; // 12px edge label font size
+    // Edge labels render at FONT_SIZE (16px) — see SVG font-size attr — so dagre layout
+    // must use the same size when measuring label width.
     for (i, rel) in diag.relations.iter().enumerate() {
-        let (lw, _) = measure_browser(&format!("<<{}>>", rel.rel_type.display()), label_fs);
+        let (lw, _) = measure(&format!("<<{}>>", rel.rel_type.display()), FONT_SIZE);
         g.set_edge(
             &rel.src,
             &rel.dst,
@@ -326,7 +371,7 @@ pub fn render(diag: &RequirementDiagram, theme: Theme) -> String {
             sid,
             line_color,
             col.font_color,
-            vars.edge_label_bg,
+            col.font_family,
         );
     }
     svg += "</g><g class=\"req-nodes\">";

@@ -12,11 +12,12 @@ use super::constants::*;
 use super::parser::{BlockDiagram, BlockEdge, BlockNode, BlockShape, RowItem};
 #[allow(unused_imports)]
 use super::templates::{
-    self, build_markers, edge_label_text, edge_path, esc, fmt, fmt_px, node_circle,
-    node_cylinder_ellipse, node_cylinder_rect, node_diamond, node_group, node_hexagon,
-    node_label_text, node_rect_rounded, node_rect_square, svg_root, svg_style,
+    self, build_markers, cluster_composite_rect, edge_label_text, edge_path, esc, fmt, fmt_px,
+    node_block_arrow, node_circle, node_cylinder_ellipse, node_cylinder_path, node_cylinder_rect,
+    node_diamond, node_group, node_hexagon, node_label_text, node_rect_rounded, node_rect_square,
+    node_rect_stadium, svg_root, svg_style,
 };
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 
 /// Decode basic HTML entities to their text equivalents for measurement.
@@ -28,11 +29,9 @@ fn decode_entities(s: &str) -> String {
         .replace("&quot;", "\"")
 }
 
-/// Compute text width scaled to browser metrics.
 fn text_width(label: &str) -> f64 {
     let decoded = decode_entities(label);
-    let (tw, _) = measure(&decoded, FONT_SIZE);
-    tw * TEXT_SCALE
+    measure(&decoded, FONT_SIZE).0
 }
 
 pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> String {
@@ -327,6 +326,7 @@ pub fn render(diag: &BlockDiagram, theme: Theme, _use_foreign_object: bool) -> S
                 svg_id,
                 line_color,
                 primary_text,
+                vars.font_family,
             ));
         }
     }
@@ -378,13 +378,12 @@ fn render_node(
                 stroke = cluster_border
             ),
         };
-        s.push_str(&format!(
-            r##"<rect class="basic cluster composite label-container" style="{cluster_style}" rx="0" ry="0" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"##,
-            cluster_style = cluster_style,
-            x = fmt(-hw),
-            y = fmt(-hh),
-            w = fmt(w),
-            h = fmt(h),
+        s.push_str(&cluster_composite_rect(
+            &fmt(-hw),
+            &fmt(-hh),
+            &fmt(w),
+            &fmt(h),
+            &cluster_style,
         ));
         s.push_str("</g>");
         return s;
@@ -417,9 +416,13 @@ fn render_node(
             let natural_h = FONT_SIZE * 2.0; // 32
             let nhw = natural_w / 2.0;
             let nhh = natural_h / 2.0; // = 16 = rx
-            s.push_str(&format!(
-                r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" ry="{r}" class="label-container" style="{style}"></rect>"##,
-                x = fmt(-nhw), y = fmt(-nhh), w = fmt(natural_w), h = fmt(natural_h), r = fmt(nhh), style = node_style,
+            s.push_str(&node_rect_stadium(
+                &fmt(-nhw),
+                &fmt(-nhh),
+                &fmt(natural_w),
+                &fmt(natural_h),
+                &fmt(nhh),
+                &node_style,
             ));
         }
         BlockShape::Diamond => {
@@ -460,13 +463,7 @@ fn render_node(
                 "M 0,{ry} a {rx},{ry} 0,0,0 {dx} 0 a {rx},{ry} 0,0,0 -{dx} 0 l 0,{bh} a {rx},{ry} 0,0,0 {dx} 0 l 0,-{bh}",
                 ry = fmt(ry_val), rx = fmt(rx_val), dx = fmt(dx), bh = fmt(body_h),
             );
-            s.push_str(&format!(
-                r##"<path style="{style}" d="{d}" transform="translate({tx},{ty})"></path>"##,
-                style = node_style,
-                d = d,
-                tx = fmt(tx),
-                ty = fmt(ty),
-            ));
+            s.push_str(&node_cylinder_path(&node_style, &d, &fmt(tx), &fmt(ty)));
         }
         BlockShape::BlockArrow => {
             // Faithful port of Mermaid's blockArrowHelper.ts.
@@ -565,10 +562,7 @@ fn render_node(
                     )
                 }
             };
-            s.push_str(&format!(
-                r##"<polygon points="{pts}" class="label-container" style="{node_style}"></polygon>"##,
-                pts = pts, node_style = node_style,
-            ));
+            s.push_str(&node_block_arrow(&pts, &node_style));
         }
         BlockShape::Hexagon => {
             let indent = hh * 0.5;
@@ -637,6 +631,7 @@ fn render_edge(
     svg_id: &str,
     line_color: &str,
     text_color: &str,
+    ff: &str,
 ) -> String {
     // Start point: intersection on source boundary toward target center
     let (sx, sy) = intersect_rect(fx, fy, fw / 2.0, fh / 2.0, tx, ty);
@@ -714,6 +709,7 @@ fn render_edge(
                 &fmt(mid_y - 5.0),
                 &esc(label),
                 text_color,
+                ff,
             ));
         }
     }

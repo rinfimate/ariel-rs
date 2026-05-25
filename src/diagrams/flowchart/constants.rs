@@ -7,20 +7,16 @@
 /// Default font size for node labels (px).
 pub const FONT_SIZE: f64 = 16.0;
 
-/// TEXT_SCALE: browser renders Arial 16px ~11.7% wider than ab_glyph raw metrics.
-/// Now using monospace (Courier New) metrics via measure_mono.
-#[allow(dead_code)]
-pub const TEXT_SCALE: f64 = 1.117;
-
 // ---------------------------------------------------------------------------
 // Node geometry
 // ---------------------------------------------------------------------------
 
-/// Height of a standard rectangular node (px).
-pub const RECT_H: f64 = 54.0;
+/// Height of a standard rectangular node. Calibrated from ref/flowchart_lr_basic.svg
+/// rect height=47 = FONT_SIZE*1.1 + 2*v_pad(15) matching Mermaid's lineHeight=1.1.
+pub const RECT_H: f64 = FONT_SIZE * 1.1 + 30.0; // 17.6 + 30 = 47.6
 
-/// Height of compact nodes: Stadium, Subroutine, Asymmetric (px).
-pub const COMPACT_H: f64 = 39.0;
+/// Height of compact nodes (Stadium, Subroutine, Asymmetric): line-height + v_pad(7.5px each side).
+pub const COMPACT_H: f64 = FONT_SIZE * 1.1 + 15.0; // 17.6 + 15 = 32.6
 
 /// Horizontal padding (each side) for Rectangle / Default nodes (px).
 pub const H_PAD: f64 = 30.0;
@@ -70,8 +66,8 @@ pub const CYLINDER_BODY_H: f64 = 49.0;
 // Label geometry
 // ---------------------------------------------------------------------------
 
-/// Height of a `<foreignObject>` label box (px).
-pub const LABEL_FO_HEIGHT: f64 = 24.0;
+/// Height of a label box reserved by dagre. Matches Mermaid's text line-height = FONT_SIZE * 1.3125 = 21.
+pub const LABEL_FO_HEIGHT: f64 = 21.0;
 
 /// Y-offset applied to the label `<g>` element (= -LABEL_FO_HEIGHT / 2, px).
 pub const LABEL_Y_OFFSET: i32 = -12;
@@ -81,7 +77,9 @@ pub const LABEL_Y_OFFSET: i32 = -12;
 pub const CYLINDER_LABEL_Y_OFFSET: i32 = -2;
 
 /// Y baseline for plain SVG `<text>` node labels, relative to the group origin (px).
-pub const TEXT_LABEL_Y: i32 = 5;
+/// Ref Mermaid uses translate(0, -8.5) on the label group; combined with the tspan-with-dy
+/// pattern in label_tspan, that places the glyph baseline at y=-1 (≈ vertical centre).
+pub const TEXT_LABEL_Y: i32 = 0;
 
 /// Y offset added to the cluster-rect top to position the plain-text cluster label (px).
 pub const CLUSTER_LABEL_TEXT_DY: f64 = 14.0;

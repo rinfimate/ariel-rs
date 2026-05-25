@@ -10,8 +10,9 @@ pub const SECTION_WIDTH: f64 = 200.0;
 /// Horizontal gap between adjacent columns (px).
 pub const SECTION_GAP: f64 = 5.0;
 
-/// Fixed height of each item card (px).
-pub const ITEM_HEIGHT: f64 = 44.0;
+/// Minimum height of each item card (px). Calibrated from ref: single-line cards
+/// render at 37px = FONT_SIZE*1.1 + ~19.4 padding.
+pub const ITEM_HEIGHT: f64 = 37.0;
 
 /// Fixed width of each item card (px). Equal to SECTION_WIDTH − 15.
 pub const ITEM_WIDTH: f64 = 185.0;
@@ -78,14 +79,11 @@ pub const COL_LEFT_BASE: f64 = 100.0;
 /// Font size used for rendering kanban item labels (px).
 pub const FONT_SIZE: f64 = 16.0;
 
-/// Line height = font_size × 1.5 (CSS default line-height).
-pub const LINE_HEIGHT: f64 = FONT_SIZE * 1.5;
+/// Line height = font_size × 1.1 (Mermaid `createText.ts` uses lineHeight=1.1).
+pub const LINE_HEIGHT: f64 = FONT_SIZE * 1.1;
 
 /// Available width for text in each item card (px). Matches the foreignObject width.
 pub const AVAILABLE_WIDTH: f64 = ITEM_WIDTH - 10.0;
 
 /// Vertical padding (top + bottom) added to wrapped text in each card (px).
 pub const V_PADDING: f64 = 20.0;
-
-/// Scale factor: browser renders item text slightly wider than ab_glyph metrics.
-pub const TEXT_SCALE: f64 = 1.13;

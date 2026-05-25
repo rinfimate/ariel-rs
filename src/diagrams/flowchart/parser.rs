@@ -56,6 +56,13 @@ pub struct FlowEdge {
     pub to: String,
     pub label: Option<String>,
     pub style: EdgeStyle,
+    /// Dagre `minlen` derived from the link syntax — matches Mermaid's
+    /// `destructEndLink` length = line.length - 1 (where line is the link
+    /// string minus its trailing arrow head). Bidirectional links like
+    /// `<--x`, `<-->`, `o--o` get length=2 because the leading `<`/`o`
+    /// adds to the line length, putting the target one rank further from
+    /// the source than a plain `-->`.
+    pub length: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -305,6 +312,7 @@ fn parse_statement(line: &str, diag: &mut FlowchartDiagram) {
         }
 
         // Create edges: each left × each right
+        let length = edge_length_for(&style);
         for l in &left_nodes {
             for r in &right_nodes {
                 diag.edges.push(FlowEdge {
@@ -312,6 +320,7 @@ fn parse_statement(line: &str, diag: &mut FlowchartDiagram) {
                     to: r.clone(),
                     label: label.clone(),
                     style: style.clone(),
+                    length,
                 });
             }
         }
@@ -630,6 +639,30 @@ fn normalize_color(c: &str) -> String {
 }
 
 // ─── Edge parser ─────────────────────────────────────────────────────────────
+
+/// Match Mermaid's `destructEndLink` length computation for our supported edge
+/// styles. Mermaid: `length = line.length - 1` where `line` is the link string
+/// minus its trailing arrow char. Bidirectional links keep the leading `<`/`o`
+/// in `line`, adding one to length. For dotted links, length = dot count.
+fn edge_length_for(style: &EdgeStyle) -> usize {
+    // Mermaid's destructEndLink: when the start char matches the end arrow
+    // marker (e.g. `<-->` ends in `>` and starts with `<`), the link is
+    // recognised as "double_" and the leading char is sliced off the line
+    // before computing length. When start/end don't match (e.g. `<--x`
+    // starts with `<` but ends in `x`), the leading char STAYS in line,
+    // adding 1 to length. Length = line.length - 1.
+    //
+    // - `-->`   → line "--"  → 1
+    // - `<-->`  → "double_arrow_point", line "--" → 1
+    // - `<--x`  → "arrow_cross" (no double), line "<--" → 2  ← only this case
+    // - `o--o`  → "double_arrow_circle", line "--" → 1
+    // - `<==>`  → "double_arrow_point", line "==" → 1
+    // - `<-.->` → "double_arrow_point", line "-.-", dots=1 → 1
+    match style {
+        EdgeStyle::BiCrossArrow => 2,
+        _ => 1,
+    }
+}
 
 /// Returns (style, label, new_pos) or None if no edge at this position
 fn try_parse_edge(chars: &[char], pos: usize) -> Option<(EdgeStyle, Option<String>, usize)> {

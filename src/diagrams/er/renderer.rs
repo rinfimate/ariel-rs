@@ -25,15 +25,15 @@ use super::templates::{
     fo_label, marker_end, marker_start, midpoint, render_markers, render_relationship,
     self_loop_edge_label, self_loop_path_end, self_loop_path_mid, self_loop_path_start, svg_root,
 };
-use crate::text::measure;
+use crate::backends::layout;
+use crate::backends::measure;
 use crate::theme::Theme;
 use dagre_dgl_rs::graph::{EdgeLabel, Graph, GraphLabel, NodeLabel};
-use dagre_dgl_rs::layout::layout;
 
 // ── Measurement helpers ────────────────────────────────────────────────────────
 
 fn tw(text: &str, font_size: f64) -> f64 {
-    measure(text, font_size).0 * TEXT_SCALE
+    measure(text, font_size).0
 }
 
 // ── Entity geometry ───────────────────────────────────────────────────────────
@@ -226,6 +226,7 @@ fn render_entity_svg(
             label_text,
             "",
             vars.primary_text,
+            vars.font_family,
         ));
     } else {
         // With-attr: entity name label centered in the name row (y=0 to y=ROW_H)
@@ -237,6 +238,7 @@ fn render_entity_svg(
             label_text,
             "",
             vars.primary_text,
+            vars.font_family,
         ));
 
         // Horizontal divider after name row
@@ -280,6 +282,7 @@ fn render_entity_svg(
                 &attr.attribute_type,
                 "",
                 vars.primary_text,
+                vars.font_family,
             ));
             s.push_str(&fo_label(
                 geom.name_col_x + ATTR_PADDING / 2.0,
@@ -289,6 +292,7 @@ fn render_entity_svg(
                 &attr.attribute_name,
                 "",
                 vars.primary_text,
+                vars.font_family,
             ));
 
             if geom.has_key {
@@ -302,6 +306,7 @@ fn render_entity_svg(
                     &key_str,
                     "",
                     vars.primary_text,
+                    vars.font_family,
                 ));
             }
             if geom.has_comment {
@@ -314,6 +319,7 @@ fn render_entity_svg(
                     &attr.attribute_comment,
                     "",
                     vars.primary_text,
+                    vars.font_family,
                 ));
             }
         }
@@ -533,6 +539,8 @@ pub fn render(diag: &ErDiagram, theme: Theme) -> String {
                         REL_FONT_SIZE,
                         &esc(&rel.role_a),
                         vars.primary_text,
+                        vars.er_relation_label_bg,
+                        vars.font_family,
                     ));
                 }
             }

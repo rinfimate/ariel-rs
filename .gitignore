@@ -53,3 +53,4 @@ visual-regression/corpus/**/*.svg
 visual-regression/rsvg_output/**/*.png
 visual-regression/rsvg_output/**/*.svg
 visual-regression/**/*.svg
+visual-regression/**/*.png

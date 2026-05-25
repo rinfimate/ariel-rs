@@ -37,9 +37,9 @@ pub(crate) fn svg_root_empty(max_w: i64, vb_x: i64, vb_y: i64, vb_w: i64, vb_h: 
 }
 
 /// Render the outer SVG wrapper element for a non-empty treemap.
-pub(crate) fn svg_root(max_w: i64, vb_x: i64, vb_y: i64, vb_w: i64, vb_h: i64) -> String {
+pub(crate) fn svg_root(max_w: i64, vb_x: i64, vb_y: i64, vb_w: i64, vb_h: i64, ff: &str) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" width="100%" style="max-width: {max_w}px;" viewBox="{vb_x} {vb_y} {vb_w} {vb_h}" role="graphics-document" class="flowchart">"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" font-family="{ff}" width="100%" style="max-width: {max_w}px;" viewBox="{vb_x} {vb_y} {vb_w} {vb_h}" role="graphics-document" class="flowchart">"##,
     )
 }
 

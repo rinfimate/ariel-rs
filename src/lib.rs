@@ -15,6 +15,7 @@
 //! For a fallible variant that returns [`RenderError`] instead of an error SVG,
 //! use [`try_render`].
 #![deny(missing_docs)]
+pub mod backends;
 pub(crate) mod diagrams;
 /// Error and parse-result types for ariel-rs diagram parsing and rendering.
 ///

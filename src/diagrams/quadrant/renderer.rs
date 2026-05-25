@@ -514,7 +514,12 @@ pub fn render(diag: &QuadrantDiagram, theme: Theme) -> String {
 
     let mut out = Vec::<String>::new();
 
-    out.push(templates::svg_root(id, &fmt(width), &fmt(height)));
+    out.push(templates::svg_root(
+        id,
+        &fmt(width),
+        &fmt(height),
+        vars.font_family,
+    ));
     out.push(r#"<g class="main">"#.to_string());
 
     out.push(r#"<g class="quadrants">"#.to_string());

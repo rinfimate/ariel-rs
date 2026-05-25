@@ -1,10 +1,9 @@
 // Usage: node svg_to_png.mjs <dir>
 // Converts all *.svg files in visual-regression/<dir>/ to *.png.
 //
-// Uses resvg for all directories (fast, consistent rendering).
-// Note: SVGs using foreignObject may be skipped if resvg cannot parse them.
+// Uses sharp (librsvg) — full CSS <style> support, exact viewBox dimensions.
 
-import { Resvg } from '@resvg/resvg-js';
+import sharp from 'sharp';
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,29 +24,42 @@ if (svgFiles.length === 0) {
   process.exit(0);
 }
 
+/** Extract intrinsic pixel size from an SVG string.
+ *  Priority: viewBox (most reliable) → explicit width/height attrs.
+ *  Returns { w, h } in whole pixels. */
+function svgSize(svgText) {
+  const vb = svgText.match(/viewBox="([^"]+)"/);
+  if (vb) {
+    const parts = vb[1].trim().split(/[\s,]+/).map(Number);
+    if (parts.length === 4) {
+      const w = Math.round(Math.abs(parts[2]));
+      const h = Math.round(Math.abs(parts[3]));
+      if (w > 0 && h > 0) return { w, h };
+    }
+  }
+  // Fallback: explicit width/height (px values only)
+  const wm = svgText.match(/\bwidth="(\d+(?:\.\d+)?)"/);
+  const hm = svgText.match(/\bheight="(\d+(?:\.\d+)?)"/);
+  if (wm && hm) return { w: Math.round(+wm[1]), h: Math.round(+hm[1]) };
+  return { w: 800, h: 600 }; // safe fallback
+}
+
 let converted = 0;
 let failed = 0;
 
 for (const file of svgFiles) {
   const svgPath = join(dir, file);
   const pngPath = join(dir, file.replace(/\.svg$/, '.png'));
-  // Replace HTML entities not valid in XML (resvg parses SVG as XML)
-  const svgRaw = readFileSync(svgPath, 'utf8')
-    .replace(/&nbsp;/g, '&#160;')
-    .replace(/&mdash;/g, '&#8212;')
-    .replace(/&ndash;/g, '&#8211;')
-    .replace(/&hellip;/g, '&#8230;')
-    .replace(/&amp;nbsp;/g, '&#160;');
-  const svg = Buffer.from(svgRaw, 'utf8');
+  const svgText = readFileSync(svgPath, 'utf8');
+  const { w, h } = svgSize(svgText);
 
   try {
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'width', value: 1200 },
-      font: { loadSystemFonts: true },
-    });
-    const pngData = resvg.render().asPng();
+    const pngData = await sharp(Buffer.from(svgText))
+      .resize(w, h)
+      .png()
+      .toBuffer();
     writeFileSync(pngPath, pngData);
-    console.log(`  ${basename(file)} => ${basename(pngPath)}`);
+    console.log(`  ${basename(file)} (${w}x${h}) => ${basename(pngPath)}`);
     converted++;
   } catch (err) {
     console.error(`  SKIP ${basename(file)}: ${err.message.split('\n')[0]}`);

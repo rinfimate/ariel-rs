@@ -25,8 +25,8 @@ pub const DRAW_WIDTH: f64 = SVG_WIDTH - LEFT_PAD - RIGHT_PAD; // = 1834.0
 pub const TITLE_TOP: f64 = 25.0;
 
 /// Y where the first task band starts, after title + axis label area (px).
-/// Matches defaultConfig.gantt.topPadding = 50.
-pub const CHART_TOP: f64 = 50.0;
+/// Mermaid reference SVG places the grid at y=98 = 48 + 2*24 + 2 (not 50 as defaultConfig says).
+pub const CHART_TOP: f64 = 48.0;
 
 /// Height of each task row (px).
 pub const ROW_HEIGHT: f64 = 24.0;

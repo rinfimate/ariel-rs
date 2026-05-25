@@ -131,9 +131,9 @@ pub fn task_text_fill<'a>(
 // ---------------------------------------------------------------------------
 
 /// Render the outer SVG wrapper for a Gantt chart.
-pub fn svg_root(id: &str, w: f64, h: i64) -> String {
+pub fn svg_root(id: &str, w: f64, h: i64, ff: &str) -> String {
     format!(
-        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="gantt">"##,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="{ff}" viewBox="0 0 {w} {h}" style="max-width: {w}px;" role="graphics-document document" aria-roledescription="gantt">"##,
         id = id,
         w = w,
         h = h,

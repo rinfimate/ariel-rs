@@ -16,9 +16,9 @@ pub use crate::diagrams::util::{esc, fmt};
 
 /// Render the outer `<svg>` element.
 /// Mermaid JS sets width="100%" with max-width style and a square viewBox.
-pub fn svg_root(total_w: &str, total_h: &str) -> String {
+pub fn svg_root(total_w: &str, total_h: &str, ff: &str) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" style="max-width: {total_w}px;" viewBox="0 0 {total_w} {total_h}" role="graphics-document document" aria-roledescription="radar">"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="{ff}" style="max-width: {total_w}px;" viewBox="0 0 {total_w} {total_h}" role="graphics-document document" aria-roledescription="radar">"##,
     )
 }
 

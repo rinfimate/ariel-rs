@@ -18,7 +18,7 @@ use super::templates::{self, esc, fmt};
 /// of all rendered coordinates (branch endpoints, label boxes, head extent)
 /// and derive the viewBox from those, matching what Mermaid's applyPaddedViewBox
 /// produces after calling getBBox().
-use crate::text::measure;
+use crate::backends::{measure, measure_bold};
 use crate::theme::Theme;
 
 /// Wrap text to at most `max_chars` characters per line, splitting on whitespace.
@@ -96,13 +96,8 @@ fn measure_text_block(text: &str, font_size: f64) -> (f64, f64, usize) {
     (max_w, lh, lines.len())
 }
 
-/// Like `measure_text_block` but scales the returned width by `TEXT_WIDTH_SCALE`
-/// so that layout calculations match the Arial-based reference widths produced by
-/// Mermaid's getBBox() calls.  Use this wherever a width drives a coordinate
-/// calculation (bounding-box tracking, box sizing) rather than an SVG attribute.
 fn measure_layout_width(text: &str, font_size: f64) -> (f64, f64, usize) {
-    let (w, lh, n) = measure_text_block(text, font_size);
-    (w * TEXT_WIDTH_SCALE, lh, n)
+    measure_text_block(text, font_size)
 }
 
 pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
@@ -231,10 +226,15 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
     let max_chars_head = ((110.0 / (head_font_size * 0.6)).floor() as usize).max(6);
     let wrapped_head = wrap_text(head_label, max_chars_head);
     let lh = head_font_size * 1.05;
-    // JS: w = max(60, tb.width+6) where tb.width is getBBox() at CSS-rendered 14px (Arial, SVG).
-    // Liberation Sans at 14px × HEAD_TEXT_SCALE ≈ Arial 14px SVG getBBox (empirical from reference).
-    let (tb_width_14_raw, _, n_lines) = measure_text_block(&wrapped_head, 14.0);
-    let tb_width_14 = tb_width_14_raw * HEAD_TEXT_SCALE;
+    // Mermaid: w = max(60, tb.width+6) where tb.width is getBBox() on SVG text at CSS-rendered 14px
+    // with CSS class .ishikawa-head-label { font-weight: 600 } — the head text is bold.
+    // We must measure bold to match the rendered width (bold is ~8.2% wider than regular).
+    let head_lines = split_lines(&wrapped_head);
+    let n_lines = head_lines.len();
+    let tb_width_14: f64 = head_lines
+        .iter()
+        .map(|l| measure_bold(l, 14.0).0)
+        .fold(0.0_f64, f64::max);
     let tb_height = n_lines as f64 * lh;
     // w and h used for both kite path and text centering (one consistent value, as in JS)
     let head_w = (tb_width_14 + 6.0).max(60.0);
@@ -264,13 +264,12 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
         pt,
     );
 
-    elements.push(format!(
-        r##"<g class="ishikawa-head-group" transform="translate(0,{:.5})"><path class="ishikawa-head" fill="{pc}" stroke="{lc}" stroke-width="2" d="{hp}"/>{ht}</g>"##,
+    elements.push(templates::head_group_multiline(
         spine_y,
-        pc = pc,
-        lc = lc,
-        hp = head_path,
-        ht = head_text_svg,
+        pc,
+        lc,
+        &head_path,
+        &head_text_svg,
     ));
 
     // Head occupies from y = spine_y - head_h/2 to spine_y + head_h/2
@@ -303,6 +302,7 @@ pub fn render(diag: &IshikawaDiagram, theme: Theme) -> String {
         translate_x,
         translate_y,
         &content,
+        vars.font_family,
     )
 }
 
@@ -386,10 +386,9 @@ fn draw_branch(
     let box_w = tw + 40.0;
     let box_h = tb_h + 4.0;
     let box_y = cause_label_y - box_h * 0.57;
-    elements.push(format!(
-        r#"<g class="ishikawa-label-group">{}{}</g>"#,
-        templates::cause_label_rect(box_x, box_y, box_w, box_h, primary_color, line_color),
-        cause_text_svg,
+    elements.push(templates::cause_label_group(
+        &templates::cause_label_rect(box_x, box_y, box_w, box_h, primary_color, line_color),
+        &cause_text_svg,
     ));
 
     // The leftmost x from the cause label text
@@ -528,9 +527,8 @@ fn draw_branch(
 
         leftmost_x = leftmost_x.min(text_lx);
 
-        elements.push(format!(
-            r#"<g class="{}">{}{}</g>"#,
-            grp_class, sub_el, text_el
+        elements.push(templates::branch_subtree_group(
+            grp_class, &sub_el, &text_el,
         ));
 
         if entry.child_count > 0 {
@@ -592,21 +590,22 @@ fn build_multiline_text_weighted(
         } else {
             format!("{:.5}", lh)
         };
-        tspans.push_str(&format!(
-            r#"<tspan x="{:.5}" dy="{}">{}</tspan>"#,
-            x,
-            dy,
-            esc(line)
-        ));
+        tspans.push_str(&templates::text_tspan_line(x, &dy, &esc(line)));
     }
     let weight_attr = if font_weight.is_empty() {
         String::new()
     } else {
         format!(" font-weight=\"{}\"", font_weight)
     };
-    format!(
-        r#"<text class="{}" fill="{}" text-anchor="{}" x="{:.5}" y="{:.5}" font-size="{}"{} dominant-baseline="middle">{}</text>"#,
-        cls, fill, anchor, x, y_first, font_size, weight_attr, tspans,
+    templates::multiline_text(
+        cls,
+        fill,
+        anchor,
+        x,
+        y_first,
+        font_size,
+        &weight_attr,
+        &tspans,
     )
 }
 

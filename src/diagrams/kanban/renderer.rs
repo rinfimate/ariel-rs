@@ -15,7 +15,7 @@ use super::templates::{self, esc, priority_line};
 ///   - viewBox: "90 -310 W H" where W = 15 + n_cols*205, H = max_col_h + 20.
 ///
 /// This port faithfully replicates the Mermaid coordinate system and CSS class scheme.
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 
 // ── Layout math ────────────────────────────────────────────────────────────────
@@ -37,8 +37,14 @@ fn item_height(label: &str) -> f64 {
     // Mermaid renders kanban labels at 16px — use 16px for wrapping estimation
     // so items wrap at the same point the browser would wrap them.
     let (text_w, _) = measure(label, FONT_SIZE);
-    let lines = ((text_w * TEXT_SCALE) / AVAILABLE_WIDTH).ceil().max(1.0);
-    (lines * LINE_HEIGHT + V_PADDING).max(ITEM_HEIGHT)
+    let lines = (text_w / AVAILABLE_WIDTH).ceil().max(1.0);
+    if lines <= 1.0 {
+        // Single-line: use exact ITEM_HEIGHT (37 in ref) instead of computed
+        // value which floats slightly above due to LINE_HEIGHT * 1.1 + padding.
+        ITEM_HEIGHT
+    } else {
+        lines * LINE_HEIGHT + V_PADDING
+    }
 }
 
 /// Map a priority string to its stroke color.
@@ -62,7 +68,7 @@ fn fo_height(label: &str) -> f64 {
 #[allow(dead_code)]
 fn text_height(label: &str) -> f64 {
     let (text_w, _) = measure(label, FONT_SIZE);
-    let lines = ((text_w * TEXT_SCALE) / AVAILABLE_WIDTH).ceil().max(1.0);
+    let lines = (text_w / AVAILABLE_WIDTH).ceil().max(1.0);
     lines * LINE_HEIGHT
 }
 
@@ -78,7 +84,7 @@ fn wrap_label(label: &str) -> Vec<String> {
             format!("{} {}", current, word)
         };
         let (w, _) = measure(&candidate, FONT_SIZE);
-        if w * TEXT_SCALE > AVAILABLE_WIDTH && !current.is_empty() {
+        if w > AVAILABLE_WIDTH && !current.is_empty() {
             lines.push(current.clone());
             current = word.to_string();
         } else {
@@ -154,6 +160,7 @@ fn render_section_and_items(
     primary_text: &str,
     card_bg: &str,
     theme: crate::theme::Theme,
+    ff: &str,
 ) -> (String, String) {
     let cx = col_center_x(col_idx);
     let lx = col_left_x(col_idx);
@@ -180,6 +187,7 @@ fn render_section_and_items(
         col_top,
         &esc(&section.label),
         header_text,
+        ff,
     ));
 
     sec_svg.push_str("</g>");
@@ -209,6 +217,7 @@ fn render_section_and_items(
                     fo_height(&item.label),
                     &esc(&item.label),
                     primary_text,
+                    ff,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -240,6 +249,7 @@ fn render_section_and_items(
                     fo_height(&item.label),
                     &esc(&item.label),
                     primary_text,
+                    ff,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -263,6 +273,7 @@ fn render_section_and_items(
                     fo_height(&item.label),
                     &esc(&item.label),
                     primary_text,
+                    ff,
                 ));
                 items_svg.push_str("</g>");
                 continue;
@@ -299,6 +310,7 @@ fn render_section_and_items(
                 &lines,
                 LINE_HEIGHT,
                 primary_text,
+                ff,
             ));
         } else {
             items_svg.push_str(&templates::item_label_fo(
@@ -309,6 +321,7 @@ fn render_section_and_items(
                 label_fo_h,
                 &esc(&item.label),
                 primary_text,
+                ff,
             ));
         }
 
@@ -329,6 +342,7 @@ fn render_section_and_items(
                         24.0,
                         &esc(ticket),
                         primary_text,
+                        ff,
                     ));
                 } else {
                     items_svg.push_str(&templates::ticket_link(
@@ -337,6 +351,7 @@ fn render_section_and_items(
                         meta_y,
                         &esc(ticket),
                         primary_text,
+                        ff,
                     ));
                 }
             }
@@ -348,6 +363,7 @@ fn render_section_and_items(
                     item_w_half + 5.0,
                     &esc(assigned),
                     primary_text,
+                    ff,
                 ));
             }
         } else {
@@ -421,6 +437,7 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
         VIEWBOX_Y as i64,
         vb_w as u64,
         vb_h as u64,
+        vars.font_family,
     ));
 
     // Empty g (matches Mermaid structure)
@@ -442,6 +459,7 @@ pub fn render(diag: &KanbanDiagram, theme: Theme) -> String {
             vars.primary_text,
             vars.kanban_card_bg,
             theme,
+            vars.font_family,
         );
         sections_svg.push_str(&sec_svg);
         items_svg_parts.push(items_svg);

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use ab_glyph::{Font, FontRef, PxScale, ScaleFont};
 use std::sync::OnceLock;
 

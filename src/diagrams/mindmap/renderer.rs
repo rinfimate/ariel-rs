@@ -1,7 +1,7 @@
 use super::constants::*;
 use super::parser::{MindmapDiagram, MindmapNode, NodeType};
 use super::templates::{self, esc, node_group_open};
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 
 #[derive(Debug, Clone)]
@@ -64,15 +64,16 @@ fn flatten_node(node: &MindmapNode, parent: Option<usize>, out: &mut Vec<LayoutN
     }
 }
 
-fn count_leaves(nodes: &[LayoutNode], idx: usize) -> usize {
+fn subtree_h(nodes: &[LayoutNode], idx: usize) -> f64 {
     if nodes[idx].children.is_empty() {
-        1
+        nodes[idx].height + NODE_V_GAP
     } else {
-        nodes[idx]
+        let sum: f64 = nodes[idx]
             .children
             .iter()
-            .map(|&ci| count_leaves(nodes, ci))
-            .sum()
+            .map(|&ci| subtree_h(nodes, ci))
+            .sum();
+        sum.max(nodes[idx].height + NODE_V_GAP)
     }
 }
 
@@ -90,17 +91,17 @@ fn layout_mindmap(nodes: &mut Vec<LayoutNode>) {
     let right_children: Vec<usize> = root_children[..n_right].to_vec();
     let left_children: Vec<usize> = root_children[n_right..].to_vec();
 
-    let left_leaves = left_children
+    let right_span: f64 = right_children
         .iter()
-        .map(|&ci| count_leaves(nodes, ci))
-        .sum::<usize>()
-        .max(1);
-    let right_leaves = right_children
+        .map(|&ci| subtree_h(nodes, ci))
+        .sum::<f64>()
+        .max(1.0);
+    let left_span: f64 = left_children
         .iter()
-        .map(|&ci| count_leaves(nodes, ci))
-        .sum::<usize>()
-        .max(1);
-    let total_span = (left_leaves.max(right_leaves)) as f64 * NODE_SLOT;
+        .map(|&ci| subtree_h(nodes, ci))
+        .sum::<f64>()
+        .max(1.0);
+    let total_span = left_span.max(right_span);
     let root_y = total_span / 2.0;
     nodes[0].x = 0.0;
     nodes[0].y = root_y;
@@ -111,7 +112,7 @@ fn layout_mindmap(nodes: &mut Vec<LayoutNode>) {
             nodes,
             &right_children,
             root_half_w,
-            root_y - (right_leaves as f64 * NODE_SLOT) / 2.0,
+            root_y - right_span / 2.0,
             1.0,
         );
     }
@@ -119,7 +120,7 @@ fn layout_mindmap(nodes: &mut Vec<LayoutNode>) {
         nodes,
         &left_children,
         root_half_w,
-        root_y - (left_leaves as f64 * NODE_SLOT) / 2.0,
+        root_y - left_span / 2.0,
         -1.0,
     );
 }
@@ -133,7 +134,7 @@ fn layout_side(
 ) {
     let mut cursor = start_y;
     for &ci in children {
-        let span = count_leaves(nodes, ci) as f64 * NODE_SLOT;
+        let span = subtree_h(nodes, ci);
         let cy = cursor + span / 2.0;
         let chw = nodes[ci].width / 2.0;
         nodes[ci].x = dir * (parent_hw + NODE_H_GAP + chw);
@@ -156,7 +157,7 @@ fn layout_subtree(
 ) {
     let mut cursor = slot_start;
     for &ci in children {
-        let span = count_leaves(nodes, ci) as f64 * NODE_SLOT;
+        let span = subtree_h(nodes, ci);
         let cy = cursor + span / 2.0;
         let chw = nodes[ci].width / 2.0;
         nodes[ci].x = px + dir * (phw + NODE_H_GAP + chw);

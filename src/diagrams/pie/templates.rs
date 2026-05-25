@@ -26,9 +26,9 @@ pub fn fmt_value(v: f64) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the outer `<svg>` element for a pie diagram.
-pub fn svg_root(id: &str, vbx: &str, vbw: &str, vbh: &str, mw: &str) -> String {
+pub fn svg_root(id: &str, vbx: &str, vbw: &str, vbh: &str, mw: &str, ff: &str) -> String {
     format!(
-        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Arial, sans-serif" viewBox="{vbx} 0 {vbw} {vbh}" style="max-width: {mw}px;" role="graphics-document document" aria-roledescription="pie">"##,
+        r##"<svg id="{id}" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="{ff}" viewBox="{vbx} 0 {vbw} {vbh}" style="max-width: {mw}px;" role="graphics-document document" aria-roledescription="pie">"##,
     )
 }
 

@@ -233,7 +233,7 @@ impl Theme {
                 xychart_axis_color: "#131300",
                 er_row_fill_even: "#ECECFF",
                 er_row_fill_odd: "#ffffff",
-                er_relation_label_bg: "rgba(248.6666666666, 255, 235.9999999999, 0.5)",
+                er_relation_label_bg: "rgba(232, 232, 232, 0.8)",
                 git_branch_colors: &[
                     (
                         "hsl(240, 100%, 46.2745098039%)",
@@ -399,7 +399,7 @@ impl Theme {
                 xychart_axis_color: "#e0dfdf",
                 er_row_fill_even: "hsl(180,1.5873015873%,2.3529411765%)",
                 er_row_fill_odd: "hsl(180,1.5873015873%,17.3529411765%)",
-                er_relation_label_bg: "rgba(32.0000000001, 31.3333333334, 31.0000000001, 0.5)",
+                er_relation_label_bg: "rgba(232, 232, 232, 0.8)",
                 git_branch_colors: &[
                     (
                         "hsl(180, 1.5873015873%, 48.3529411765%)",
@@ -569,7 +569,7 @@ impl Theme {
                 xychart_axis_color: "#321b67",
                 er_row_fill_even: "hsl(78.1578947368,58.4615384615%,94.5098039216%)",
                 er_row_fill_odd: "#ffffff",
-                er_relation_label_bg: "rgba(224.6153846155, 238.5923076923, 192.4076923078, 0.5)",
+                er_relation_label_bg: "rgba(232, 232, 232, 0.8)",
                 git_branch_colors: &[
                     (
                         "hsl(78.1578947368, 58.4615384615%, 49.5098039216%)",

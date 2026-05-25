@@ -19,11 +19,20 @@ pub const PAD_X: f64 = 10.0;
 pub const PAD_Y: f64 = 8.0;
 
 /// Row height (vertical spacing between body items inside a box, px).
-pub const ROW_H: f64 = 24.0;
+/// Calibrated from ref: test_req body item spacing = 23 (FONT_SIZE*1.1 + 5.4 padding).
+pub const ROW_H: f64 = 23.0;
 
 /// Height of the header section inside each node box (px).
-/// HEADER_H = PAD_Y + 2×ROW_H + ROW_H/2 = 8 + 48 + 12 = 68.
-pub const HEADER_H: f64 = 68.0;
+/// Calibrated from ref divider position: test_req divider at y=-20 with hh=86 → HEADER=66.
+pub const HEADER_H: f64 = 66.0;
+
+/// First body row center offset from divider line (px).
+/// Calibrated from ref: divider at -20, first body row center at -11.5 → 8.5.
+pub const BODY_FIRST_ROW_OFFSET: f64 = 8.5;
+
+/// Body bottom padding constant: last_row_center to box bottom = ROW_H/2 + this.
+/// Calibrated from ref: test_req last row at 57.5, box bottom 86 → 28.5 = ROW_H/2 + 17.
+pub const BODY_BOTTOM_PAD: f64 = 17.0;
 
 /// Minimum box width (px). Natural sizing — Mermaid's rect_min_width=200 is overridden by theme.
 #[allow(dead_code)]
@@ -39,8 +48,9 @@ pub const MIN_HEIGHT: f64 = 0.0;
 /// Node separation used by dagre (px).
 pub const NODE_SEP: f64 = 50.0;
 
-/// Rank separation used by dagre (px). Dagre adds edge-label height (18) giving total gap of 74.
-pub const RANK_SEP: f64 = 56.0;
+/// Rank separation used by dagre (px). Dagre adds edge-label height (18) giving total gap.
+/// Calibrated: ref test_req center y=268 with test_entity y=59.5 → gap 208.5 → ranksep=53.
+pub const RANK_SEP: f64 = 53.0;
 
 /// Horizontal margin around the dagre graph (px).
 pub const MARGIN_X: f64 = 8.0;
@@ -59,11 +69,6 @@ pub const MARGIN_Y: f64 = 8.0;
 // ---------------------------------------------------------------------------
 // Text measurement
 // ---------------------------------------------------------------------------
-
-/// Effective space advance width at 16 px Arial in browser string measurements (px).
-/// measure_browser() stores 0 for space, so tmw() adds this per space character.
-/// Calibrated to 4.0555: matches browser measurement for multi-space requirement texts.
-pub const SPACE_W_16: f64 = 4.0555;
 
 /// Safety margin added to text width measurements to prevent last-letter clipping (px).
 /// Set to 0: browser-measured character widths already account for glyph advance, so no

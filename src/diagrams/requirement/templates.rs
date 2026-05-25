@@ -64,25 +64,30 @@ pub fn node_divider(l: f64, r: f64, y: f64, stroke: &str) -> String {
     )
 }
 
-/// Render a centered label as a plain SVG `<text>` element.
-pub fn label_text(cx: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
-    format!(
-        "<text x=\"{cx:.3}\" y=\"{cy:.3}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text>",
+/// Render a centered label. Uses label_tspan_raw to put the translate directly on
+/// the label-group (matching Mermaid's requirement renderer structure).
+pub fn label_text(cx: f64, cy: f64, fs: f64, fill: &str, text: &str, ff: &str) -> String {
+    crate::diagrams::util::label_tspan_raw(cx, cy, text, fs, fill, "middle", "", ff)
+}
+
+/// Render a bold centered label (for node names).
+pub fn label_text_bold(cx: f64, cy: f64, fs: f64, fill: &str, text: &str, ff: &str) -> String {
+    crate::diagrams::util::label_tspan_raw(
+        cx,
+        cy,
+        text,
+        fs,
+        fill,
+        "middle",
+        " font-weight=\"bold\"",
+        ff,
     )
 }
 
-/// Render a bold centered label as a plain SVG `<text>` element (for node names).
-pub fn label_text_bold(cx: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
-    format!(
-        "<text x=\"{cx:.3}\" y=\"{cy:.3}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" font-weight=\"bold\" fill=\"{fill}\">{text}</text>",
-    )
-}
-
-/// Render a left-aligned body item label as a plain SVG `<text>` element.
-pub fn label_text_body(x: f64, cy: f64, fs: f64, fill: &str, text: &str) -> String {
-    format!(
-        "<text x=\"{x:.3}\" y=\"{cy:.3}\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text>",
-    )
+/// Render a left-aligned body item label. Uses label_tspan_raw (no -8.5 offset)
+/// because the translate goes directly on the label-group (no wrapping node group).
+pub fn label_text_body(x: f64, cy: f64, fs: f64, fill: &str, text: &str, ff: &str) -> String {
+    crate::diagrams::util::label_tspan_raw(x, cy, text, fs, fill, "start", "", ff)
 }
 
 // ---------------------------------------------------------------------------
@@ -102,19 +107,20 @@ pub fn relation_path(
     )
 }
 
-/// Render an edge label as a plain SVG `<text>` element.
-pub fn edge_label_text(
-    mx: f64,
-    my: f64,
-    lw: f64,
-    fs: f64,
-    fill: &str,
-    bg: &str,
-    text: &str,
-) -> String {
-    let ox = -(lw / 2.0);
+/// Render an edge label as a centered SVG text element (no background rect).
+pub fn edge_label_text(mx: f64, my: f64, fs: f64, fill: &str, text: &str, ff: &str) -> String {
+    // Match Mermaid's structure (inner label translates by -10.5; rect at y=0).
+    // The text contains HTML entities (&lt; &gt;) so measure with them decoded.
+    let plain = text
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    let text_w = crate::text_browser_metrics::measure_browser(&plain, fs).0;
+    let rect_w = text_w + 4.0;
+    let rx = -rect_w / 2.0;
+    let text_y = -(fs * 0.631);
     format!(
-        "<g class=\"edgeLabel\" transform=\"translate({mx:.3},{my:.3})\"><rect x=\"{ox:.3}\" y=\"-12\" width=\"{lw:.3}\" height=\"24\" fill=\"{bg}\" stroke=\"none\"/><text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fs}\" fill=\"{fill}\">{text}</text></g>",
+        "<g class=\"edgeLabel\" transform=\"translate({mx:.3},{my:.3})\"><g class=\"label\" transform=\"translate(0, -10.5)\"><rect class=\"background\" x=\"{rx:.3}\" y=\"0\" width=\"{rect_w:.3}\" height=\"21\" fill=\"rgba(232,232,232,0.8)\" stroke=\"none\"></rect><text y=\"{text_y:.3}\" text-anchor=\"middle\" font-family=\"{ff}\" font-size=\"{fs}\" fill=\"{fill}\"><tspan x=\"0\" y=\"-0.1em\" dy=\"1.1em\"><tspan>{text}</tspan></tspan></text></g></g>"
     )
 }
 

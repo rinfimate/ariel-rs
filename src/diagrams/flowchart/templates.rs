@@ -234,6 +234,11 @@ pub fn edge_path(
 /// Render an edge label using plain SVG `<text>`.
 ///
 /// `fill`: text fill color (from `vars.primary_text`).
+///
+/// Matches Mermaid's nested structure: an inner `<g class="label" transform="translate(0,-10.5)">`
+/// wraps a rect at y=0 (so it spans −10.5..+10.5, centred on the edge midpoint) and a
+/// `<text y="-10.1"><tspan x="0" y="-0.1em" dy="1.1em">` pattern that produces baseline ≈ +5.5
+/// inside the inner group — vertically centred with the rect.
 #[allow(clippy::too_many_arguments)]
 pub fn edge_label_text(
     mx: &str,
@@ -241,8 +246,8 @@ pub fn edge_label_text(
     ox: &str,
     fo_width: &str,
     fo_height: f64,
-    label_y_offset: i32,
-    text_label_y: i32,
+    _label_y_offset: i32,
+    _text_label_y: i32,
     font_family: &str,
     font_size: f64,
     text: &str,
@@ -250,7 +255,7 @@ pub fn edge_label_text(
     bg: &str,
 ) -> String {
     format!(
-        r##"<g class="edgeLabel" transform="translate({mx}, {my})"><rect x="{ox}" y="{label_y_offset}" width="{fo_width}" height="{fo_height}" fill="{bg}" stroke="none"></rect><text x="0" y="{text_label_y}" text-anchor="middle" font-family="{font_family}" font-size="{font_size}" fill="{fill}">{text}</text></g>"##,
+        r##"<g class="edgeLabel" transform="translate({mx}, {my})"><g class="label" transform="translate(0, -10.5)"><rect x="{ox}" y="0" width="{fo_width}" height="{fo_height}" fill="{bg}" stroke="none"></rect><text y="-10.1" text-anchor="middle" font-family="{font_family}" font-size="{font_size}" fill="{fill}"><tspan x="0" y="-0.1em" dy="1.1em"><tspan>{text}</tspan></tspan></text></g></g>"##,
     )
 }
 
@@ -317,16 +322,16 @@ pub fn node_group(dom_id: &str, cx: &str, cy: &str) -> String {
 }
 
 /// Render a rectangular node background (`<rect>`).
-pub fn node_rect(x: &str, w: &str, style: &str) -> String {
+pub fn node_rect(x: &str, w: &str, h: &str, y: &str, style: &str) -> String {
     format!(
-        r##"<rect class="basic label-container" style="{style}" x="{x}" y="-27" width="{w}" height="54"></rect>"##,
+        r##"<rect class="basic label-container" style="{style}" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"##,
     )
 }
 
 /// Render a rounded-rectangle node background (`<rect rx ry>`).
-pub fn node_rounded_rect(x: &str, w: &str, style: &str) -> String {
+pub fn node_rounded_rect(x: &str, w: &str, h: &str, y: &str, style: &str) -> String {
     format!(
-        r##"<rect class="basic label-container" style="{style}" rx="5" ry="5" x="{x}" y="-27" width="{w}" height="54"></rect>"##,
+        r##"<rect class="basic label-container" style="{style}" rx="5" ry="5" x="{x}" y="{y}" width="{w}" height="{h}"></rect>"##,
     )
 }
 
@@ -407,7 +412,18 @@ pub fn node_label_text_xy(
     text_fill: &str,
     label_text: &str,
 ) -> String {
+    // Mermaid's flowchart node labels use tspan-with-dy structure (htmlLabels:false path).
+    let lbl_g = crate::diagrams::util::label_tspan(
+        0.0,
+        text_label_y as f64,
+        label_text,
+        font_size,
+        "",
+        "middle",
+        &format!(" style=\"fill:{}\"", text_fill),
+        font_family,
+    );
     format!(
-        r##"<g class="label" style="{label_color_style}" transform="translate({label_tx}, 0)"><text x="0" y="{text_label_y}" text-anchor="middle" font-family="{font_family}" font-size="{font_size}" style="fill:{text_fill}">{label_text}</text></g>"##,
+        r##"<g class="label" style="{label_color_style}" transform="translate({label_tx}, 0)">{lbl_g}</g>"##,
     )
 }

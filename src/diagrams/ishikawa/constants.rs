@@ -73,26 +73,3 @@ pub const HEAD_LABEL_X_SCALE: f64 = 0.8;
 
 /// Initial x offset from head x=0 where branch placement starts (px).
 pub const SPINE_START_OFFSET: f64 = 20.0;
-
-// ---------------------------------------------------------------------------
-// Font metric correction
-// ---------------------------------------------------------------------------
-
-/// Scale factor applied to measured text widths for layout purposes.
-///
-/// Mermaid JS uses Arial (measured in a real browser via getBBox()), but we
-/// bundle LiberationSans for portability. LiberationSans runs approximately
-/// 89.6% of Arial's advance widths at the same point size, so multiplying our
-/// measurements by this factor brings computed text-bounding-box positions
-/// (and therefore the diagram's horizontal extent) into agreement with the
-/// reference SVGs.
-///
-/// Empirically derived from comparing reference getBBox() values (Arial 16 px)
-/// to our LiberationSans measurements across several strings:
-///   "SubCause1: [Bad"  ref=125.42 / ours=112.27 → ratio 1.1171
-///   "Inappropriate"    ref=94.30  / ours=84.40  → ratio 1.1173
-pub const TEXT_WIDTH_SCALE: f64 = 1.117;
-
-/// Scale factor for the head label text at 14px.
-/// Liberation Sans at 14px × 1.21 ≈ Arial 14px SVG getBBox (empirical ratio from reference).
-pub const HEAD_TEXT_SCALE: f64 = 1.21;

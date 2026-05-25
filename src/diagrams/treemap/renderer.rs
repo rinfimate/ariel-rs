@@ -459,6 +459,7 @@ pub fn render(diag: &TreemapDiagram, theme: Theme) -> String {
         fmt_i(vb_y),
         fmt_i(vb_w),
         fmt_i(vb_h),
+        vars.font_family,
     ));
 
     // Title
@@ -626,8 +627,7 @@ pub fn render(diag: &TreemapDiagram, theme: Theme) -> String {
                 if label_font_px <= min_label_font {
                     break;
                 }
-                let (tw, _) = crate::text::measure(&leaf.name, label_font_px as f64);
-                let tw = tw * 1.117; // browser (Arial) ~11.7% wider than Liberation Sans (matches LABEL_SCALE)
+                let (tw, _) = crate::backends::measure(&leaf.name, label_font_px as f64);
                 if tw <= avail_w {
                     break;
                 }

@@ -7,12 +7,12 @@
 /// font-size of 16px — erBox.ts uses foreignObject whose text inherits 16px.
 /// We measure at 16 to match actual browser-rendered box widths and row heights.
 pub const FONT_SIZE: f64 = 16.0;
-/// Foreign-object line height = FONT_SIZE × 1.5 (CSS default line-height, px).
-pub const FO_H: f64 = FONT_SIZE * 1.5; // = 24.0
+/// SVG text height for one line. Calibrated from ref/er_attributes.svg:
+/// row spacing = 35.75 = FO_H + TEXT_PADDING(18.75) → FO_H = 17.
+/// This is the empirical text bbox.height for Arial 16px in Chromium.
+pub const FO_H: f64 = 17.0;
 /// Font size for relationship labels — .edgeLabel .label{font-size:14px} in Mermaid CSS.
 pub const REL_FONT_SIZE: f64 = 14.0;
-pub const TEXT_SCALE: f64 = 1.117;
-
 // ── Entity geometry ───────────────────────────────────────────────────────────
 /// Diagram padding (conf.diagramPadding = 20, px).
 pub const DIAGRAM_PADDING: f64 = 20.0;

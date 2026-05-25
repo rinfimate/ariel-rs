@@ -5,8 +5,9 @@
 // Node geometry
 // ---------------------------------------------------------------------------
 
-/// Node height matching Mermaid block diagram defaults: 2em at 16px (px).
-pub const NODE_H: f64 = 32.0;
+/// Node height matching Mermaid block default. Empirical from ref/block_basic.svg:
+/// single-line text "A" at 16px renders to 25×20 (FONT_SIZE*1.1 + ~7.4 padding).
+pub const NODE_H: f64 = 25.0;
 
 /// Horizontal padding per side inside a node (px).
 pub const H_PAD: f64 = 4.0;
@@ -31,9 +32,6 @@ pub const GROUP_PAD: f64 = 8.0;
 
 /// Font size matching Mermaid block diagram default (px).
 pub const FONT_SIZE: f64 = 16.0;
-
-/// ab_glyph Arial measures ~11.7% narrower than browser; apply this factor to match.
-pub const TEXT_SCALE: f64 = 1.117;
 
 // ---------------------------------------------------------------------------
 // Cylinder shape

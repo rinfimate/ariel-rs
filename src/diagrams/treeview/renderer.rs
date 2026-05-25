@@ -19,7 +19,7 @@
 use super::constants::*;
 use super::parser::TreeViewDiagram;
 use super::templates::{self, esc};
-use crate::text_browser_metrics::measure_browser;
+use crate::backends::measure;
 use crate::theme::Theme;
 
 // ---------------------------------------------------------------------------
@@ -74,7 +74,8 @@ fn flatten(
 // ---------------------------------------------------------------------------
 
 /// Render a treeView diagram to an SVG string.
-pub fn render(diag: &TreeViewDiagram, _theme: Theme) -> String {
+pub fn render(diag: &TreeViewDiagram, theme: Theme) -> String {
+    let vars = theme.resolve();
     // Build flat list: synthetic "/" root wraps all diagram roots.
     let root_label = "/";
     let root_children = &diag.roots;
@@ -114,7 +115,7 @@ pub fn render(diag: &TreeViewDiagram, _theme: Theme) -> String {
     let max_right = nodes
         .iter()
         .map(|n| {
-            let (tw, _) = measure_browser(&n.label, FONT_SIZE);
+            let (tw, _) = measure(&n.label, FONT_SIZE);
             n.text_x + tw + TRAILING_ADVANCE
         })
         .fold(0.0_f64, f64::max);
@@ -132,6 +133,7 @@ pub fn render(diag: &TreeViewDiagram, _theme: Theme) -> String {
         VIEWBOX_Y,
         vb_w,
         vb_h,
+        vars.font_family,
     ));
 
     // Empty g (Mermaid boilerplate).

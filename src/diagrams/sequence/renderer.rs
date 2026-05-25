@@ -1,5 +1,6 @@
 use super::constants::*;
 use super::templates::{self, actor_man as tmpl_actor_man, defs_svg, esc};
+use crate::backends::measure;
 /// Sequence diagram renderer — faithful port of Mermaid sequenceRenderer.ts
 ///
 /// Algorithm (same as Mermaid):
@@ -11,7 +12,6 @@ use super::templates::{self, actor_man as tmpl_actor_man, defs_svg, esc};
 use crate::diagrams::sequence::parser::{
     LineType, NotePlacement, ParticipantKind, SeqItem, SequenceDiagram,
 };
-use crate::text::measure;
 use crate::theme::Theme;
 
 // ─── Mermaid default sequence config ───────────────────────────────────────
@@ -204,6 +204,7 @@ fn actor_man_svg(
     pf: &str,
     pb: &str,
     tc: &str,
+    ff: &str,
 ) -> String {
     let cy = box_y + 10.0; // circle center y
     let r = 15.0_f64;
@@ -241,11 +242,12 @@ fn actor_man_svg(
         pf,
         pb,
         tc,
+        ff,
     )
 }
 
-fn actor_text_svg(cx: f64, cy: f64, name: &str, tc: &str) -> String {
-    templates::actor_text(cx, cy, FONT_SIZE, &esc(name), tc)
+fn actor_text_svg(cx: f64, cy: f64, name: &str, tc: &str, ff: &str) -> String {
+    templates::actor_text(cx, cy, FONT_SIZE, &esc(name), tc, ff)
 }
 
 // ─── Main render entry point ─────────────────────────────────────────────────
@@ -382,8 +384,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 let from_idx = actor_order.iter().position(|n| n == &m.from);
                 let to_idx = actor_order.iter().position(|n| n == &m.to);
                 if let (Some(fi), Some(ti)) = (from_idx, to_idx) {
-                    let (raw_w, _) = measure(&m.text, FONT_SIZE);
-                    let w = raw_w * TEXT_SCALE;
+                    let (w, _) = measure(&m.text, FONT_SIZE);
                     let msg_w = w + 2.0 * WRAP_PADDING;
 
                     if fi == ti {
@@ -891,9 +892,10 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     None => from_actor.clone(),
                 };
 
-                let (note_w, note_h_text) = measure(&n.text, FONT_SIZE);
+                let (note_w, _) = measure(&n.text, FONT_SIZE);
                 let note_w_actual = note_w + 2.0 * NOTE_MARGIN;
-                let note_h_actual = note_h_text + 2.0 * NOTE_MARGIN;
+                // Use browser text height (17px for 16px Arial) to match Mermaid's getBBox() measurement
+                let note_h_actual = 17.0 + 2.0 * NOTE_MARGIN;
 
                 let (note_start_x, note_width) = match n.placement {
                     NotePlacement::RightOf => {
@@ -1229,14 +1231,21 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
         let label_html = if bg.label.is_empty() {
             String::new()
         } else {
-            format!(
-                "<text x=\"{:.1}\" y=\"{:.1}\" dominant-baseline=\"central\" alignment-baseline=\"central\" class=\"text\" style=\"text-anchor: middle; font-size: 14px; font-weight: 400; font-family: Arial, sans-serif;\"><tspan x=\"{:.1}\" dy=\"0\">{}</tspan></text>",
-                bx + bw / 2.0, text_y, bx + bw / 2.0, esc(&bg.label)
+            templates::box_group_label_text(
+                bx + bw / 2.0,
+                text_y,
+                &esc(&bg.label),
+                vars.font_family,
             )
         };
-        svg_parts.push(format!(
-            "<rect x=\"{:.1}\" y=\"{:.1}\" fill=\"{}\" stroke=\"{}\" width=\"{:.0}\" height=\"{:.0}\" class=\"rect\" style=\"filter:drop-shadow(1px 2px 2px rgba(185,185,185,1))\"/>{}",
-            bx, box_y, fill_color, vars.primary_border, bw, box_h, label_html
+        svg_parts.push(templates::box_group_rect(
+            bx,
+            box_y,
+            bw,
+            box_h,
+            fill_color,
+            vars.primary_border,
+            &label_html,
         ));
     }
 
@@ -1257,6 +1266,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 vars.primary_color,
                 vars.sequence_loop_color,
                 vars.signal_color,
+                vars.font_family,
             )
         })
         .collect();
@@ -1278,12 +1288,13 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                     "white"
                 },
                 vars.signal_color,
+                vars.font_family,
             )
         })
         .collect();
     let note_svgs: Vec<String> = note_models
         .iter()
-        .map(|n| render_note(n, vars.note_bg, vars.note_border, vars.note_text_color))
+        .map(|n| render_note(n, vars.note_bg, vars.note_border, "black", vars.font_family))
         .collect();
 
     // Activation boxes are rendered AFTER lifelines (below) so they cover the lifelines.
@@ -1336,6 +1347,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 vars.primary_color,
                 vars.sequence_actor_border,
                 vars.text_color,
+                vars.font_family,
             ));
         } else {
             let mut g = String::from("<g>");
@@ -1353,7 +1365,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.cx(),
                 bottom_y + actor.height / 2.0,
                 &actor.alias,
-                vars.signal_color,
+                "black",
+                vars.font_family,
             ));
             g.push_str("</g>");
             bottom_actor_svgs.push(g);
@@ -1388,6 +1401,7 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 vars.primary_color,
                 vars.sequence_actor_border,
                 vars.text_color,
+                vars.font_family,
             ));
         } else {
             g.push_str(&templates::participant_root_group(ai, &esc(&actor.name)));
@@ -1405,7 +1419,8 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
                 actor.cx(),
                 actor.y + actor.height / 2.0,
                 &actor.alias,
-                vars.signal_color,
+                "black",
+                vars.font_family,
             ));
             g.push_str("</g>");
         }
@@ -1446,9 +1461,11 @@ pub fn render(diag: &SequenceDiagram, theme: Theme, _use_foreign_object: bool) -
     let vb_x = bounds.start_x - DIAGRAM_MARGIN_X;
     let vb_y = -(DIAGRAM_MARGIN_Y as i64);
     let vb_w = box_width + 2.0 * DIAGRAM_MARGIN_X;
-    // final_stopy = vp + 2*boxM + actorH + boxM; height = stopy + 2*DM_Y - boxM + 1
-    // Extend viewBox height to include box group bottom (box extends boxPadding*0.75 below final_stopy)
-    let box_bottom_extra = if !box_groups.is_empty() { 20.0 } else { 0.0 };
+    // Mermaid's setupViewBoxHeight: height = stopy + 2*DM_Y - boxM + 1
+    // box bottom extends boxPadding*0.75 (=15) below final_stopy when a box exists;
+    // we add 10 (not 15) here because grammar ref shows footer→viewBox bottom gap = 21
+    // when boxes are present, matching `+11 + 10 = +21` total below stopy.
+    let box_bottom_extra = if !box_groups.is_empty() { 10.0 } else { 0.0 };
     let vb_h = final_stopy + 2.0 * DIAGRAM_MARGIN_Y - BOX_MARGIN + 1.0 + box_bottom_extra;
     let max_w = vb_w;
 
@@ -1487,6 +1504,7 @@ fn control_kind_label(k: &ControlKind) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_control(
     ctrl: &ControlModel,
     idx: usize,
@@ -1494,6 +1512,7 @@ fn render_control(
     pf: &str,
     pb: &str,
     tc: &str,
+    ff: &str,
 ) -> String {
     let x1 = ctrl.start_x;
     let y1 = ctrl.start_y;
@@ -1543,6 +1562,7 @@ fn render_control(
         pf,
         pb,
         tc,
+        ff,
     ));
 
     if !ctrl.label.is_empty() {
@@ -1562,6 +1582,7 @@ fn render_control(
                 &esc(&line1),
                 &esc(&line2),
                 tc,
+                ff,
             ));
         } else {
             out.push_str(&templates::control_label_text(
@@ -1570,6 +1591,7 @@ fn render_control(
                 FONT_SIZE as u32,
                 &esc(&ctrl.label),
                 tc,
+                ff,
             ));
         }
     }
@@ -1585,6 +1607,7 @@ fn render_control(
                 FONT_SIZE as u32,
                 &esc(&sec.label),
                 tc,
+                ff,
             ));
         }
     }
@@ -1595,6 +1618,7 @@ fn render_control(
 
 // ── Render helper: message ──────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn render_message(
     mm: &MsgModel,
     diagram_id: &str,
@@ -1603,6 +1627,7 @@ fn render_message(
     text_color: &str,
     seqnum_text_fill: &str,
     seqnum_circle_fill: &str,
+    ff: &str,
 ) -> String {
     let is_dotted = matches!(
         mm.line_type,
@@ -1656,6 +1681,7 @@ fn render_message(
         FONT_SIZE as u32,
         &esc(&mm.text),
         text_color,
+        ff,
     ));
 
     // Line
@@ -1725,6 +1751,7 @@ fn render_note(
     note_bg: &str,
     note_border: &str,
     note_text_color: &str,
+    ff: &str,
 ) -> String {
     let mut out = String::new();
     out.push_str(&templates::note_rect(
@@ -1741,6 +1768,7 @@ fn render_note(
         FONT_SIZE as u32,
         &esc(&note.text),
         note_text_color,
+        ff,
     ));
     out
 }

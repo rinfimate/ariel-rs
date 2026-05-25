@@ -68,9 +68,6 @@ pub const CURVE_STROKE_WIDTH: f64 = 2.0;
 #[allow(dead_code)]
 pub const GRATICULE_COLOR: &str = "#DEDEDE";
 
-/// Stroke colour for axis spoke lines — matches Mermaid's .radarAxisLine { stroke:#333333 }
-pub const AXIS_LINE_COLOR: &str = "#333333";
-
 /// Graticule fill opacity.
 pub const GRATICULE_OPACITY: f64 = 0.3;
 

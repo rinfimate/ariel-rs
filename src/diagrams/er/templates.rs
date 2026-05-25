@@ -62,26 +62,38 @@ pub fn marker_end(rel: &ErRelationship, svg_id: &str) -> String {
 
 // ── Entity label (native SVG text) ───────────────────────────────────────────
 
-pub fn fo_label(x: f64, y: f64, _w: f64, h: f64, text: &str, style: &str, pt: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn fo_label(
+    x: f64,
+    y: f64,
+    _w: f64,
+    h: f64,
+    text: &str,
+    style: &str,
+    pt: &str,
+    ff: &str,
+) -> String {
     // Vertical center within the label box: y offset = h/2
     let text_y = y + h / 2.0;
-    // italic style means attribute_comment column
     let font_style = if style.contains("italic") {
         " font-style=\"italic\""
     } else {
         ""
     };
+    let lbl_g = crate::diagrams::util::label_tspan(
+        0.0,
+        text_y,
+        &esc(text),
+        FONT_SIZE,
+        pt,
+        "start",
+        font_style,
+        ff,
+    );
     format!(
-        "<g class=\"label\" transform=\"translate({x:.3},0)\">\
-         <text font-family=\"Arial, sans-serif\" \
-         font-size=\"{FONT_SIZE}\"{font_style} fill=\"{pt}\" \
-         text-anchor=\"start\" dominant-baseline=\"middle\" \
-         x=\"0\" y=\"{text_y:.3}\">{escaped}</text></g>",
+        "<g class=\"label\" transform=\"translate({x:.3},0)\">{lbl_g}</g>",
         x = x,
-        text_y = text_y,
-        font_style = font_style,
-        pt = pt,
-        escaped = esc(text),
+        lbl_g = lbl_g
     )
 }
 
@@ -124,6 +136,7 @@ pub fn render_relationship(
             vars.primary_text,
             vars.er_relation_label_bg,
             lbl_w,
+            vars.font_family,
         ));
     }
 
@@ -213,28 +226,30 @@ pub fn self_loop_path_mid(d: &str, lc: &str, dasharray: &str) -> String {
     )
 }
 
-/// Render the self-loop edge label as a native SVG `<text>`.
+/// Render the self-loop edge label as a native SVG `<text>` with background rect.
 #[allow(clippy::too_many_arguments)]
 pub fn self_loop_edge_label(
     lx: f64,
     ly: f64,
     _ox: f64,
     _oy: f64,
-    _lbl_w: f64,
+    lbl_w: f64,
     _fo_h: f64,
     rel_font_size: f64,
     text: &str,
     pt: &str,
+    bg: &str,
+    ff: &str,
 ) -> String {
+    let rh = rel_font_size * 1.5;
+    let rx = lx - lbl_w / 2.0;
+    // Match Mermaid's -9 offset for 14px edge labels (vs label_tspan's -8.5 for 16px).
+    let gy = ly - 9.0;
+    let ry = gy;
+    let lbl_g =
+        crate::diagrams::util::label_tspan_raw(lx, gy, text, rel_font_size, pt, "middle", "", ff);
     format!(
-        "<text class=\"edgeLabel\" font-family=\"Arial, sans-serif\" \
-         font-size=\"{rel_font_size}\" fill=\"{pt}\" text-anchor=\"middle\" \
-         dominant-baseline=\"middle\" x=\"{lx:.3}\" y=\"{ly:.3}\">{text}</text>",
-        lx = lx,
-        ly = ly,
-        rel_font_size = rel_font_size,
-        pt = pt,
-        text = text,
+        "<rect class=\"relationshipLabelBox\" x=\"{rx:.3}\" y=\"{ry:.3}\" width=\"{lbl_w:.3}\" height=\"{rh:.3}\" fill=\"{bg}\"/>{lbl_g}",
     )
 }
 
@@ -278,23 +293,32 @@ pub fn svg_root(
 // ── Edge label helper ─────────────────────────────────────────────────────────
 
 /// Render a relationship edge label as a native SVG `<text>`.
-pub fn edge_label_text(x: f64, y: f64, text: &str, pt: &str, bg: &str, text_w: f64) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn edge_label_text(
+    x: f64,
+    y: f64,
+    text: &str,
+    pt: &str,
+    bg: &str,
+    text_w: f64,
+    ff: &str,
+) -> String {
     // Height = REL_FONT_SIZE × 1.5 (line-height), matching Mermaid's foreignObject height.
     // No extra padding — the foreignObject background fills exactly text_w × line_h.
     let rw = text_w;
     let rh = REL_FONT_SIZE * 1.5;
     let rx = x - rw / 2.0;
-    let ry = y - rh / 2.0;
+    // Mermaid's ER edge labels translate the inner label group by -9 px for 14px text
+    // (vs -8.5 for 16px node labels). Rect top aligns with that group top.
+    let gy = y - 9.0;
+    let ry = gy;
+    let lbl_g =
+        crate::diagrams::util::label_tspan_raw(x, gy, text, REL_FONT_SIZE, pt, "middle", "", ff);
     format!(
         "<rect class=\"relationshipLabelBox\" x=\"{rx:.3}\" y=\"{ry:.3}\" width=\"{rw:.3}\" height=\"{rh:.3}\" \
-         fill=\"{bg}\"/>\
-         <text class=\"edgeLabel er relationshipLabel\" \
-         font-family=\"Arial, sans-serif\" \
-         font-size=\"{REL_FONT_SIZE}\" fill=\"{pt}\" \
-         text-anchor=\"middle\" dominant-baseline=\"middle\" \
-         x=\"{x:.3}\" y=\"{y:.3}\">{text}</text>",
+         fill=\"{bg}\"/>{lbl_g}",
         rx = rx, ry = ry, rw = rw, rh = rh,
-        bg = bg, x = x, y = y, pt = pt, text = text,
+        bg = bg, lbl_g = lbl_g,
     )
 }
 

@@ -2,17 +2,45 @@ use super::constants::*;
 use super::parser::{TimelineDiagram, TimelineTask};
 use super::templates::{self, esc, node_text_element, text_tspan};
 
-/// Brighten a color by 20% (replaces `filter:brightness(120%)`).
-/// Handles `hsl(h, s%, l%)` and `#RRGGBB` / `#RGB` hex formats.
+/// Convert HSL (h in degrees, s and l in 0..=1) to linear RGB (each in 0..=1).
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let h_prime = (h / 60.0).rem_euclid(6.0);
+    let x = c * (1.0 - (h_prime % 2.0 - 1.0).abs());
+    let (r1, g1, b1) = if h_prime < 1.0 {
+        (c, x, 0.0)
+    } else if h_prime < 2.0 {
+        (x, c, 0.0)
+    } else if h_prime < 3.0 {
+        (0.0, c, x)
+    } else if h_prime < 4.0 {
+        (0.0, x, c)
+    } else if h_prime < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+    let m = l - c / 2.0;
+    (r1 + m, g1 + m, b1 + m)
+}
+
+/// Simulate CSS `filter:brightness(120%)` by multiplying each RGB channel by 1.2 (clamped).
+/// Handles `hsl(h, s%, l%)` and `#RRGGBB` / `#RGB` hex formats; returns `#RRGGBB`.
 fn brighten_color(color: &str) -> String {
     let c = color.trim();
     if let Some(inner) = c.strip_prefix("hsl(").and_then(|s| s.strip_suffix(')')) {
         let parts: Vec<&str> = inner.split(',').collect();
         if parts.len() == 3 {
-            let l_str = parts[2].trim().trim_end_matches('%');
-            if let Ok(l) = l_str.parse::<f64>() {
-                let l2 = (l * 1.2).min(100.0);
-                return format!("hsl({}, {}, {:.4}%)", parts[0].trim(), parts[1].trim(), l2);
+            if let (Ok(h), Ok(s), Ok(l)) = (
+                parts[0].trim().parse::<f64>(),
+                parts[1].trim().trim_end_matches('%').parse::<f64>(),
+                parts[2].trim().trim_end_matches('%').parse::<f64>(),
+            ) {
+                let (r, g, b) = hsl_to_rgb(h, s / 100.0, l / 100.0);
+                let r2 = ((r * 1.2).min(1.0) * 255.0).round() as u8;
+                let g2 = ((g * 1.2).min(1.0) * 255.0).round() as u8;
+                let b2 = ((b * 1.2).min(1.0) * 255.0).round() as u8;
+                return format!("#{:02x}{:02x}{:02x}", r2, g2, b2);
             }
         }
     }
@@ -64,7 +92,7 @@ fn brighten_color(color: &str) -> String {
 /// Section colour palette: 12 colours cycling by section index.
 /// Task colour = section colour (same index for all tasks in that section).
 /// isWithoutSections: each task gets its own colour index (incremented).
-use crate::text::measure;
+use crate::backends::measure;
 use crate::theme::Theme;
 
 // ── Layout constants (faithful to Mermaid timelineRenderer.ts defaults) ────────
@@ -324,14 +352,15 @@ fn draw_node(
 
     let mut svg = String::new();
     let base_fill = section_fill(section_idx, theme);
-    let brightened;
-    let fill = if is_event {
-        brightened = brighten_color(base_fill);
-        &brightened
+    let base_line = section_line(section_idx, theme);
+    let (brightened_fill, brightened_line);
+    let (fill, line) = if is_event {
+        brightened_fill = brighten_color(base_fill);
+        brightened_line = brighten_color(base_line);
+        (brightened_fill.as_str(), brightened_line.as_str())
     } else {
-        base_fill
+        (base_fill, base_line)
     };
-    let line = section_line(section_idx, theme);
     svg.push_str(&templates::node_group_open(section_class));
     svg.push_str("  <g>\n");
     svg.push_str(&templates::node_bg_path(
@@ -584,7 +613,7 @@ pub fn render(diag: &TimelineDiagram, theme: Theme) -> String {
     // vb_h = (connector_y2 - svgBounds.y) + 2*padding = (connector_y2 + 10) + 100 = connector_y2 + 110
     let vb_h = connector_y2 + 110.0;
 
-    let mut svg = templates::svg_root(diagram_id, vb_w, vb_x, vb_y, vb_w, vb_h);
+    let mut svg = templates::svg_root(diagram_id, vb_w, vb_x, vb_y, vb_w, vb_h, vars.font_family);
 
     for part in &parts {
         svg.push_str(part);

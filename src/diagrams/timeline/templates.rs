@@ -58,10 +58,19 @@ pub fn title_text(x: f64, title: &str, title_color: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render the outer SVG wrapper.
-pub fn svg_root(id: &str, max_w: f64, vb_x: f64, vb_y: f64, vb_w: f64, vb_h: f64) -> String {
+pub fn svg_root(
+    id: &str,
+    max_w: f64,
+    vb_x: f64,
+    vb_y: f64,
+    vb_w: f64,
+    vb_h: f64,
+    font_family: &str,
+) -> String {
     format!(
-        "<svg id=\"{id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" font-family=\"Arial, sans-serif\" style=\"max-width: {mw}px;\" viewBox=\"{vx} {vy} {vw} {vh}\" role=\"graphics-document document\" aria-roledescription=\"timeline\"><g></g><g></g>",
+        "<svg id=\"{id}\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" font-family=\"{ff}\" style=\"max-width: {mw}px;\" viewBox=\"{vx} {vy} {vw} {vh}\" role=\"graphics-document document\" aria-roledescription=\"timeline\"><g></g><g></g>",
         id = id,
+        ff = font_family,
         mw = max_w,
         vx = vb_x,
         vy = vb_y,

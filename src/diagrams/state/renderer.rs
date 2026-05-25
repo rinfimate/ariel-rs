@@ -5,11 +5,11 @@
 ///   layout main graph → apply title offset → recursiveRender → SVG wrapper
 use super::constants::*;
 use super::parser::{Edge as PEdge, Node as PNode, Shape, StateDiagram};
-use super::templates::{self, esc, fmt};
-use crate::text::measure;
+use super::templates::{self, esc};
+use crate::backends::layout;
+use crate::backends::measure;
 use crate::theme::{Theme, ThemeVars};
 use dagre_dgl_rs::graph::{Edge, EdgeLabel, Graph, GraphLabel, NodeLabel};
-use dagre_dgl_rs::layout::layout;
 use std::collections::{HashMap, HashSet};
 
 pub fn render(diag: &StateDiagram, theme: Theme) -> String {
@@ -56,7 +56,10 @@ fn do_render(pnodes: &[PNode], pedges: &[PEdge], direction: &str, vars: &ThemeVa
         } else {
             label_w(&pe.label)
         };
-        let lh = if pe.label.is_empty() { 0.0 } else { 18.0 };
+        // Edge label height: ref state_choice shows choice→False distance 101.5 with
+        // edge label vs our 104.5 = 3 px less in ref. Mermaid uses font_size*1.3125 = 21
+        // (line-height for 16px text in browser) not 24.
+        let lh = if pe.label.is_empty() { 0.0 } else { 21.0 };
         g.set_edge(
             &pe.start,
             &pe.end,
@@ -100,16 +103,14 @@ fn do_render(pnodes: &[PNode], pedges: &[PEdge], direction: &str, vars: &ThemeVa
     );
 
     let (vx, vy, vw, vh) = viewbox(&g, pedges, pnodes, &sub_graphs);
-    format!(
-        "<svg id=\"mermaid-svg\" width=\"100%\" xmlns=\"http://www.w3.org/2000/svg\" \
-         viewBox=\"{vx} {vy} {vw} {vh}\" style=\"max-width:{vw}px;\">{css}{marker}{body}</svg>",
-        vx = fmt(vx),
-        vy = fmt(vy),
-        vw = fmt(vw),
-        vh = fmt(vh),
-        css = css(vars),
-        marker = templates::arrow_marker(vars.state_transition_color),
-        body = body,
+    templates::svg_root(
+        vx,
+        vy,
+        vw,
+        vh,
+        &css(vars),
+        &templates::arrow_marker(vars.state_transition_color),
+        &body,
     )
 }
 
@@ -705,9 +706,7 @@ fn recursive_render(
             let is_divider = pn.map(|p| p.shape == Shape::Divider).unwrap_or(false);
 
             if is_note_group {
-                out.push_str(&format!(
-                    "<g class=\"statediagram-state statediagram-note-group\" id=\"{dom_id}\"></g>"
-                ));
+                out.push_str(&templates::note_group_placeholder(&dom_id));
             } else if in_sub {
                 // Extracted sub-graph. Content starts at inner rect (after title area).
                 // inner_rect.y = cy - h/2 + CLUSTER_PAD + CLUSTER_LABEL_H
@@ -718,11 +717,7 @@ fn recursive_render(
                 // tx at outer rect left; sub-graph's own marginx provides internal padding
                 let tx = cx - w / 2.0;
                 let ty = cy - h / 2.0 + CLUSTER_TITLE_AREA;
-                out.push_str(&format!(
-                    "<g transform=\"translate({},{})\">",
-                    fmt(tx),
-                    fmt(ty)
-                ));
+                out.push_str(&templates::translate_group_open(tx, ty));
                 render_sub_graph(&sub_graphs[id].graph, pnodes, pedges, vars, out);
                 out.push_str("</g>");
             } else if has_children {
@@ -937,44 +932,28 @@ fn render_cluster(
     let x = cx - w / 2.0;
     let y = cy - h / 2.0;
     if is_divider {
-        format!(
-            "<g class=\"statediagram-state statediagram-cluster statediagram-cluster-alt\" id=\"{dom_id}\">\
-             <rect class=\"divider\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" \
-             style=\"fill:#f0f0f0;stroke:{s};stroke-dasharray:10,10;\"></rect></g>",
-            dom_id=dom_id, x=fmt(x), y=fmt(y), w=fmt(w), h=fmt(h), s=vars.state_end_bg,
-        )
+        templates::cluster_divider(dom_id, x, y, w, h, vars.state_end_bg)
     } else {
         // Outer rect at full node boundary so edge endpoints touch it (no CLUSTER_PAD inset).
-        let rx = x;
-        let ry = y;
-        let rw = w;
-        let outer_rh = h;
         let inner_y = y + CLUSTER_TITLE_AREA;
         let inner_h = h - CLUSTER_TITLE_AREA - 4.0;
         let tcy = y + CLUSTER_TITLE_AREA / 2.0;
-        format!(
-            "<g class=\"statediagram-state statediagram-cluster\" id=\"{dom_id}\">\
-             <rect class=\"outer\" x=\"{rx}\" y=\"{ry}\" width=\"{rw}\" height=\"{rh}\" \
-             rx=\"5\" ry=\"5\" style=\"fill:{pc};stroke:{pb};stroke-width:1px;\"></rect>\
-             <text x=\"{tcx}\" y=\"{tcy}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
-             font-size=\"{fs}\" fill=\"{fc}\">{lbl}</text>\
-             <rect class=\"inner\" x=\"{rx}\" y=\"{iy}\" width=\"{rw}\" height=\"{ih}\" \
-             style=\"fill:{bg};stroke:{pb};stroke-width:1px;\"></rect></g>",
-            dom_id = dom_id,
-            rx = fmt(rx),
-            ry = fmt(ry),
-            rw = fmt(rw),
-            rh = fmt(outer_rh),
-            tcx = fmt(cx),
-            tcy = fmt(tcy),
-            iy = fmt(inner_y),
-            ih = fmt(inner_h),
-            pc = vars.primary_color,
-            pb = vars.state_end_bg,
-            fs = FONT_SIZE as u32,
-            fc = vars.primary_text,
-            lbl = esc(label),
-            bg = vars.state_composit_bg,
+        templates::cluster_compound(
+            dom_id,
+            x,
+            y,
+            w,
+            h,
+            cx,
+            tcy,
+            inner_y,
+            inner_h,
+            vars.primary_color,
+            vars.state_end_bg,
+            FONT_SIZE as u32,
+            vars.primary_text,
+            &esc(label),
+            vars.state_composit_bg,
         )
     }
 }
@@ -1019,8 +998,25 @@ fn clip_to_diamond(
     }
     // Ray from center toward (from_x, from_y): intersect with diamond |x/s| + |y/s| = 1
     let t = s / (dx.abs() + dy.abs());
-    p.x = cx + dx * t;
-    p.y = cy + dy * t;
+    let mut x = cx + dx * t;
+    let mut y = cy + dy * t;
+    // Replicate Mermaid's intersect-line.js integer-rounding quirk applied to floats:
+    // for each diamond clip, the result is shifted by 0.5 away from zero in world coords.
+    // The quirk: offset = |denom/2| is added/subtracted to the numerator before division,
+    // intended for integer-rounding but mis-applied to floats. Net effect for choice
+    // diamonds: result shifts by sign(coord) * 0.5.
+    if x >= 0.0 {
+        x += 0.5;
+    } else {
+        x -= 0.5;
+    }
+    if y >= 0.0 {
+        y += 0.5;
+    } else {
+        y -= 0.5;
+    }
+    p.x = x;
+    p.y = y;
 }
 
 fn render_edge_pts(lbl: &EdgeLabel, classes: &str, vars: &ThemeVars, out: &mut String) {
@@ -1036,24 +1032,34 @@ fn render_edge_pts(lbl: &EdgeLabel, classes: &str, vars: &ThemeVars, out: &mut S
         } else {
             " marker-end=\"url(#state-barbEnd)\""
         };
-        out.push_str(&format!(
-            "<path d=\"{d}\" class=\"transition\" fill=\"none\" stroke=\"{c}\" style=\"{dash}\"{me}></path>",
-            d=d, c=vars.state_transition_color, dash=dash, me=me,
+        out.push_str(&templates::transition_path(
+            &d,
+            vars.state_transition_color,
+            dash,
+            me,
         ));
     }
 }
 
 fn edge_label(x: f64, y: f64, label: &str, vars: &ThemeVars) -> String {
-    let lw = (label_w(label) + 10.0).max(10.0);
-    // Background height=24 matches Mermaid's foreignObject label height (line-height 1.5 × 16px)
-    format!(
-        "<g class=\"edgeLabel\" transform=\"translate({x},{y})\">\
-         <rect x=\"{rx}\" y=\"-12\" width=\"{lw}\" height=\"24\" fill=\"{bg}\" stroke=\"none\"></rect>\
-         <text x=\"0\" y=\"0\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
-         font-size=\"{fs}\" fill=\"{fc}\">{lbl}</text></g>",
-        x=fmt(x), y=fmt(y), rx=fmt(-lw/2.0), lw=fmt(lw),
-        bg=vars.edge_label_bg, fs=FONT_SIZE as u32, fc=vars.primary_text, lbl=esc(label),
-    )
+    // Mermaid: .edgeLabel .label rect{fill:#ECECFF;opacity:0.5;} — light tint behind label.
+    // Background rect width matches Mermaid's labelGroup bbox (text width + 2*padding).
+    let text_w = crate::text_browser_metrics::measure_browser(label, FONT_SIZE).0;
+    let rect_w = text_w + 4.0;
+    let rect_h = 21.0;
+    // Mermaid translates the inner label group by -10.5 px (= -rect_h/2) for 16px edge labels,
+    // placing the rect's top at the group's top. label_tspan's -font_size/1.882 = -8.5 is wrong here.
+    let lbl_g = crate::diagrams::util::label_tspan_raw(
+        0.0,
+        -10.5,
+        &esc(label),
+        FONT_SIZE,
+        vars.primary_text,
+        "middle",
+        "",
+        vars.font_family,
+    );
+    templates::edge_label_group(x, y, rect_w, rect_h, vars.primary_color, &lbl_g)
 }
 
 // ─── Sizing ───────────────────────────────────────────────────────────────────
@@ -1070,22 +1076,19 @@ fn node_size(pn: &PNode) -> (f64, f64) {
         Shape::Choice => (CHOICE_SIZE * 2.0, CHOICE_SIZE * 2.0),
         Shape::Note => {
             let (tw, _) = measure(&pn.label, FONT_SIZE);
-            (
-                (tw * LABEL_SCALE + NOTE_PADDING * 2.0).max(NOTE_MIN_WIDTH),
-                NOTE_HEIGHT,
-            )
+            ((tw + NOTE_PADDING * 2.0).max(NOTE_MIN_WIDTH), NOTE_HEIGHT)
         }
         Shape::Group | Shape::Divider | Shape::NoteGroup => (1.0, 1.0),
         _ => {
             let (tw, _) = measure(&pn.label, FONT_SIZE);
-            ((tw * LABEL_SCALE + NODE_PADDING * 2.0).max(1.0), 40.0)
+            // 33 = FONT_SIZE*1.1 + 15.4 padding (Mermaid lineHeight=1.1, matches ref state rect h=33).
+            ((tw + NODE_PADDING * 2.0).max(1.0), 33.0)
         }
     }
 }
 
 fn label_w(label: &str) -> f64 {
-    let (tw, _) = measure(label, FONT_SIZE);
-    tw * LABEL_SCALE
+    measure(label, FONT_SIZE).0
 }
 
 // ─── ViewBox ──────────────────────────────────────────────────────────────────
@@ -1110,8 +1113,8 @@ fn viewbox(
             max_y = max_y.max(cy + n.height / 2.0);
         }
     }
-    for (i, _) in pedges.iter().enumerate() {
-        let e = Edge::named(&pedges[i].start, &pedges[i].end, &format!("e{}", i));
+    for (i, pe) in pedges.iter().enumerate() {
+        let e = Edge::named(&pe.start, &pe.end, &format!("e{}", i));
         if let Some(lbl) = g.edge(&e) {
             if let Some(ref pts) = lbl.points {
                 for p in pts {
@@ -1119,6 +1122,13 @@ fn viewbox(
                     min_y = min_y.min(p.y);
                     max_x = max_x.max(p.x);
                     max_y = max_y.max(p.y);
+                }
+            }
+            if !pe.label.is_empty() {
+                if let Some(x) = lbl.x {
+                    let hw = label_w(&pe.label) / 2.0;
+                    min_x = min_x.min(x - hw);
+                    max_x = max_x.max(x + hw);
                 }
             }
         }
@@ -1154,24 +1164,14 @@ fn viewbox(
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 
 fn css(vars: &ThemeVars) -> String {
-    format!(
-        "<style>\
-         .statediagram-cluster rect{{fill:{pc};stroke:{pb};}}\
-         .statediagram-state rect.basic{{fill:{pc};stroke:{pb};}}\
-         .node circle.state-start{{fill:{sc};}}\
-         .node .fork-join{{fill:{sc};}}\
-         .transition{{stroke:{tc};fill:none;}}\
-         .statediagram-state rect.divider{{stroke-dasharray:10,10;fill:#f0f0f0;}}\
-         .statediagram-note rect{{fill:{nb};stroke:{nst};}}\
-         .note-edge{{stroke-dasharray:5;}}\
-         text{{font-family:Arial,sans-serif;font-size:{fs}px;}}\
-         </style>",
-        pc = vars.primary_color,
-        pb = vars.state_end_bg,
-        sc = vars.state_start_fill,
-        tc = vars.state_transition_color,
-        nb = vars.note_bg,
-        nst = vars.note_border,
-        fs = FONT_SIZE as u32,
+    templates::css(
+        vars.primary_color,
+        vars.state_end_bg,
+        vars.state_start_fill,
+        vars.state_transition_color,
+        vars.note_bg,
+        vars.note_border,
+        FONT_SIZE as u32,
+        vars.font_family,
     )
 }

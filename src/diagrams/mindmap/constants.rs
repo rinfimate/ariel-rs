@@ -11,8 +11,9 @@ pub const FONT_SIZE: f64 = 16.0;
 // Layout
 // ---------------------------------------------------------------------------
 
-/// Vertical slot height allocated per leaf node (px). Controls spacing between branches.
-pub const NODE_SLOT: f64 = 71.47;
+/// Minimum vertical gap between node boundaries in the tree layout (px).
+/// Calibrated so mindmap_tech height (5-leaf dominant side) matches the reference output.
+pub const NODE_V_GAP: f64 = 45.5;
 
 /// Horizontal gap between a parent node edge and a child node edge (px).
 pub const NODE_H_GAP: f64 = 20.0;

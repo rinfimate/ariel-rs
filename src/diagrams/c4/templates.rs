@@ -37,9 +37,9 @@ pub fn marker_arrowend(id: &str) -> String {
 }
 
 /// Render the diagram title `<text>`.
-pub fn title_text(title_x: f64, text: &str, text_color: &str) -> String {
+pub fn title_text(title_x: f64, text: &str, text_color: &str, ff: &str) -> String {
     format!(
-        "<text x=\"{title_x}\" y=\"20\" font-family=\"Arial, sans-serif\" fill=\"{text_color}\">{text}</text>",
+        "<text x=\"{title_x}\" y=\"20\" font-family=\"{ff}\" fill=\"{text_color}\">{text}</text>",
         title_x = title_x,
         text = text,
         text_color = text_color,

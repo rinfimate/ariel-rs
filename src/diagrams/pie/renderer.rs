@@ -224,6 +224,7 @@ pub fn render(diag: &PieDiagram, theme: Theme, _use_foreign_object: bool) -> Str
         &fmt(total_width),
         &fmt(HEIGHT),
         &fmt(total_width),
+        vars.font_family,
     ));
 
     // Empty first group (Mermaid always emits this)

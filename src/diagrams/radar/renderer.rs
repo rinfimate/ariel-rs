@@ -61,7 +61,11 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
 
     // ── SVG root ───────────────────────────────────────────────────────────
     let mut out = String::new();
-    out.push_str(&templates::svg_root(&fmt(total_w), &fmt(total_h)));
+    out.push_str(&templates::svg_root(
+        &fmt(total_w),
+        &fmt(total_h),
+        vars.font_family,
+    ));
 
     // ── Centered group (all drawing relative to chart centre) ──────────────
     out.push_str(&centered_group_open(&fmt(cx), &fmt(cy)));
@@ -101,7 +105,7 @@ pub fn render(diag: &RadarDiagram, theme: Theme) -> String {
         out.push_str(&templates::axis_line(
             &fmt(spoke_x),
             &fmt(spoke_y),
-            AXIS_LINE_COLOR,
+            vars.line_color,
         ));
 
         // Label at axisLabelFactor * radius

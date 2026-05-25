@@ -5,24 +5,26 @@
 // Typography
 // ---------------------------------------------------------------------------
 
-/// Font size for class box text — foreignObjects inherit SVG root font-size:16px (px).
-pub const FONT_SIZE: f64 = 16.0;
+/// Font size for class member/method/annotation text — matches Mermaid CSS `g.classGroup text { font-size: 10px }`.
+pub const FONT_SIZE: f64 = 10.0;
 
-/// Font size for the class name row (bold, px).
-pub const TITLE_FONT_SIZE: f64 = 16.0;
+/// Font size for the class name row — matches Mermaid CSS `.classTitleText { font-size: 18px }`.
+pub const TITLE_FONT_SIZE: f64 = 18.0;
 
 // ---------------------------------------------------------------------------
 // Node geometry
 // ---------------------------------------------------------------------------
 
-/// Height per member or method row in a class box (px).
-pub const MEMBER_ROW_H: f64 = 24.0;
+/// Height per member or method row. Calibrated from ref output: Animal-Dog
+/// row-diff = 20px (FONT_SIZE * 1.1 + 9 = 20). Matches Mermaid's lineHeight=1.1.
+pub const MEMBER_ROW_H: f64 = FONT_SIZE * 1.1 + 9.0; // 11 + 9 = 20
 
-/// Height of the class header section (annotation label + padding, px).
-pub const HEADER_H: f64 = 48.0;
+/// Height of the class header section. Calibrated from ref class_basic Dog: dividers at
+/// y=±20.5 with hh=61.5 → header_h = -20.5 − (−61.5) = 41.
+pub const HEADER_H: f64 = 41.0;
 
-/// Height per annotation row (px).
-pub const ANNOTATION_H: f64 = 24.0;
+/// Height per annotation row: same line-height as member rows.
+pub const ANNOTATION_H: f64 = FONT_SIZE * 1.1 + 9.0; // 11 + 9 = 20
 
 /// Horizontal padding inside the class box on each side (px).
 pub const H_PAD: f64 = 12.0;
@@ -36,14 +38,6 @@ pub const EMPTY_SECTION_H: f64 = 18.0;
 // ---------------------------------------------------------------------------
 // Text scaling
 // ---------------------------------------------------------------------------
-
-/// Browser renders foreignObject HTML content at ~1.117× our ab_glyph metric for regular text.
-/// Empirically derived by comparing reference foreignObject widths with ab_glyph measurements.
-pub const CONTENT_SCALE: f64 = 1.117;
-
-/// Browser renders bold class-name foreignObject at ~1.207× our ab_glyph metric.
-/// Empirically calibrated across all class diagrams; 1.207 minimises the weighted RMS.
-pub const NAME_SCALE: f64 = 1.207;
 
 // ---------------------------------------------------------------------------
 // Layout / dagre parameters
@@ -78,5 +72,21 @@ pub const TRIM_ARROW: f64 = 8.0;
 /// Terminal label marker size used in Mermaid (px).
 pub const TERMINAL_MARKER_SIZE: f64 = 10.0;
 
-/// Scale factor for terminal label text (11px CSS class `.edgeTerminals`).
-pub const TERMINAL_SCALE: f64 = 1.117;
+// ---------------------------------------------------------------------------
+// Mermaid-canonical colors (not theme-derived)
+// ---------------------------------------------------------------------------
+
+/// Namespace cluster background fill (Mermaid `class-diagram-v2.scss`).
+pub const NAMESPACE_FILL: &str = "#ffffde";
+
+/// Namespace cluster border stroke (shared with notes).
+pub const NAMESPACE_STROKE: &str = "#aaaa33";
+
+/// Note background fill (Mermaid `class-diagram-v2.scss` `.note { fill }`).
+pub const NOTE_FILL: &str = "#fff5ad";
+
+/// Note border stroke (same as namespace).
+pub const NOTE_STROKE: &str = "#aaaa33";
+
+/// Drop-shadow flood colour applied to outer-class shadow filters.
+pub const SHADOW_FLOOD_COLOR: &str = "#000000";

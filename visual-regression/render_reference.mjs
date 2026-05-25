@@ -39,6 +39,9 @@ await page.evaluate((theme) => {
     theme,
     securityLevel: 'loose',
     fontFamily: 'Arial, sans-serif',
+    // htmlLabels:false → Mermaid emits <text> instead of <foreignObject>, matching
+    // ariel-rs's SVG output and allowing pixel-comparable rendering via Puppeteer/resvg.
+    htmlLabels: false,
   });
 }, themeName);
 
