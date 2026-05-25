@@ -22,7 +22,7 @@ A faithful Rust port of [Mermaid JS](https://mermaid.js.org/) — renders diagra
 
 ```toml
 [dependencies]
-ariel-rs = "0.3.0"
+ariel-rs = "0.4.0"
 ```
 
 ```rust
