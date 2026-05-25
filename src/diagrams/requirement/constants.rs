@@ -15,9 +15,6 @@ pub const FONT_SIZE: f64 = 16.0;
 /// Horizontal padding inside each requirement/element box (px).
 pub const PAD_X: f64 = 10.0;
 
-/// Vertical padding above the first body item inside a box (px).
-pub const PAD_Y: f64 = 8.0;
-
 /// Row height (vertical spacing between body items inside a box, px).
 /// Calibrated from ref: test_req body item spacing = 23 (FONT_SIZE*1.1 + 5.4 padding).
 pub const ROW_H: f64 = 23.0;
